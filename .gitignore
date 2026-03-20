@@ -1,2 +1,18 @@
 social-backend/node_modules/
 social-frontend/node_modules/
+
+node_modules
+.env
+dist
+build
+.DS_Store
+.vscode
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# upload data (quan trọng)
+D:\Data
+uploads
