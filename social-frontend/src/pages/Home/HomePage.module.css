@@ -1,0 +1,14 @@
+.wrapper {
+  display: flex;
+  justify-content: center;
+  gap: 64px;
+  padding-top: 28px;
+}
+
+.center {
+  width: 630px;
+}
+
+.right {
+  width: 320px;
+}

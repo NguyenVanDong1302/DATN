@@ -1,0 +1,47 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 9999;
+}
+
+.modal {
+  width: min(720px, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 12px;
+}
+
+.headerRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.body {
+  margin-top: 10px;
+}
+
+/* Fullscreen (stories) */
+.fullscreenOverlay {
+  position: fixed;
+  inset: 0;
+  background: #111;
+  z-index: 9999;
+}

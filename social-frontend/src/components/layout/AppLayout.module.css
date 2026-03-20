@@ -1,0 +1,17 @@
+.shell {
+  min-height: 100vh;
+  background: #fff;
+  color: #000;
+
+  /* Sidebar sizes */
+  --sb-collapsed: 72px;
+  --sb-expanded: 244px;
+}
+
+.main {
+  padding-left: var(--sb-collapsed); /* mặc định chỉ chừa chỗ icon */
+}
+
+.main {
+  padding-left: 9%; /* đúng chiều rộng sidebar */
+}

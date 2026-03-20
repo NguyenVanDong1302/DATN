@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Post Test UI + Realtime</title>
+    <style>
+      body { font-family: system-ui, Arial; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+      textarea { width: 100%; min-height: 90px; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
+      select, input { padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
+      button { padding: 10px 14px; border-radius: 10px; border: 1px solid #333; background: #111; color: #fff; cursor: pointer; }
+      button.secondary { background: #fff; color: #111; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .post { border: 1px solid #eee; border-radius: 12px; padding: 12px; margin: 10px 0; }
+      .muted { color: #666; font-size: 12px; }
+      pre { background: #0b1020; color: #cde; padding: 12px; border-radius: 12px; overflow: auto; }
+      .hide { display: none; }
+      .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; }
+      .noti { border-top: 1px solid #eee; padding: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 Social Mini (Username + Realtime)</h1>
+
+    <div id="loginCard" class="card">
+      <h3>Nhập tên người dùng</h3>
+      <div class="row">
+        <input id="username" placeholder="vd: an, binh, chi..." />
+        <button id="btnEnter">Vào app</button>
+      </div>
+      <div class="muted">Mỗi tab/browser có thể nhập username khác nhau để test realtime.</div>
+    </div>
+
+    <div id="appRoot" class="hide">
+      <div class="card">
+        <div class="row">
+          <div>Xin chào: <b id="who"></b></div>
+          <span class="badge" id="socketStatus">socket: -</span>
+          <button class="secondary" id="btnLogout">Đổi user</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btnHealth">GET /api/health</button>
+          <button class="secondary" id="btnReload">Reload posts</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🔔 Thông báo realtime</h3>
+        <div class="muted">Khi ai đó thả tim/comment bài của bạn, nó sẽ hiện ở đây.</div>
+        <div id="notis"></div>
+      </div>
+
+      <div class="card">
+        <h3>Test pages</h3>
+        <ul>
+          <li><a href="/index.html">Post Test UI</a></li>
+          <li><a href="/follow.html">Follow Test UI</a></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Tạo bài viết</h3>
+        <textarea id="content" placeholder="Nhập nội dung bài viết..."></textarea>
+        <div class="row" style="margin-top:10px;">
+          <label>Visibility:</label>
+          <select id="visibility">
+            <option value="public">public</option>
+            <option value="friends">friends</option>
+            <option value="private">private</option>
+          </select>
+          <button id="btnCreate">Đăng bài</button>
+        </div>
+        <div class="muted">Backend nhận user qua header <b>X-Username</b>.</div>
+      </div>
+
+      <div class="card">
+        <h3>Danh sách bài viết</h3>
+        <div id="posts"></div>
+      </div>
+
+      <div class="card">
+        <h3>Output</h3>
+        <pre id="out">{}</pre>
+      </div>
+    </div>
+
+    <!-- socket.io client (served by backend) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,80 @@
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #737373;
+}
+
+.state {
+  border: 1px solid #dbdbdb;
+  border-radius: 14px;
+  padding: 18px;
+  background: #fff;
+  color: #737373;
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.pageText {
+  min-width: 90px;
+  text-align: center;
+  font-size: 14px;
+  color: #262626;
+}
+
+.commentBox {
+  min-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.commentTitle {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.commentInput {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid #dbdbdb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.commentInput:focus {
+  border-color: #b5b5b5;
+}
+
+.commentActions {
+  display: flex;
+  justify-content: flex-end;
+}
