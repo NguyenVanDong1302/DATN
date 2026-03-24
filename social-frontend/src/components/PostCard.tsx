@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { resolveMediaUrl } from '../lib/api'
 import { Post } from '../types'
 
 type NormalizedMedia = {
   type: 'image' | 'video'
   url: string
-}
-
-function normalizeUrl(url?: string) {
-  if (!url) return ''
-  if (/^https?:\/\//i.test(url)) return url
-  return `http://localhost:4000${url.startsWith('/') ? '' : '/'}${url}`
 }
 
 function detectMediaType(item: any): 'image' | 'video' | null {
@@ -32,14 +27,14 @@ function getPostMedia(post: Post): NormalizedMedia[] {
   if (Array.isArray(post.media)) {
     for (const item of post.media) {
       const type = detectMediaType(item)
-      const url = normalizeUrl(item?.url)
+      const url = resolveMediaUrl(item?.url)
       if (!type || !url) continue
       list.push({ type, url })
     }
   }
 
   if (!list.length && post.imageUrl) {
-    const url = normalizeUrl(post.imageUrl)
+    const url = resolveMediaUrl(post.imageUrl)
     const type = detectMediaType({ url }) || 'image'
     list.push({ type, url })
   }
@@ -62,7 +57,7 @@ function MediaVideo({ src, active }: { src: string; active: boolean }) {
       ([entry]) => {
         setInView(entry.isIntersecting && entry.intersectionRatio >= 0.6)
       },
-      { threshold: [0.2, 0.4, 0.6, 0.8] }
+      { threshold: [0.2, 0.4, 0.6, 0.8] },
     )
 
     observer.observe(el)
@@ -104,7 +99,9 @@ function MediaVideo({ src, active }: { src: string; active: boolean }) {
         video.pause()
         setPlaying(false)
       }
-    } catch { }
+    } catch {
+      setPlaying(!video.paused)
+    }
   }
 
   const toggleMute = (e: React.MouseEvent) => {
@@ -213,12 +210,16 @@ function MediaSlider({ media }: { media: NormalizedMedia[] }) {
 
 export default function PostCard({
   post,
+  likePending,
+  commentPending,
   onLike,
   onOpenComment,
   onOpenDetail,
   onOpenAuthor,
 }: {
   post: Post
+  likePending?: boolean
+  commentPending?: boolean
   onLike: () => void
   onOpenComment: () => void
   onOpenDetail: () => void
@@ -228,6 +229,14 @@ export default function PostCard({
   const likedByMe = !!post.likedByMe
   const commentsCount = post.commentsCount ?? 0
   const media = useMemo(() => getPostMedia(post), [post])
+  const [heartBurst, setHeartBurst] = useState(false)
+
+  useEffect(() => {
+    if (!likedByMe) return
+    setHeartBurst(true)
+    const timer = window.setTimeout(() => setHeartBurst(false), 520)
+    return () => window.clearTimeout(timer)
+  }, [likedByMe])
 
   return (
     <div style={styles.post}>
@@ -252,11 +261,29 @@ export default function PostCard({
       <MediaSlider media={media} />
 
       <div style={styles.actions}>
-        <button style={styles.actionBtn} onClick={onLike}>
-          {likedByMe ? '♥' : '♡'} {likesCount}
+        <button
+          style={{
+            ...styles.likeBtn,
+            ...(likedByMe ? styles.likeBtnActive : null),
+            ...(likePending ? styles.buttonPending : null),
+            transform: heartBurst ? 'scale(1.06)' : 'scale(1)',
+          }}
+          onClick={onLike}
+          disabled={!!likePending}
+        >
+          <span style={{ ...styles.iconPulse, transform: heartBurst ? 'scale(1.3)' : 'scale(1)' }}>{likedByMe ? '♥' : '♡'}</span>
+          <span>{likesCount}</span>
         </button>
-        <button style={styles.actionBtn} onClick={onOpenComment}>
-          💬 {commentsCount}
+        <button
+          style={{
+            ...styles.actionBtn,
+            ...(commentPending ? styles.buttonPending : null),
+          }}
+          onClick={onOpenComment}
+          disabled={!!commentPending}
+        >
+          <span>💬</span>
+          <span>{commentsCount}</span>
         </button>
         <button style={{ ...styles.actionBtn, marginLeft: 'auto' }} onClick={onOpenDetail}>
           Xem chi tiết
@@ -350,7 +377,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     background: '#0b1220',
   },
-  
   videoMedia: {
     width: '100%',
     height: '100%',
@@ -434,5 +460,36 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     cursor: 'pointer',
     color: '#111',
+    display: 'inline-flex',
+    gap: 8,
+    alignItems: 'center',
+    transition: 'transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease',
+  },
+  likeBtn: {
+    border: 'none',
+    background: '#fff1f2',
+    borderRadius: 999,
+    padding: '10px 14px',
+    fontSize: 14,
+    cursor: 'pointer',
+    color: '#be123c',
+    display: 'inline-flex',
+    gap: 8,
+    alignItems: 'center',
+    fontWeight: 700,
+    boxShadow: '0 8px 18px rgba(225, 29, 72, 0.08)',
+    transition: 'transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease',
+  },
+  likeBtnActive: {
+    background: 'linear-gradient(135deg, #ffe4e6, #fdf2f8)',
+    boxShadow: '0 14px 24px rgba(225, 29, 72, 0.12)',
+  },
+  buttonPending: {
+    opacity: 0.7,
+    cursor: 'not-allowed',
+  },
+  iconPulse: {
+    display: 'inline-block',
+    transition: 'transform 220ms ease',
   },
 }

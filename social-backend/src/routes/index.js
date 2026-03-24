@@ -3,6 +3,7 @@ const postRoutes = require("./post.routes");
 const { sessionUser } = require("../middlewares/sessionUser");
 
 const userRoutes = require("./user.routes");
+const notificationRoutes = require("./notification.routes");
 const router = express.Router();
 
 router.get("/health", (req, res) =>
@@ -12,6 +13,7 @@ router.get("/health", (req, res) =>
 // Posts
 router.use("/posts", postRoutes);
 router.use("/users", userRoutes);
+router.use("/notifications", notificationRoutes);
 router.get("/whoami", sessionUser, (req, res) => {
   res.json({
     ok: true,

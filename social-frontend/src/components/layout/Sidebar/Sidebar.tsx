@@ -2,6 +2,7 @@ import { type ReactNode, useMemo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import styles from './Sidebar.module.css'
 import { useAuth } from '../../../features/auth/AuthProvider'
+import { useNotifications } from '../../../features/notifications/NotificationProvider'
 
 type NavItem = {
   to: string
@@ -15,6 +16,7 @@ function Icon({ children }: { children: ReactNode }) {
 
 export default function Sidebar() {
   const { user, logout } = useAuth()
+  const { unreadCount } = useNotifications()
   const navigate = useNavigate()
 
   const profileSlug = useMemo(() => {
@@ -52,7 +54,12 @@ export default function Sidebar() {
             className={({ isActive }) => `${styles.item} ${isActive ? styles.active : ''}`}
             title={it.label}
           >
-            {it.icon}
+            <span className={styles.iconWrap}>
+              {it.icon}
+              {it.to === '/notifications' && unreadCount > 0 ? (
+                <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span>
+              ) : null}
+            </span>
             <span className={styles.label}>{it.label}</span>
           </NavLink>
         ))}

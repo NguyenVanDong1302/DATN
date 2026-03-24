@@ -24,10 +24,13 @@ export type Post = {
 export type PostComment = {
   _id: string
   postId?: string
+  parentCommentId?: string | null
   authorId?: string
   authorUsername?: string
   content: string
+  likes?: string[]
+  likesCount?: number
+  likedByMe?: boolean
   createdAt?: string
   updatedAt?: string
 }
-

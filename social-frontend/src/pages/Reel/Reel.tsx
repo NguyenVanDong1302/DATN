@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./Reel.scss";
 
 import ReelComments, { type ReelComment } from "./comments/ReelComments";
-import video1 from "./DataVS/Video1.mp4";
-import video2 from "./DataVS/Video2.mp4";
-import video3 from "./DataVS/Video3.mp4";
-import video4 from "./DataVS/Video4.mp4";
+// import video1 from "./DataVS/Video1.mp4";
+// import video2 from "./DataVS/Video2.mp4";
+// import video3 from "./DataVS/Video3.mp4";
+// import video4 from "./DataVS/Video4.mp4";
 
 type Reel = {
   id: string;
@@ -26,129 +26,6 @@ function clamp(n: number, min: number, max: number) {
 export default function Reel() {
   const reels: Reel[] = useMemo(
     () => [
-      {
-        id: "1",
-        src: video1,
-        username: "camtu_205",
-        handle: "camtu_205",
-        caption: "Tác dụng của việc lướt Thread quá 180p là t đã học được cách buộc tóc siêu xinh nè 🙈",
-        likes: "60,8K",
-        comments: "161",
-        avatarUrl: "https://i.pravatar.cc/120?img=12",
-        commentsList: [
-          {
-            id: "1-1",
-            user: "b.m_bmf",
-            avatarUrl: "https://i.pravatar.cc/80?img=41",
-            time: "9w",
-            text: "Que bom que vc se amou!",
-            likes: "3",
-          },
-          {
-            id: "1-2",
-            user: "yessivitutcci",
-            avatarUrl: "https://i.pravatar.cc/80?img=32",
-            time: "5w",
-            text: "👏👏🔥🔥❤️😍",
-            likes: "4",
-          },
-          {
-            id: "1-3",
-            user: "packy.33",
-            avatarUrl: "https://i.pravatar.cc/80?img=18",
-            time: "5w",
-            text: "Se transformó en el capitán América",
-            likes: "313",
-            repliesLabel: "View all 1 replies",
-            verified: true,
-          },
-          {
-            id: "1-4",
-            user: "s.way.s",
-            avatarUrl: "https://i.pravatar.cc/80?img=57",
-            time: "4w",
-            text: "Động lực lên mood quá trời luôn 😮‍💨",
-            likes: "217",
-            imageUrl: "https://images.unsplash.com/photo-1516728778615-2d590ea1856f?auto=format&fit=crop&w=640&q=80",
-          },
-        ],
-      },
-      {
-        id: "2",
-        src: video2,
-        username: "vandong010302",
-        handle: "vandong010302",
-        caption: "Reel số 2",
-        likes: "12,3K",
-        comments: "88",
-        avatarUrl: "https://i.pravatar.cc/120?img=13",
-        commentsList: [
-          {
-            id: "2-1",
-            user: "gymboy.7",
-            avatarUrl: "https://i.pravatar.cc/80?img=22",
-            time: "2d",
-            text: "Form ổn ghê, quay góc này đẹp đó.",
-            likes: "18",
-          },
-          {
-            id: "2-2",
-            user: "ha.anh.fit",
-            avatarUrl: "https://i.pravatar.cc/80?img=26",
-            time: "1d",
-            text: "Tập đều như này là tháng sau khác liền 😤",
-            likes: "9",
-          },
-        ],
-      },
-      {
-        id: "3",
-        src: video3,
-        username: "vandong010302",
-        handle: "vandong010302",
-        caption: "Reel số 3",
-        likes: "9,1K",
-        comments: "40",
-        avatarUrl: "https://i.pravatar.cc/120?img=14",
-        commentsList: [
-          {
-            id: "3-1",
-            user: "minhthao.daily",
-            avatarUrl: "https://i.pravatar.cc/80?img=35",
-            time: "12h",
-            text: "Nhạc khớp video quá nè.",
-            likes: "12",
-          },
-          {
-            id: "3-2",
-            user: "quang.hoang",
-            avatarUrl: "https://i.pravatar.cc/80?img=46",
-            time: "10h",
-            text: "Up part 2 đi bạn ơi.",
-            likes: "5",
-          },
-        ],
-      },
-      {
-        id: "4",
-        src: video4,
-        username: "vandong010302",
-        handle: "vandong010302",
-        caption: "Reel số 4",
-        likes: "3,4K",
-        comments: "21",
-        avatarUrl: "https://i.pravatar.cc/120?img=15",
-        commentsList: [
-          {
-            id: "4-1",
-            user: "anhthu.me",
-            avatarUrl: "https://i.pravatar.cc/80?img=48",
-            time: "3h",
-            text: "Đoạn cuối cuốn thật sự 😂",
-            likes: "2",
-          },
-        ],
-      },
     ],
     []
   );

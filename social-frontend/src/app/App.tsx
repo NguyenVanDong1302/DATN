@@ -9,6 +9,7 @@ import NotificationsPage from '../pages/NotificationsPage'
 import SettingsPage from '../pages/SettingsPage'
 import { ToastHost } from '../components/Toast'
 import { ModalProvider } from '../components/Modal'
+import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import ReelsPage from '../pages/Reel/Reel'
 import MessagesPage from '../pages/Messages/MessagesPage'
 import CreatePostPage from '../pages/CreatePostPage'
@@ -30,6 +31,7 @@ export default function App() {
     <AppStoreProvider>
       <AuthProvider>
         <SocketProvider>
+          <NotificationProvider>
           <ModalProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -49,6 +51,7 @@ export default function App() {
               </Route>
             </Routes>
           </ModalProvider>
+          </NotificationProvider>
           <ToastHost />
         </SocketProvider>
       </AuthProvider>

@@ -4,50 +4,9 @@ import { useApi } from '../../../../lib/api'
 import { useModal } from '../../../../components/Modal'
 import { useToast } from '../../../../components/Toast'
 import GlobalPostCard from '../../../../components/PostCard'
+import CommentSheet from '../../../../components/comments/CommentSheet'
 import type { Post } from '../../../../types'
 import styles from './Feed.module.css'
-
-function CommentForm({ postId, onDone }: { postId: string; onDone: () => void }) {
-  const api = useApi()
-  const toast = useToast()
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
-
-  const submit = async () => {
-    const content = text.trim()
-    if (!content || sending) return
-
-    setSending(true)
-    try {
-      await api.post(`/posts/${postId}/comments`, { content })
-      setText('')
-      toast.push('Đã thêm bình luận')
-      onDone()
-    } catch (error: any) {
-      toast.push(error?.message || 'Không thể gửi bình luận')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className={styles.commentBox}>
-      <div className={styles.commentTitle}>Bình luận</div>
-      <textarea
-        className={styles.commentInput}
-        placeholder="Viết bình luận..."
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        rows={4}
-      />
-      <div className={styles.commentActions}>
-        <button className="btn" type="button" onClick={submit} disabled={sending || !text.trim()}>
-          {sending ? 'Đang gửi...' : 'Gửi'}
-        </button>
-      </div>
-    </div>
-  )
-}
 
 export default function Feed() {
   const api = useApi()
@@ -59,7 +18,6 @@ export default function Feed() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -77,19 +35,34 @@ export default function Feed() {
 
   useEffect(() => {
     loadPosts()
-  }, [loadPosts, refreshKey])
+  }, [loadPosts])
 
   const refresh = () => {
-    setPage(1)
-    setRefreshKey((value) => value + 1)
+    loadPosts()
+  }
+
+  const updatePost = (postId: string, patch: Partial<Post>) => {
+    setItems((prev) => prev.map((item) => (item._id === postId ? { ...item, ...patch } : item)))
   }
 
   const toggleLike = async (post: Post) => {
+    const previous = { likedByMe: !!post.likedByMe, likesCount: post.likesCount || 0 }
+    const nextLiked = !previous.likedByMe
+    updatePost(post._id, {
+      likedByMe: nextLiked,
+      likesCount: Math.max(0, previous.likesCount + (nextLiked ? 1 : -1)),
+    })
+
     try {
-      if (post.likedByMe) await api.del(`/posts/${post._id}/like`)
-      else await api.post(`/posts/${post._id}/like`, {})
-      await loadPosts()
+      if (post.likedByMe) {
+        const res = await api.del(`/posts/${post._id}/like`)
+        updatePost(post._id, res?.data || {})
+      } else {
+        const res = await api.post(`/posts/${post._id}/like`, {})
+        updatePost(post._id, res?.data || {})
+      }
     } catch (error: any) {
+      updatePost(post._id, previous)
       toast.push(error?.message || 'Không thể cập nhật lượt thích')
     }
   }
@@ -115,7 +88,12 @@ export default function Feed() {
           post={post}
           onLike={() => toggleLike(post)}
           onOpenComment={() =>
-            modal.open(<CommentForm postId={post._id} onDone={loadPosts} />)
+            modal.open(
+              <CommentSheet
+                postId={post._id}
+                onChanged={(count) => updatePost(post._id, { commentsCount: count })}
+              />,
+            )
           }
           onOpenDetail={() => nav(`/post/${post._id}`)}
           onOpenAuthor={() => nav(`/profile/${encodeURIComponent(post.authorUsername || post.authorId || 'user')}`)}
