@@ -56,9 +56,7 @@ export default function Sidebar() {
           >
             <span className={styles.iconWrap}>
               {it.icon}
-              {it.to === '/notifications' && unreadCount > 0 ? (
-                <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span>
-              ) : null}
+              {it.to === '/notifications' && unreadCount > 0 ? <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
             </span>
             <span className={styles.label}>{it.label}</span>
           </NavLink>

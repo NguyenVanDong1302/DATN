@@ -6,13 +6,10 @@ const { AppError } = require("../utils/errors");
 const Comment = require("../models/Comment");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
-const {
-  createOrMergeNotification,
-  removeActorFromNotification,
-} = require("../services/notification.service");
+const notificationService = require("../services/notification.service");
 
 const visibilityEnum = ["public", "friends", "private"];
-const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\\/,/$/ ,"");
 
 const createPostSchema = z
   .object({
@@ -38,6 +35,7 @@ const createPostSchema = z
 const addCommentSchema = z.object({
   content: z.string().trim().min(1).max(1000),
   parentCommentId: z.string().trim().optional().nullable(),
+  replyToCommentId: z.string().trim().optional().nullable(),
 });
 
 const updatePostSchema = z
@@ -95,7 +93,9 @@ function cleanupUploadedFiles(files = []) {
     if (file?.path && fs.existsSync(file.path)) {
       try {
         fs.unlinkSync(file.path);
-      } catch (_err) {}
+      } catch (_err) {
+        // noop
+      }
     }
   }
 }
@@ -108,7 +108,9 @@ function removePostMediaFiles(post) {
     if (fs.existsSync(absolutePath)) {
       try {
         fs.unlinkSync(absolutePath);
-      } catch (_err) {}
+      } catch (_err) {
+        // noop
+      }
     }
   }
 }
@@ -142,13 +144,25 @@ function detectMediaType(media) {
   return types.has("video") ? "video" : "image";
 }
 
-function serializeComment(comment, userId) {
+function serializeComment(comment, currentUserId, postAuthorId) {
   const obj = comment.toObject ? comment.toObject() : comment;
-  const likes = Array.isArray(obj.likes) ? obj.likes : [];
+  const parentCommentId = obj.parentCommentId ? String(obj.parentCommentId) : null;
+  const replyToCommentId = obj.replyToCommentId ? String(obj.replyToCommentId) : null;
   return {
     ...obj,
-    likesCount: likes.length,
-    likedByMe: userId ? likes.includes(userId) : false,
+    parentCommentId,
+    replyToCommentId,
+    isReply: Boolean(parentCommentId),
+    replyTo: obj.replyToAuthorUsername
+      ? {
+          commentId: replyToCommentId,
+          authorId: obj.replyToAuthorId || null,
+          authorUsername: obj.replyToAuthorUsername,
+        }
+      : null,
+    likedByMe: Array.isArray(obj.likes) ? obj.likes.includes(currentUserId) : false,
+    likesCount: Array.isArray(obj.likes) ? obj.likes.length : 0,
+    canDelete: Boolean(currentUserId) && (obj.authorId === currentUserId || postAuthorId === currentUserId),
   };
 }
 
@@ -197,7 +211,11 @@ async function createPost(req, res, next) {
 
     if (!body.content && media.length === 0) {
       cleanupUploadedFiles(uploadedFiles);
-      throw new AppError("Post must contain text, image, or video", 400, "EMPTY_POST");
+      throw new AppError(
+        "Post must contain text, image, or video",
+        400,
+        "EMPTY_POST",
+      );
     }
 
     const post = await Post.create({
@@ -218,11 +236,21 @@ async function createPost(req, res, next) {
       imageUrl: media.find((item) => item.type === "image")?.url || "",
     });
 
-    res.status(201).json({ ok: true, message: "Post created successfully", data: serializePost(post, req.user.sub, 0) });
+    res.status(201).json({
+      ok: true,
+      message: "Post created successfully",
+      data: serializePost(post, req.user.sub, 0),
+    });
   } catch (err) {
     cleanupUploadedFiles(uploadedFiles);
     if (err?.name === "ZodError") {
-      return next(new AppError(err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input", 400, "VALIDATION_ERROR"));
+      return next(
+        new AppError(
+          err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input",
+          400,
+          "VALIDATION_ERROR",
+        ),
+      );
     }
     next(err);
   }
@@ -231,7 +259,10 @@ async function createPost(req, res, next) {
 async function listPosts(req, res, next) {
   try {
     const page = Math.max(parseInt(req.query.page || "1", 10), 1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit || "10", 10), 1), 50);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit || "10", 10), 1),
+      50,
+    );
     const skip = (page - 1) * limit;
 
     const filters = {};
@@ -242,7 +273,9 @@ async function listPosts(req, res, next) {
       filters.visibility = requestedVisibility;
     } else {
       filters.$or = [{ visibility: "public" }];
-      if (viewerId) filters.$or.push({ authorId: viewerId });
+      if (viewerId) {
+        filters.$or.push({ authorId: viewerId });
+      }
     }
 
     const [items, total] = await Promise.all([
@@ -252,9 +285,21 @@ async function listPosts(req, res, next) {
 
     const postIds = items.map((p) => p._id);
     const countMap = await getCommentsCountMap(postIds);
-    const mapped = items.map((p) => serializePost(p, viewerId, countMap.get(String(p._id)) || 0));
 
-    res.json({ ok: true, data: { items: mapped, page, limit, total, totalPages: Math.ceil(total / limit) } });
+    const mapped = items.map((p) =>
+      serializePost(p, viewerId, countMap.get(String(p._id)) || 0),
+    );
+
+    res.json({
+      ok: true,
+      data: {
+        items: mapped,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -264,17 +309,18 @@ async function getPost(req, res, next) {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
-    if (post.visibility === "private" && post.authorId !== req.user?.sub) {
-      throw new AppError("Forbidden", 403, "FORBIDDEN");
+
+    if (post.visibility === 'private' && post.authorId !== req.user?.sub) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
 
-    const comments = await Comment.find({ postId: post._id }).sort({ createdAt: -1 }).limit(100);
+    const comments = await Comment.find({ postId: post._id }).sort({ createdAt: -1 }).limit(30);
 
     res.json({
       ok: true,
       data: {
         post: serializePost(post, req.user?.sub, comments.length),
-        comments: comments.map((comment) => serializeComment(comment, req.user?.sub)),
+        comments: comments.map((item) => serializeComment(item, req.user?.sub, post.authorId)),
       },
     });
   } catch (err) {
@@ -292,7 +338,15 @@ async function recordView(req, res, next) {
     await post.save();
 
     const commentsCount = await Comment.countDocuments({ postId: post._id });
-    res.json({ ok: true, data: { postId: post._id, viewsCount: post.viewsCount, lastViewedAt: post.lastViewedAt, post: serializePost(post, req.user?.sub, commentsCount) } });
+    res.json({
+      ok: true,
+      data: {
+        postId: post._id,
+        viewsCount: post.viewsCount,
+        lastViewedAt: post.lastViewedAt,
+        post: serializePost(post, req.user?.sub, commentsCount),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -303,7 +357,10 @@ async function updatePost(req, res, next) {
     const body = updatePostSchema.parse(req.body || {});
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
-    if (post.authorId !== req.user.sub) throw new AppError("Forbidden", 403, "FORBIDDEN");
+
+    if (post.authorId !== req.user.sub) {
+      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    }
 
     if (body.content !== undefined) post.content = body.content;
     if (body.visibility !== undefined) post.visibility = body.visibility;
@@ -315,7 +372,11 @@ async function updatePost(req, res, next) {
     if (body.tags !== undefined) post.tags = body.tags;
 
     if (!post.content && (!post.media || post.media.length === 0)) {
-      throw new AppError("Post must contain text, image, or video", 400, "EMPTY_POST");
+      throw new AppError(
+        "Post must contain text, image, or video",
+        400,
+        "EMPTY_POST",
+      );
     }
 
     await post.save();
@@ -323,7 +384,13 @@ async function updatePost(req, res, next) {
     res.json({ ok: true, data: serializePost(post, req.user.sub, commentsCount) });
   } catch (err) {
     if (err?.name === "ZodError") {
-      return next(new AppError(err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input", 400, "VALIDATION_ERROR"));
+      return next(
+        new AppError(
+          err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input",
+          400,
+          "VALIDATION_ERROR",
+        ),
+      );
     }
     next(err);
   }
@@ -333,7 +400,10 @@ async function deletePost(req, res, next) {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
-    if (post.authorId !== req.user.sub) throw new AppError("Forbidden", 403, "FORBIDDEN");
+
+    if (post.authorId !== req.user.sub) {
+      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    }
 
     removePostMediaFiles(post);
     await Post.deleteOne({ _id: post._id });
@@ -351,53 +421,38 @@ async function toggleLike(req, res, next) {
 
     const userId = req.user.sub;
     const idx = post.likes.indexOf(userId);
-    const hasLiked = idx >= 0;
-    if (hasLiked) {
-      post.likes.splice(idx, 1);
-    } else {
-      post.likes.push(userId);
-    }
-    await post.save();
 
-    const liked = !hasLiked;
+    if (idx >= 0) {
+      throw new AppError("Post already liked by this user", 409, "ALREADY_LIKED");
+    }
+
+    post.likes.push(userId);
+    await post.save();
 
     const io = getIO();
     io.to(`post:${post._id}`).emit("post:like", {
       postId: String(post._id),
       likesCount: post.likes.length,
       likedBy: req.user.username,
-      liked,
-      actorId: req.user.sub,
     });
 
-    if (post.authorId !== req.user.sub) {
-      if (liked) {
-        const notification = await createOrMergeNotification({
-          ownerId: post.authorId,
-          type: 'like',
-          postId: post._id,
-          actorId: req.user.sub,
-          actorUsername: req.user.username,
-        });
-        if (notification) {
-          io.to(`user:${post.authorId}`).emit('notify', {
-            type: 'like',
-            postId: String(post._id),
-            fromUsername: req.user.username,
-            createdAt: new Date().toISOString(),
-          });
-        }
-      } else {
-        await removeActorFromNotification({
-          ownerId: post.authorId,
-          type: 'like',
-          postId: post._id,
-          actorId: req.user.sub,
-        });
-      }
-    }
+    notificationService.notifyPostLike({
+      post,
+      actorId: req.user.sub,
+      actorUsername: req.user.username,
+    }).catch((error) => {
+      console.error("notifyPostLike failed:", error?.message || error);
+    });
 
-    res.json({ ok: true, data: { postId: post._id, liked, likesCount: post.likes.length, displayLikesCount: post.hideLikeCount ? null : post.likes.length } });
+    res.json({
+      ok: true,
+      data: {
+        postId: post._id,
+        liked: true,
+        likesCount: post.likes.length,
+        displayLikesCount: post.hideLikeCount ? null : post.likes.length,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -409,20 +464,34 @@ async function removeLike(req, res, next) {
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
     const userId = req.user.sub;
-    const before = post.likes.length;
     post.likes = (post.likes || []).filter((item) => item !== userId);
     await post.save();
 
-    if (before !== post.likes.length && post.authorId !== req.user.sub) {
-      await removeActorFromNotification({
-        ownerId: post.authorId,
-        type: 'like',
-        postId: post._id,
-        actorId: req.user.sub,
-      });
-    }
+    const io = getIO();
+    io.to(`post:${post._id}`).emit("post:like", {
+      postId: String(post._id),
+      likesCount: post.likes.length,
+      likedBy: req.user.username,
+    });
 
-    res.json({ ok: true, data: { postId: post._id, liked: false, likesCount: post.likes.length, displayLikesCount: post.hideLikeCount ? null : post.likes.length } });
+    notificationService.removePostLikeActor({
+      postId: post._id,
+      recipientId: post.authorId,
+      actorId: req.user.sub,
+      actorUsername: req.user.username,
+    }).catch((error) => {
+      console.error("removePostLikeActor failed:", error?.message || error);
+    });
+
+    res.json({
+      ok: true,
+      data: {
+        postId: post._id,
+        liked: false,
+        likesCount: post.likes.length,
+        displayLikesCount: post.hideLikeCount ? null : post.likes.length,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -431,58 +500,82 @@ async function removeLike(req, res, next) {
 async function addComment(req, res, next) {
   try {
     const body = addCommentSchema.parse(req.body);
+
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
-    if (!post.allowComments) throw new AppError("Comments are disabled for this post", 400, "COMMENTS_DISABLED");
+    if (!post.allowComments) {
+      throw new AppError("Comments are disabled for this post", 400, "COMMENTS_DISABLED");
+    }
 
     let parentComment = null;
-    if (body.parentCommentId) {
-      parentComment = await Comment.findById(body.parentCommentId);
+    let replyTarget = null;
+    if (body.parentCommentId || body.replyToCommentId) {
+      const targetId = body.replyToCommentId || body.parentCommentId;
+      replyTarget = await Comment.findById(targetId);
+      if (!replyTarget || String(replyTarget.postId) !== String(post._id)) {
+        throw new AppError("Reply target not found", 404, "REPLY_TARGET_NOT_FOUND");
+      }
+
+      if (body.parentCommentId) {
+        parentComment = await Comment.findById(body.parentCommentId);
+        if (!parentComment || String(parentComment.postId) !== String(post._id)) {
+          throw new AppError("Parent comment not found", 404, "PARENT_COMMENT_NOT_FOUND");
+        }
+      } else {
+        parentComment = replyTarget.parentCommentId
+          ? await Comment.findById(replyTarget.parentCommentId)
+          : replyTarget;
+      }
+
       if (!parentComment || String(parentComment.postId) !== String(post._id)) {
-        throw new AppError('Parent comment not found', 404, 'COMMENT_NOT_FOUND');
+        throw new AppError("Parent comment not found", 404, "PARENT_COMMENT_NOT_FOUND");
       }
     }
 
     const c = await Comment.create({
       postId: post._id,
-      parentCommentId: parentComment?._id || null,
       authorId: req.user.sub,
       authorUsername: req.user.username,
       content: body.content,
-      likes: [],
+      parentCommentId: parentComment?._id || null,
+      replyToCommentId: replyTarget?._id || null,
+      replyToAuthorId: replyTarget?.authorId || null,
+      replyToAuthorUsername: replyTarget?.authorUsername || null,
     });
-
     const io = getIO();
+
     io.to(`post:${post._id}`).emit("post:comment", {
       postId: String(post._id),
-      comment: serializeComment(c, req.user.sub),
+      comment: {
+        _id: String(c._id),
+        authorUsername: c.authorUsername,
+        content: c.content,
+        createdAt: c.createdAt,
+        parentCommentId: c.parentCommentId ? String(c.parentCommentId) : null,
+        replyToCommentId: c.replyToCommentId ? String(c.replyToCommentId) : null,
+        replyToAuthorUsername: c.replyToAuthorUsername || null,
+      },
     });
 
-    if (parentComment && parentComment.authorId !== req.user.sub) {
-      await createOrMergeNotification({
-        ownerId: parentComment.authorId,
-        type: 'reply',
-        postId: post._id,
-        commentId: parentComment._id,
-        actorId: req.user.sub,
-        actorUsername: req.user.username,
-        contentPreview: c.content.slice(0, 120),
-      });
-    } else if (post.authorId !== req.user.sub) {
-      await createOrMergeNotification({
-        ownerId: post.authorId,
-        type: 'comment',
-        postId: post._id,
-        actorId: req.user.sub,
-        actorUsername: req.user.username,
-        contentPreview: c.content.slice(0, 120),
-      });
-    }
+    notificationService.notifyPostComment({
+      post,
+      actorId: req.user.sub,
+      actorUsername: req.user.username,
+      previewText: c.content.slice(0, 120),
+    }).catch((error) => {
+      console.error("notifyPostComment failed:", error?.message || error);
+    });
 
-    res.status(201).json({ ok: true, data: serializeComment(c, req.user.sub) });
+    res.status(201).json({ ok: true, data: serializeComment(c, req.user.sub, post.authorId) });
   } catch (err) {
     if (err?.name === "ZodError") {
-      return next(new AppError(err.errors?.[0]?.message || "Invalid input", 400, "VALIDATION_ERROR"));
+      return next(
+        new AppError(
+          err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input",
+          400,
+          "VALIDATION_ERROR",
+        ),
+      );
     }
     next(err);
   }
@@ -493,8 +586,8 @@ async function listComments(req, res, next) {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
-    const items = await Comment.find({ postId: post._id }).sort({ createdAt: 1 });
-    res.json({ ok: true, data: items.map((item) => serializeComment(item, req.user?.sub)) });
+    const items = await Comment.find({ postId: post._id }).sort({ createdAt: 1, _id: 1 });
+    res.json({ ok: true, data: items.map((item) => serializeComment(item, req.user?.sub, post.authorId)) });
   } catch (err) {
     next(err);
   }
@@ -504,59 +597,20 @@ async function deleteComment(req, res, next) {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) throw new AppError("Comment not found", 404, "NOT_FOUND");
-    const post = await Post.findById(comment.postId);
+
+    const post = await Post.findById(comment.postId).select("authorId");
     const canDelete = comment.authorId === req.user.sub || post?.authorId === req.user.sub;
-    if (!canDelete) throw new AppError("Forbidden", 403, "FORBIDDEN");
-
-    const ids = [comment._id];
-    const children = await Comment.find({ parentCommentId: comment._id }).select('_id');
-    for (const child of children) ids.push(child._id);
-
-    await Comment.deleteMany({ _id: { $in: ids } });
-    res.json({ ok: true, data: { id: comment._id, deletedIds: ids.map(String) } });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function toggleCommentLike(req, res, next) {
-  try {
-    const comment = await Comment.findById(req.params.commentId);
-    if (!comment) throw new AppError('Comment not found', 404, 'NOT_FOUND');
-
-    const userId = req.user.sub;
-    const idx = (comment.likes || []).indexOf(userId);
-    let liked = false;
-    if (idx >= 0) {
-      comment.likes.splice(idx, 1);
-    } else {
-      comment.likes.push(userId);
-      liked = true;
-    }
-    await comment.save();
-
-    if (comment.authorId !== req.user.sub) {
-      if (liked) {
-        await createOrMergeNotification({
-          ownerId: comment.authorId,
-          type: 'comment_like',
-          postId: comment.postId,
-          commentId: comment._id,
-          actorId: req.user.sub,
-          actorUsername: req.user.username,
-        });
-      } else {
-        await removeActorFromNotification({
-          ownerId: comment.authorId,
-          type: 'comment_like',
-          postId: comment.postId,
-          commentId: comment._id,
-          actorId: req.user.sub,
-        });
-      }
+    if (!canDelete) {
+      throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    res.json({ ok: true, data: serializeComment(comment, req.user.sub) });
+    await Comment.deleteMany({
+      $or: [
+        { _id: comment._id },
+        { parentCommentId: comment._id },
+      ],
+    });
+    res.json({ ok: true, data: { id: comment._id } });
   } catch (err) {
     next(err);
   }
@@ -574,5 +628,4 @@ module.exports = {
   addComment,
   listComments,
   deleteComment,
-  toggleCommentLike,
 };

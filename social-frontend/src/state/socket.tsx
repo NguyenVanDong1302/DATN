@@ -14,16 +14,17 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.username) return
 
-    const s = io({ auth: { username: state.username } })
+    const s = io(undefined, { auth: { username: state.username } })
     setSocket(s)
 
-    s.on('connect', () => toast.push('Kết nối realtime thành công'))
-    s.on('connect_error', () => toast.push('Realtime đang gặp lỗi kết nối'))
+    s.on('connect', () => toast.push('Đã kết nối realtime'))
+    s.on('notify', (payload: any) => toast.push(payload?.message || 'Bạn có thông báo mới'))
 
     return () => {
       s.disconnect()
       setSocket(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.username, toast])
 
   const value = useMemo(() => ({ socket }), [socket])

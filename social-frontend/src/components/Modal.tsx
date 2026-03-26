@@ -59,21 +59,17 @@ function ModalHost({
     <div
       className={mode === 'fullscreen' ? styles.fullscreenOverlay : styles.overlay}
       onMouseDown={(e) => {
-        // normal mode: click nền để đóng
         if (mode === 'normal' && e.target === e.currentTarget) onClose()
       }}
     >
       {mode === 'normal' ? (
         <div className={styles.modal}>
-          <div className={styles.headerRow}>
-            <button className={styles.btn} onClick={onClose}>
-              Close
-            </button>
-          </div>
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Đóng popup">
+            ×
+          </button>
           <div className={styles.body}>{node}</div>
         </div>
       ) : (
-        // fullscreen mode: render nguyên node (StoryViewer tự có nút X)
         <>{node}</>
       )}
     </div>

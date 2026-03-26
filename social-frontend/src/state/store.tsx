@@ -14,7 +14,7 @@ const StoreCtx = createContext<Ctx | null>(null)
 
 function loadState(): AppState {
   return {
-    username: localStorage.getItem('x_username') || 'ad',
+    username: localStorage.getItem('x_username') || '',
     token: localStorage.getItem('token') || '',
   }
 }

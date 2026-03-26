@@ -8,18 +8,27 @@ const commentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    authorId: { type: String, required: true, index: true },
+    authorUsername: { type: String, required: true },
+    content: { type: String, required: true, trim: true, maxlength: 1000 },
     parentCommentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
       default: null,
       index: true,
     },
-    authorId: { type: String, required: true, index: true },
-    authorUsername: { type: String, required: true },
-    content: { type: String, required: true, trim: true, maxlength: 1000 },
+    replyToCommentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Comment",
+      default: null,
+    },
+    replyToAuthorId: { type: String, default: null },
+    replyToAuthorUsername: { type: String, default: null },
     likes: { type: [String], default: [] },
   },
   { timestamps: true },
 );
+
+commentSchema.index({ postId: 1, parentCommentId: 1, createdAt: 1 });
 
 module.exports = mongoose.model("Comment", commentSchema);

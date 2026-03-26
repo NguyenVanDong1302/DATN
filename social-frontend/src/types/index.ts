@@ -21,16 +21,27 @@ export type Post = {
   media?: PostMedia[]
 }
 
+export type PostCommentReplyTo = {
+  commentId?: string | null
+  authorId?: string | null
+  authorUsername?: string | null
+} | null
+
 export type PostComment = {
   _id: string
   postId?: string
-  parentCommentId?: string | null
   authorId?: string
   authorUsername?: string
   content: string
-  likes?: string[]
-  likesCount?: number
-  likedByMe?: boolean
   createdAt?: string
   updatedAt?: string
+  parentCommentId?: string | null
+  replyToCommentId?: string | null
+  replyToAuthorId?: string | null
+  replyToAuthorUsername?: string | null
+  replyTo?: PostCommentReplyTo
+  isReply?: boolean
+  likesCount?: number
+  likedByMe?: boolean
+  canDelete?: boolean
 }

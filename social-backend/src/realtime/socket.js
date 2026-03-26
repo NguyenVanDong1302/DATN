@@ -11,7 +11,8 @@ function initSocket(io) {
 
   io.on('connection', (socket) => {
     const username = socket.handshake.auth?.username?.toString()?.trim();
-    const userId = socket.handshake.auth?.userId?.toString()?.trim() || (username ? toUserId(username) : '');
+    const providedUserId = socket.handshake.auth?.userId?.toString()?.trim();
+    const userId = providedUserId || (username ? toUserId(username) : '');
 
     if (userId) socket.join(`user:${userId}`);
 
@@ -32,4 +33,4 @@ function getIO() {
   return ioRef;
 }
 
-module.exports = { initSocket, getIO };
+module.exports = { initSocket, getIO, toUserId };

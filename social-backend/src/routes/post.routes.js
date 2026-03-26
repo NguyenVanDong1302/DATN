@@ -13,7 +13,6 @@ const {
   addComment,
   listComments,
   deleteComment,
-  toggleCommentLike,
 } = require("../controllers/post.controller");
 
 const router = express.Router();
@@ -32,7 +31,5 @@ router.delete("/:id/like", removeLike);
 router.post("/:id/comments", addComment);
 router.get("/:id/comments", listComments);
 router.delete("/:id/comments/:commentId", deleteComment);
-router.post("/:id/comments/:commentId/like", toggleCommentLike);
-router.delete("/:id/comments/:commentId/like", toggleCommentLike);
 
 module.exports = router;

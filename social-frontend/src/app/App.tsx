@@ -7,15 +7,15 @@ import ExplorePage from '../pages/ExplorePage'
 import ProfilePage from '../pages/Profile/ProfilePage'
 import NotificationsPage from '../pages/NotificationsPage'
 import SettingsPage from '../pages/SettingsPage'
-import { ToastHost } from '../components/Toast'
+import { ToastHost, ToastProvider } from '../components/Toast'
 import { ModalProvider } from '../components/Modal'
-import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import ReelsPage from '../pages/Reel/Reel'
 import MessagesPage from '../pages/Messages/MessagesPage'
 import CreatePostPage from '../pages/CreatePostPage'
 import PostPage from '../pages/PostPage'
 import LoginPage from '../pages/Auth/LoginPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
+import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import ProtectedRoute from '../features/auth/ProtectedRoute'
 
 function ProtectedShell() {
@@ -29,32 +29,34 @@ function ProtectedShell() {
 export default function App() {
   return (
     <AppStoreProvider>
-      <AuthProvider>
-        <SocketProvider>
-          <NotificationProvider>
-          <ModalProvider>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
+      <ToastProvider>
+        <AuthProvider>
+          <SocketProvider>
+            <NotificationProvider>
+              <ModalProvider>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
 
-              <Route element={<ProtectedRoute />}>
-                <Route element={<ProtectedShell />}>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/explore" element={<ExplorePage />} />
-                  <Route path="/profile/:username" element={<ProfilePage />} />
-                  <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/reels" element={<ReelsPage />} />
-                  <Route path="/messages" element={<MessagesPage />} />
-                  <Route path="/create" element={<CreatePostPage />} />
-                  <Route path="/post/:id" element={<PostPage />} />
-                </Route>
-              </Route>
-            </Routes>
-          </ModalProvider>
-          </NotificationProvider>
-          <ToastHost />
-        </SocketProvider>
-      </AuthProvider>
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<ProtectedShell />}>
+                      <Route path="/" element={<HomePage />} />
+                      <Route path="/explore" element={<ExplorePage />} />
+                      <Route path="/profile/:username" element={<ProfilePage />} />
+                      <Route path="/notifications" element={<NotificationsPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/reels" element={<ReelsPage />} />
+                      <Route path="/messages" element={<MessagesPage />} />
+                      <Route path="/create" element={<CreatePostPage />} />
+                      <Route path="/post/:id" element={<PostPage />} />
+                    </Route>
+                  </Route>
+                </Routes>
+              </ModalProvider>
+              <ToastHost />
+            </NotificationProvider>
+          </SocketProvider>
+        </AuthProvider>
+      </ToastProvider>
     </AppStoreProvider>
   )
 }

@@ -12,8 +12,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { firebaseConfigError, getFirebaseServices } from '../../lib/firebase'
 import { useAppStore } from '../../state/store'
+import { firebaseConfigError, getFirebaseServices } from '../../lib/firebase'
 
 type AuthContextValue = {
   user: User | null
@@ -24,16 +24,6 @@ type AuthContextValue = {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
-
-function normalizeUsername(user: User | null) {
-  if (!user) return ''
-  const base = user.email?.split('@')[0] || user.displayName || user.uid
-  return String(base)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'user'
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -49,7 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { auth } = getFirebaseServices()
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
-      setState({ username: normalizeUsername(firebaseUser) })
+      const username = firebaseUser?.email?.split('@')[0]?.trim() || firebaseUser?.displayName?.trim().replace(/\s+/g, '_').toLowerCase() || ''
+      setState({ username, token: firebaseUser?.uid || '' })
       setLoading(false)
     })
 
