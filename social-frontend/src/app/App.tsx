@@ -14,6 +14,7 @@ import MessagesPage from '../pages/Messages/MessagesPage'
 import CreatePostPage from '../pages/CreatePostPage'
 import PostPage from '../pages/PostPage'
 import LoginPage from '../pages/Auth/LoginPage'
+import RegisterPage from '../pages/Auth/RegisterPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import ProtectedRoute from '../features/auth/ProtectedRoute'
@@ -36,6 +37,7 @@ export default function App() {
               <ModalProvider>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
 
                   <Route element={<ProtectedRoute />}>
                     <Route element={<ProtectedShell />}>

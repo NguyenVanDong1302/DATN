@@ -1,11 +1,15 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
+import { useAppStore } from '../../state/store'
 
 export default function ProtectedRoute() {
   const { user, loading } = useAuth()
+  const { state } = useAppStore()
   const location = useLocation()
 
-  if (loading) {
+  const hasBackendSession = Boolean(state.username && state.token)
+
+  if (loading && !hasBackendSession) {
     return (
       <div
         style={{
@@ -23,7 +27,7 @@ export default function ProtectedRoute() {
     )
   }
 
-  if (!user) {
+  if (!user && !hasBackendSession) {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 

@@ -1,0 +1,35 @@
+export type MessageUser = {
+  id: string
+  username: string
+  email?: string
+  bio?: string
+  avatarUrl?: string
+}
+
+export type ConversationItem = {
+  id: string
+  type: 'direct'
+  peer: MessageUser
+  lastMessageText: string
+  lastMessageAt?: string | null
+  unreadCount: number
+}
+
+export type ChatMessage = {
+  id: string
+  conversationId: string
+  senderId: string
+  senderUsername: string
+  receiverId: string
+  receiverUsername: string
+  type: 'text'
+  text: string
+  status: 'sent' | 'delivered' | 'seen'
+  seenAt?: string | null
+  createdAt: string
+}
+
+export type SearchUsersResponse = {
+  following: MessageUser[]
+  suggested: MessageUser[]
+}

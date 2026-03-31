@@ -14,7 +14,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.username) return
 
-    const s = io(undefined, { auth: { username: state.username } })
+    const s = io('http://localhost:4000', {
+      auth: { username: state.username, token: state.token },
+    })
     setSocket(s)
 
     s.on('connect', () => toast.push('Đã kết nối realtime'))
@@ -24,8 +26,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       s.disconnect()
       setSocket(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.username, toast])
+  }, [state.username, state.token, toast])
 
   const value = useMemo(() => ({ socket }), [socket])
   return <SocketCtx.Provider value={value}>{children}</SocketCtx.Provider>

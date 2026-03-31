@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import styles from './Sidebar.module.css'
 import { useAuth } from '../../../features/auth/AuthProvider'
 import { useNotifications } from '../../../features/notifications/NotificationProvider'
+import { useAppStore } from '../../../state/store'
 
 type NavItem = {
   to: string
@@ -17,12 +18,13 @@ function Icon({ children }: { children: ReactNode }) {
 export default function Sidebar() {
   const { user, logout } = useAuth()
   const { unreadCount } = useNotifications()
+  const { state, setState } = useAppStore()
   const navigate = useNavigate()
 
   const profileSlug = useMemo(() => {
-    const raw = user?.displayName || user?.email?.split('@')[0] || 'user'
+    const raw = state.username || user?.displayName || user?.email?.split('@')[0] || 'user'
     return encodeURIComponent(raw)
-  }, [user])
+  }, [state.username, user])
 
   const items: NavItem[] = [
     { to: '/', label: 'Trang chủ', icon: <Icon>🏠</Icon> },
@@ -36,7 +38,12 @@ export default function Sidebar() {
   ]
 
   const handleLogout = async () => {
-    await logout()
+    try {
+      if (user) await logout()
+    } catch {
+      // ignore firebase logout error when using backend auth only
+    }
+    setState({ username: '', token: '' })
     navigate('/login', { replace: true })
   }
 

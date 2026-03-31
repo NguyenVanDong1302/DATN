@@ -28,10 +28,21 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(!firebaseConfigError)
-  const { setState } = useAppStore()
+  const { state, setState } = useAppStore()
 
   useEffect(() => {
+    if (state.token && state.username) {
+      setUser({
+        uid: state.token,
+        email: state.username.includes('@') ? state.username : `${state.username}@local.app`,
+        displayName: state.username,
+      } as User)
+      setLoading(false)
+      return
+    }
+
     if (firebaseConfigError) {
+      setUser(null)
       setLoading(false)
       return
     }
@@ -45,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => unsub()
-  }, [setState])
+  }, [firebaseConfigError, setState, state.token, state.username])
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -57,8 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInWithPopup(auth, googleProvider)
       },
       logout: async () => {
-        const { auth } = getFirebaseServices()
-        await signOut(auth)
+        if (!firebaseConfigError) {
+          const { auth } = getFirebaseServices()
+          await signOut(auth)
+        }
+        setUser(null)
         setState({ username: '', token: '' })
       },
     }),
