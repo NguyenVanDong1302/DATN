@@ -216,6 +216,10 @@ export default function PostCard({
   onOpenComment,
   onOpenDetail,
   onOpenAuthor,
+  showFollowButton,
+  following,
+  followPending,
+  onToggleFollow,
 }: {
   post: Post
   likePending?: boolean
@@ -224,6 +228,10 @@ export default function PostCard({
   onOpenComment: () => void
   onOpenDetail: () => void
   onOpenAuthor: () => void
+  showFollowButton?: boolean
+  following?: boolean
+  followPending?: boolean
+  onToggleFollow?: () => void
 }) {
   const likesCount = post.likesCount ?? (Array.isArray(post.likes) ? post.likes.length : 0)
   const likedByMe = !!post.likedByMe
@@ -253,7 +261,23 @@ export default function PostCard({
           </div>
         </div>
 
-        <div style={styles.moreBtn}>•••</div>
+        <div style={styles.headerActions}>
+          {showFollowButton ? (
+            <button
+              type="button"
+              style={{
+                ...styles.followBtn,
+                ...(following ? styles.followBtnSecondary : {}),
+                ...(followPending ? styles.buttonPending : {}),
+              }}
+              onClick={onToggleFollow}
+              disabled={!!followPending}
+            >
+              {followPending ? 'Đang xử lý...' : following ? 'Đang theo dõi' : 'Theo dõi'}
+            </button>
+          ) : null}
+          <div style={styles.moreBtn}>•••</div>
+        </div>
       </div>
 
       {post.content && <div style={styles.content}>{post.content}</div>}
@@ -332,6 +356,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: '#777',
     marginTop: 2,
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+  },
+  followBtn: {
+    border: 'none',
+    borderRadius: 999,
+    padding: '8px 14px',
+    background: '#1877f2',
+    color: '#fff',
+    fontWeight: 700,
+    fontSize: 13,
+    cursor: 'pointer',
+  },
+  followBtnSecondary: {
+    background: '#efefef',
+    color: '#111',
   },
   moreBtn: {
     fontSize: 18,

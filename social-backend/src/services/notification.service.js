@@ -1,5 +1,4 @@
 const Notification = require('../models/Notification');
-const Post = require('../models/Post');
 const { getIO } = require('../realtime/socket');
 
 let indexesEnsured = false;
@@ -27,15 +26,25 @@ function buildNotifyMessage(notification) {
   const first = names[0] || 'Ai đó';
   const others = Math.max((notification.totalEvents || names.length || 1) - 1, 0);
 
+  if (notification.type === 'follow') {
+    return others > 0
+      ? `${first} và ${others} người khác đã theo dõi bạn.`
+      : `${first} đã theo dõi bạn.`;
+  }
+
   if (notification.type === 'like') {
     return others > 0
       ? `${first} và ${others} người khác đã thích bài viết của bạn.`
       : `${first} đã thích bài viết của bạn.`;
   }
 
-  return others > 0
-    ? `${first} và ${others} người khác đã bình luận về bài viết của bạn.`
-    : `${first} đã bình luận về bài viết của bạn.`;
+  if (notification.type === 'comment') {
+    return others > 0
+      ? `${first} và ${others} người khác đã bình luận về bài viết của bạn.`
+      : `${first} đã bình luận về bài viết của bạn.`;
+  }
+
+  return `${first} đã gửi cho bạn một tin nhắn mới.`;
 }
 
 async function emitNotification(recipientId, notification) {
@@ -58,8 +67,17 @@ async function emitNotification(recipientId, notification) {
   });
 }
 
-async function upsertPostNotification({ type, postId, recipientId, actorId, actorUsername, previewText = '' }) {
-  if (!recipientId || !postId || !type || !actorId) return null;
+async function upsertNotification({
+  type,
+  targetType,
+  targetId,
+  recipientId,
+  actorId,
+  actorUsername,
+  postId = '',
+  previewText = '',
+}) {
+  if (!recipientId || !targetId || !type || !actorId) return null;
   if (String(recipientId) === String(actorId)) return null;
 
   await ensureIndexes();
@@ -70,16 +88,16 @@ async function upsertPostNotification({ type, postId, recipientId, actorId, acto
       {
         recipientId,
         type,
-        targetType: 'post',
-        targetId: String(postId),
+        targetType,
+        targetId: String(targetId),
       },
       {
         $setOnInsert: {
           recipientId,
           type,
-          targetType: 'post',
-          targetId: String(postId),
-          postId: String(postId),
+          targetType,
+          targetId: String(targetId),
+          postId: postId ? String(postId) : '',
         },
         $addToSet: {
           actors: String(actorId),
@@ -102,8 +120,8 @@ async function upsertPostNotification({ type, postId, recipientId, actorId, acto
   const notification = await Notification.findOne({
     recipientId,
     type,
-    targetType: 'post',
-    targetId: String(postId),
+    targetType,
+    targetId: String(targetId),
   }).lean();
 
   if (notification) {
@@ -113,8 +131,8 @@ async function upsertPostNotification({ type, postId, recipientId, actorId, acto
   return notification;
 }
 
-async function removePostLikeActor({ postId, recipientId, actorId, actorUsername }) {
-  if (!recipientId || !postId || !actorId) return null;
+async function removeNotificationActor({ type, targetType, targetId, recipientId, actorId, actorUsername }) {
+  if (!recipientId || !targetId || !actorId) return null;
   await ensureIndexes();
 
   const update = {
@@ -129,9 +147,9 @@ async function removePostLikeActor({ postId, recipientId, actorId, actorUsername
   const doc = await Notification.findOneAndUpdate(
     {
       recipientId,
-      type: 'like',
-      targetType: 'post',
-      targetId: String(postId),
+      type,
+      targetType,
+      targetId: String(targetId),
     },
     update,
     { new: true },
@@ -152,8 +170,10 @@ async function removePostLikeActor({ postId, recipientId, actorId, actorUsername
 
 async function notifyPostLike({ post, actorId, actorUsername }) {
   if (!post?.authorId) return null;
-  return upsertPostNotification({
+  return upsertNotification({
     type: 'like',
+    targetType: 'post',
+    targetId: post._id,
     postId: post._id,
     recipientId: post.authorId,
     actorId,
@@ -163,8 +183,10 @@ async function notifyPostLike({ post, actorId, actorUsername }) {
 
 async function notifyPostComment({ post, actorId, actorUsername, previewText }) {
   if (!post?.authorId) return null;
-  return upsertPostNotification({
+  return upsertNotification({
     type: 'comment',
+    targetType: 'post',
+    targetId: post._id,
     postId: post._id,
     recipientId: post.authorId,
     actorId,
@@ -173,23 +195,54 @@ async function notifyPostComment({ post, actorId, actorUsername, previewText }) 
   });
 }
 
-async function listNotifications({ userId, onlyUnread = false }) {
+async function notifyFollow({ recipientId, actorId, actorUsername }) {
+  if (!recipientId || !actorId) return null;
+  return upsertNotification({
+    type: 'follow',
+    targetType: 'user',
+    targetId: recipientId,
+    recipientId,
+    actorId,
+    actorUsername,
+  });
+}
+
+async function removeFollowNotification({ recipientId, actorId, actorUsername }) {
+  if (!recipientId || !actorId) return null;
+  return removeNotificationActor({
+    type: 'follow',
+    targetType: 'user',
+    targetId: recipientId,
+    recipientId,
+    actorId,
+    actorUsername,
+  });
+}
+
+function normalizeRecipientIds(userIds) {
+  const list = Array.isArray(userIds) ? userIds : [userIds];
+  return Array.from(new Set(list.map((item) => String(item || '').trim()).filter(Boolean)));
+}
+
+async function listNotifications({ userIds, userId, onlyUnread = false }) {
   await ensureIndexes();
-  const filter = { recipientId: String(userId) };
+  const recipientIds = normalizeRecipientIds(userIds || userId);
+  const filter = recipientIds.length > 1 ? { recipientId: { $in: recipientIds } } : { recipientId: recipientIds[0] || '' };
   if (onlyUnread) filter.isRead = false;
 
   const [items, unreadCount] = await Promise.all([
     Notification.find(filter).sort({ lastEventAt: -1, createdAt: -1 }).limit(50).lean(),
-    Notification.countDocuments({ recipientId: String(userId), isRead: false }),
+    Notification.countDocuments({ recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false }),
   ]);
 
   return { items, unreadCount };
 }
 
-async function markRead({ userId, id, isRead }) {
+async function markRead({ userIds, userId, id, isRead }) {
   await ensureIndexes();
+  const recipientIds = normalizeRecipientIds(userIds || userId);
   const notification = await Notification.findOneAndUpdate(
-    { _id: id, recipientId: String(userId) },
+    { _id: id, recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || '') },
     {
       $set: {
         isRead: Boolean(isRead),
@@ -199,21 +252,25 @@ async function markRead({ userId, id, isRead }) {
     { new: true },
   ).lean();
 
-  if (notification) await emitNotification(String(userId), notification);
+  if (notification) {
+    const emitRecipientId = String(notification.recipientId || recipientIds[0] || '');
+    await emitNotification(emitRecipientId, notification);
+  }
   return notification;
 }
 
-async function markAllRead({ userId }) {
+async function markAllRead({ userIds, userId }) {
   await ensureIndexes();
+  const recipientIds = normalizeRecipientIds(userIds || userId);
   await Notification.updateMany(
-    { recipientId: String(userId), isRead: false },
+    { recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false },
     { $set: { isRead: true, readAt: new Date() } },
   );
-  const unreadCount = await Notification.countDocuments({ recipientId: String(userId), isRead: false });
+  const unreadCount = await Notification.countDocuments({ recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false });
   let io;
   try {
     io = getIO();
-    io.to(`user:${userId}`).emit('notification:count', { unreadCount });
+    for (const recipientId of recipientIds) io.to(`user:${recipientId}`).emit('notification:count', { unreadCount });
   } catch (_err) {
     // ignore
   }
@@ -224,8 +281,13 @@ module.exports = {
   ensureIndexes,
   notifyPostLike,
   notifyPostComment,
-  removePostLikeActor,
+  removeNotificationActor,
+  removePostLikeActor: ({ postId, recipientId, actorId, actorUsername }) =>
+    removeNotificationActor({ type: 'like', targetType: 'post', targetId: postId, recipientId, actorId, actorUsername }),
+  notifyFollow,
+  removeFollowNotification,
   listNotifications,
   markRead,
   markAllRead,
+  buildNotifyMessage,
 };

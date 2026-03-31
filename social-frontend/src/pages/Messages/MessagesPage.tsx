@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
@@ -26,21 +27,66 @@ function avatarOf(user?: Pick<MessageUser, 'avatarUrl' | 'username'> | null) {
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`
 }
 
+function normalizeText(value?: string | null) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function buildUserMatchScore(user: MessageUser, rawQuery: string) {
+  const query = normalizeText(rawQuery)
+  if (!query) return 0
+
+  const username = normalizeText(user.username)
+  const email = normalizeText(user.email)
+  const bio = normalizeText(user.bio)
+
+  let score = 0
+  if (username === query) score += 1200
+  if (email === query) score += 1000
+  if (username.startsWith(query)) score += 800
+  if (email.startsWith(query)) score += 520
+  if (bio.startsWith(query)) score += 280
+  if (username.includes(query)) score += 360
+  if (email.includes(query)) score += 220
+  if (bio.includes(query)) score += 120
+
+  return score
+}
+
+function sortUsersForSearch(items: MessageUser[], query: string) {
+  const normalizedQuery = normalizeText(query)
+  return [...items].sort((a, b) => {
+    const scoreDiff = buildUserMatchScore(b, normalizedQuery) - buildUserMatchScore(a, normalizedQuery)
+    if (scoreDiff !== 0) return scoreDiff
+
+    const aTime = new Date(a.createdAt || 0).getTime()
+    const bTime = new Date(b.createdAt || 0).getTime()
+    if (aTime !== bTime) return bTime - aTime
+
+    return a.username.localeCompare(b.username, 'vi')
+  })
+}
+
 export default function MessagesPage() {
   const api = useMessagesApi()
   const { state } = useAppStore()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { socket } = useSocket()
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [directoryLoading, setDirectoryLoading] = useState(true)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeId, setActiveId] = useState('')
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>({})
   const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchUsersResponse>({ following: [], suggested: [] })
+  const [allUsers, setAllUsers] = useState<MessageUser[]>([])
+  const [followingUsers, setFollowingUsers] = useState<MessageUser[]>([])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const searchRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const activeConversation = useMemo(
     () => conversations.find((item) => item.id === activeId) || null,
@@ -52,49 +98,89 @@ export default function MessagesPage() {
     [messagesByConversation, activeId],
   )
 
+  const navigateToProfile = (user?: MessageUser | null) => {
+    if (!user?.username) return
+    navigate(`/profile/${encodeURIComponent(user.username)}`)
+  }
+
+  const searchResults = useMemo<SearchUsersResponse>(() => {
+    const followingIdSet = new Set(followingUsers.map((user) => user.id))
+    const normalizedQuery = normalizeText(query)
+
+    const matchedUsers = allUsers
+      .filter((user) => user.username !== state.username)
+      .filter((user) => {
+        if (!normalizedQuery) return true
+        return buildUserMatchScore(user, normalizedQuery) > 0
+      })
+
+    const following = sortUsersForSearch(
+      matchedUsers.filter((user) => followingIdSet.has(user.id)),
+      normalizedQuery,
+    )
+
+    const suggested = sortUsersForSearch(
+      matchedUsers.filter((user) => !followingIdSet.has(user.id)),
+      normalizedQuery,
+    )
+
+    return {
+      recent: [],
+      following: following.slice(0, 50),
+      suggested: suggested.slice(0, 50),
+    }
+  }, [allUsers, followingUsers, query, state.username])
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         setLoading(true)
-        const items = await api.getConversations()
+        setDirectoryLoading(true)
+        const [items, users, following] = await Promise.all([
+          api.getConversations(),
+          api.getAllUsers(),
+          api.getFollowingUsers(),
+        ])
         if (!mounted) return
         setConversations(items)
-        if (items[0]?.id) setActiveId((prev) => prev || items[0].id)
+        setAllUsers(users)
+        setFollowingUsers(following)
+        const wantedConversationId = searchParams.get('conversation')
+        if (wantedConversationId && items.some((item) => item.id === wantedConversationId)) {
+          setActiveId(wantedConversationId)
+        } else if (items[0]?.id) {
+          setActiveId((prev) => prev || items[0].id)
+        }
       } catch (err: any) {
         if (!mounted) return
-        setError(err?.message || 'Không tải được danh sách chat')
+        setError(err?.message || 'Không tải được dữ liệu tin nhắn')
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) {
+          setLoading(false)
+          setDirectoryLoading(false)
+        }
       }
     })()
 
     return () => {
       mounted = false
     }
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
-    let cancelled = false
-    if (!query.trim()) {
-      setSearchResults({ following: [], suggested: [] })
-      return
-    }
-
-    const timer = window.setTimeout(async () => {
-      try {
-        const data = await api.searchUsers(query)
-        if (!cancelled) setSearchResults(data)
-      } catch {
-        if (!cancelled) setSearchResults({ following: [], suggested: [] })
+    function handleDocumentClick(event: MouseEvent) {
+      const target = event.target as Node | null
+      if (searchRef.current && target && !searchRef.current.contains(target)) {
+        setIsSearchOpen(false)
       }
-    }, 250)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
     }
-  }, [query])
+
+    document.addEventListener('mousedown', handleDocumentClick)
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick)
+    }
+  }, [])
 
   useEffect(() => {
     if (!activeId) return
@@ -138,7 +224,9 @@ export default function MessagesPage() {
     const onMessageNew = (message: ChatMessage) => {
       setMessagesByConversation((prev) => {
         const arr = prev[message.conversationId] ? [...prev[message.conversationId]] : []
-        if (!arr.some((item) => item.id === message.id)) arr.push(message)
+        const optimisticIndex = arr.findIndex((item) => item.id.startsWith('temp-') && item.senderUsername === message.senderUsername && item.text === message.text)
+        if (optimisticIndex >= 0) arr.splice(optimisticIndex, 1, message)
+        else if (!arr.some((item) => item.id === message.id)) arr.push(message)
         return { ...prev, [message.conversationId]: arr }
       })
 
@@ -182,7 +270,7 @@ export default function MessagesPage() {
       setConversations((prev) => {
         const existed = prev.some((item) => item.id === conversation.id)
         const next = existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev]
-        return next
+        return [...next].sort((a, b) => (new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()))
       })
       setActiveId(conversation.id)
       setIsSearchOpen(false)
@@ -196,18 +284,56 @@ export default function MessagesPage() {
 
   const handleSend = async () => {
     const value = text.trim()
-    if (!value || !activeId || sending) return
+    if (!value || !activeId || sending || !activeConversation) return
     setSending(true)
     setError('')
 
+    const optimisticMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      conversationId: activeId,
+      senderId: 'me',
+      senderUsername: state.username,
+      receiverId: activeConversation.peer.id,
+      receiverUsername: activeConversation.peer.username,
+      type: 'text',
+      text: value,
+      status: 'sent',
+      seenAt: null,
+      createdAt: new Date().toISOString(),
+    }
+
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [activeId]: [...(prev[activeId] || []), optimisticMessage],
+    }))
+    setConversations((prev) =>
+      [...prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: value, lastMessageAt: optimisticMessage.createdAt } : item))].sort(
+        (a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime(),
+      ),
+    )
+    setText('')
+
     try {
       const ack: any = await sendRealtimeMessage(socket, activeId, value)
-      if (!ack?.ok) {
+      if (ack?.ok && ack?.data?.message) {
+        const delivered = ack.data.message as ChatMessage
+        setMessagesByConversation((prev) => ({
+          ...prev,
+          [activeId]: (prev[activeId] || []).map((item) => (item.id === optimisticMessage.id ? delivered : item)),
+        }))
+      } else {
         const fallback = await api.sendMessageHttp(activeId, value)
-        setMessagesByConversation((prev) => ({ ...prev, [activeId]: [...(prev[activeId] || []), fallback] }))
+        setMessagesByConversation((prev) => ({
+          ...prev,
+          [activeId]: (prev[activeId] || []).map((item) => (item.id === optimisticMessage.id ? fallback : item)),
+        }))
       }
-      setText('')
     } catch (err: any) {
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [activeId]: (prev[activeId] || []).filter((item) => item.id !== optimisticMessage.id),
+      }))
+      setText(value)
       setError(err?.message || 'Gửi tin nhắn thất bại')
     } finally {
       setSending(false)
@@ -241,29 +367,47 @@ export default function MessagesPage() {
               <span className="ig-msg__userName">{state.username || 'instagram_user'}</span>
               <span className="ig-msg__chev">▾</span>
             </button>
-            <button className="ig-msg__compose" type="button">✎</button>
+            <button
+              className="ig-msg__compose"
+              type="button"
+              onClick={() => {
+                setIsSearchOpen(true)
+                window.setTimeout(() => searchInputRef.current?.focus(), 0)
+              }}
+            >✎</button>
           </div>
 
-          <div className="ig-msg__searchWrap">
+          <div className="ig-msg__searchWrap" ref={searchRef}>
             <div className="ig-msg__search">
               <span className="ig-msg__searchIcon">⌕</span>
               <input
+                ref={searchInputRef}
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value)
                   setIsSearchOpen(true)
                 }}
                 onFocus={() => setIsSearchOpen(true)}
+                onClick={() => setIsSearchOpen(true)}
                 placeholder="Tìm kiếm"
                 className="ig-msg__searchInput"
               />
             </div>
 
-            {isSearchOpen && query.trim() ? (
+            {isSearchOpen ? (
               <div className="ig-msg__searchDropdown">
-                {renderSearchGroup('Đang follow', searchResults.following)}
-                {renderSearchGroup('Đề xuất', searchResults.suggested)}
-                {!searchResults.following.length && !searchResults.suggested.length ? <div className="ig-msg__searchEmpty">Không tìm thấy người dùng phù hợp.</div> : null}
+                {directoryLoading ? <div className="ig-msg__searchEmpty">Đang tải danh sách người dùng...</div> : null}
+                {!directoryLoading ? (
+                  <>
+                    {renderSearchGroup('Đang follow', searchResults.following)}
+                    {renderSearchGroup('Đề xuất', searchResults.suggested)}
+                    {!searchResults.following.length && !searchResults.suggested.length ? (
+                      <div className="ig-msg__searchEmpty">
+                        {query.trim() ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng để gợi ý.'}
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -297,13 +441,13 @@ export default function MessagesPage() {
           {activeConversation ? (
             <>
               <div className="ig-msg__rightTop">
-                <div className="ig-msg__peer">
+                <button className="ig-msg__peer" type="button" onClick={() => navigateToProfile(activeConversation.peer)} style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}>
                   <img className="ig-msg__peerAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                   <div className="ig-msg__peerMeta">
                     <div className="ig-msg__peerName">{activeConversation.peer.username}</div>
                     <div className="ig-msg__peerUser">{activeConversation.peer.bio || 'Instagram User'}</div>
                   </div>
-                </div>
+                </button>
                 <div className="ig-msg__actions">
                   <button className="ig-msg__iconBtn" type="button">📞</button>
                   <button className="ig-msg__iconBtn" type="button">📹</button>
@@ -315,7 +459,7 @@ export default function MessagesPage() {
                 <img className="ig-msg__heroAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                 <div className="ig-msg__heroName">{activeConversation.peer.username}</div>
                 <div className="ig-msg__heroUser">{activeConversation.peer.bio || 'Instagram'}</div>
-                <button className="ig-msg__profileBtn" type="button">View profile</button>
+                <button className="ig-msg__profileBtn" type="button" onClick={() => navigateToProfile(activeConversation.peer)}>View profile</button>
               </div>
 
               <div className="ig-msg__body" ref={bodyRef}>

@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import styles from './Sidebar.module.css'
 import { useAuth } from '../../../features/auth/AuthProvider'
 import { useNotifications } from '../../../features/notifications/NotificationProvider'
+import { useMessageIndicator } from '../../../features/messages/MessageIndicatorProvider'
 import { useAppStore } from '../../../state/store'
 
 type NavItem = {
@@ -18,6 +19,7 @@ function Icon({ children }: { children: ReactNode }) {
 export default function Sidebar() {
   const { user, logout } = useAuth()
   const { unreadCount } = useNotifications()
+  const { unreadConversations } = useMessageIndicator()
   const { state, setState } = useAppStore()
   const navigate = useNavigate()
 
@@ -64,6 +66,7 @@ export default function Sidebar() {
             <span className={styles.iconWrap}>
               {it.icon}
               {it.to === '/notifications' && unreadCount > 0 ? <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
+              {it.to === '/messages' && unreadConversations > 0 ? <span className={styles.badge}>{unreadConversations > 99 ? '99+' : unreadConversations}</span> : null}
             </span>
             <span className={styles.label}>{it.label}</span>
           </NavLink>

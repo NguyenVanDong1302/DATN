@@ -41,8 +41,10 @@ async function ensureConversationMembers(conversation, users) {
 }
 
 function serializeUser(user) {
+  const id = String(user._id);
   return {
-    id: String(user._id),
+    _id: id,
+    id,
     username: user.username,
     email: user.email || "",
     bio: user.bio || "",
@@ -50,34 +52,218 @@ function serializeUser(user) {
   };
 }
 
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function legacyUserId(username) {
+  const crypto = require("crypto");
+  return crypto
+    .createHash("sha256")
+    .update(String(username || ""))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function buildSearchScore(user, keyword, signals = {}) {
+  const query = String(keyword || "").trim().toLowerCase();
+  let score = 0;
+
+  const username = String(user.username || "").toLowerCase();
+  const email = String(user.email || "").toLowerCase();
+  const bio = String(user.bio || "").toLowerCase();
+
+  if (!query) {
+    if (signals.isRecent) score += 120;
+    if (signals.isFollowing) score += 80;
+    return score;
+  }
+
+  if (username === query) score += 1000;
+  if (email === query) score += 950;
+  if (username.startsWith(query)) score += 700;
+  if (email.startsWith(query)) score += 500;
+  if (bio.startsWith(query)) score += 250;
+  if (username.includes(query)) score += 300;
+  if (email.includes(query)) score += 220;
+  if (bio.includes(query)) score += 120;
+
+  if (signals.isRecent) score += 140;
+  if (signals.isFollowing) score += 110;
+  if (signals.recentOrder >= 0) score += Math.max(0, 40 - signals.recentOrder);
+
+  return score;
+}
+
 async function searchUsers({ currentUser, q = "", limit = 8 }) {
   const keyword = String(q || "").trim();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
+  const currentUserId = String(currentUser._id);
+  const currentUsername = String(currentUser.username || "");
 
-  const followRows = await Follow.find({ followerId: String(currentUser._id) }).select("followingId").lean();
-  const followingIds = followRows.map((row) => String(row.followingId));
-
-  const regex = keyword ? new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
-
-  const followingFilter = {
-    _id: { $in: followingIds },
-    ...(regex ? { username: regex } : {}),
-  };
-
-  const suggestedFilter = {
-    _id: { $nin: [String(currentUser._id), ...followingIds] },
-    ...(regex ? { username: regex } : {}),
-  };
-
-  const [followingUsers, suggestedUsers] = await Promise.all([
-    User.find(followingFilter).select("_id username email bio avatarUrl").sort({ username: 1 }).limit(safeLimit).lean(),
-    User.find(suggestedFilter).select("_id username email bio avatarUrl").sort({ createdAt: -1 }).limit(safeLimit).lean(),
+  const [followRows, recentConversations] = await Promise.all([
+    Follow.find({
+      $or: [{ followerId: currentUserId }, { followerUsername: currentUsername }],
+    })
+      .select("followingId followingUsername")
+      .lean(),
+    Conversation.find({
+      $or: [{ memberIds: currentUserId }, { memberUsernames: currentUsername }],
+    })
+      .sort({ lastMessageAt: -1, updatedAt: -1, createdAt: -1 })
+      .limit(20)
+      .lean(),
   ]);
 
-  return {
-    following: followingUsers.map((u) => ({ id: String(u._id), username: u.username, email: u.email || "", bio: u.bio || "", avatarUrl: u.avatarUrl || "" })),
-    suggested: suggestedUsers.map((u) => ({ id: String(u._id), username: u.username, email: u.email || "", bio: u.bio || "", avatarUrl: u.avatarUrl || "" })),
+  const followingIdSet = new Set();
+  const followingUsernameSet = new Set();
+  for (const row of followRows) {
+    if (row?.followingId) followingIdSet.add(String(row.followingId));
+    if (row?.followingUsername) followingUsernameSet.add(String(row.followingUsername));
+  }
+
+  const recentIds = [];
+  const recentOrderMap = new Map();
+  for (const conversation of recentConversations) {
+    const peerId = (conversation.memberIds || []).find((id) => String(id) !== currentUserId);
+    const peerUsername = (conversation.memberUsernames || []).find((name) => String(name) !== currentUsername);
+    const recentKey = String(peerId || peerUsername || "");
+    if (!recentKey || recentOrderMap.has(recentKey)) continue;
+    recentOrderMap.set(recentKey, recentIds.length);
+    if (peerId) recentIds.push(String(peerId));
+  }
+
+  const regex = keyword ? new RegExp(escapeRegex(keyword), "i") : null;
+  const baseMatch = regex
+    ? {
+        $or: [{ username: regex }, { email: regex }, { bio: regex }],
+      }
+    : {};
+
+  const candidateLimit = Math.max(safeLimit * 5, 30);
+  const candidates = await User.find({
+    _id: { $nin: [currentUserId] },
+    ...baseMatch,
+  })
+    .select("_id username email bio avatarUrl createdAt")
+    .sort(regex ? { updatedAt: -1, createdAt: -1 } : { createdAt: -1 })
+    .limit(candidateLimit)
+    .lean();
+
+  const candidateMap = new Map();
+  for (const user of candidates) {
+    candidateMap.set(String(user._id), user);
+  }
+
+  const missingRecentIds = recentIds.filter((id) => !candidateMap.has(String(id)));
+  if (missingRecentIds.length) {
+    const recentUsers = await User.find({ _id: { $in: missingRecentIds } })
+      .select("_id username email bio avatarUrl createdAt")
+      .lean();
+    for (const user of recentUsers) {
+      candidateMap.set(String(user._id), user);
+    }
+  }
+
+  const allCandidates = Array.from(candidateMap.values())
+    .filter((user) => String(user._id) !== currentUserId)
+    .map((user) => {
+      const id = String(user._id);
+      const recentOrder = recentOrderMap.has(id)
+        ? recentOrderMap.get(id)
+        : recentOrderMap.has(String(user.username || ""))
+          ? recentOrderMap.get(String(user.username || ""))
+          : -1;
+      const isRecent = recentOrder >= 0;
+      const isFollowing = followingIdSet.has(id) || followingUsernameSet.has(String(user.username || ""));
+      return {
+        ...serializeUser(user),
+        _score: buildSearchScore(user, keyword, { isRecent, isFollowing, recentOrder }),
+        _isRecent: isRecent,
+        _isFollowing: isFollowing,
+        _recentOrder: recentOrder,
+      };
+    })
+    .filter((user) => (keyword ? user._score > 0 : true))
+    .sort((a, b) => {
+      if (b._score !== a._score) return b._score - a._score;
+      if (a._recentOrder !== b._recentOrder) {
+        const av = a._recentOrder < 0 ? Number.MAX_SAFE_INTEGER : a._recentOrder;
+        const bv = b._recentOrder < 0 ? Number.MAX_SAFE_INTEGER : b._recentOrder;
+        if (av !== bv) return av - bv;
+      }
+      return a.username.localeCompare(b.username, "vi");
+    });
+
+  const takeUnique = (items) => {
+    const seen = new Set();
+    const out = [];
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push({
+        id: item.id,
+        username: item.username,
+        email: item.email || "",
+        bio: item.bio || "",
+        avatarUrl: item.avatarUrl || "",
+      });
+      if (out.length >= safeLimit) break;
+    }
+    return out;
   };
+
+  return {
+    recent: takeUnique(allCandidates.filter((user) => user._isRecent)),
+    following: takeUnique(allCandidates.filter((user) => user._isFollowing)),
+    suggested: takeUnique(allCandidates.filter((user) => !user._isRecent && !user._isFollowing)),
+  };
+}
+
+async function listFollowingUsersForMessages({ currentUser }) {
+  const currentUserId = String(currentUser._id);
+  const currentUsername = String(currentUser.username || "");
+  const followRows = await Follow.find({
+    $or: [{ followerId: currentUserId }, { followerUsername: currentUsername }],
+  })
+    .select("followingId followingUsername")
+    .lean();
+
+  const followingIds = new Set();
+  const followingUsernames = new Set();
+
+  for (const row of followRows) {
+    if (row?.followingId) followingIds.add(String(row.followingId));
+    if (row?.followingUsername) followingUsernames.add(String(row.followingUsername));
+  }
+
+  if (!followingIds.size && !followingUsernames.size) {
+    return [];
+  }
+
+  const users = await User.find({
+    $or: [
+      ...(followingIds.size ? [{ _id: { $in: Array.from(followingIds) } }] : []),
+      ...(followingUsernames.size ? [{ username: { $in: Array.from(followingUsernames) } }] : []),
+    ],
+  })
+    .select("_id username email bio avatarUrl createdAt")
+    .sort({ username: 1 })
+    .lean();
+
+  const deduped = [];
+  const seen = new Set();
+  for (const user of users) {
+    const id = String(user._id);
+    if (id === currentUserId || seen.has(id)) continue;
+    seen.add(id);
+    deduped.push({
+      ...serializeUser(user),
+      createdAt: user.createdAt || null,
+    });
+  }
+
+  return deduped;
 }
 
 async function getOrCreateDirectConversation({ currentUser, targetUserId }) {
@@ -339,10 +525,6 @@ async function sendMessage({ currentUser, conversationId, text }) {
     { upsert: true },
   );
 
-  if (presence?.screen !== "messages") {
-    await createMessageNotification({ recipient: receiver, sender: currentUser, message });
-  }
-
   const payload = {
     id: String(message._id),
     conversationId: String(conversation._id),
@@ -360,6 +542,8 @@ async function sendMessage({ currentUser, conversationId, text }) {
   const io = getSocketIOOrNull();
   if (io) {
     io.to(`conversation:${conversation._id}`).emit("message:new", payload);
+    emitToUser(io, String(receiver._id), receiver.username, "message:new", payload);
+    emitToUser(io, String(currentUser._id), currentUser.username, "message:new", payload);
     emitToUser(io, String(receiver._id), receiver.username, "inbox:update", {
       conversationId: String(conversation._id),
       unreadDelta: isViewingSameConversation ? 0 : 1,
@@ -439,6 +623,7 @@ async function getUnreadSummary({ currentUser }) {
 module.exports = {
   resolveCurrentUserFromReq,
   searchUsers,
+  listFollowingUsersForMessages,
   getOrCreateDirectConversation,
   listConversations,
   getConversationDetail,

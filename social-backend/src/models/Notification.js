@@ -5,13 +5,13 @@ const notificationSchema = new mongoose.Schema(
     recipientId: { type: String, required: true, index: true },
     type: {
       type: String,
-      enum: ['like', 'comment', 'message'],
+      enum: ['like', 'comment', 'follow', 'message'],
       required: true,
       index: true,
     },
     targetType: {
       type: String,
-      enum: ['post', 'conversation'],
+      enum: ['post', 'user', 'conversation'],
       required: true,
       default: 'post',
       index: true,

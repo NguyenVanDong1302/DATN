@@ -1,12 +1,19 @@
 const fs = require("fs");
 const path = require("path");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const { z } = require("zod");
 const Post = require("../models/Post");
+const User = require("../models/User");
 const { AppError } = require("../utils/errors");
 const Comment = require("../models/Comment");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
 const notificationService = require("../services/notification.service");
+
+const execFileAsync = promisify(execFile);
+const thumbnailDir = path.join(postMediaDir, "thumbnails");
+fs.mkdirSync(thumbnailDir, { recursive: true });
 
 const visibilityEnum = ["public", "friends", "private"];
 const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\\/,/$/ ,"");
@@ -102,14 +109,15 @@ function cleanupUploadedFiles(files = []) {
 
 function removePostMediaFiles(post) {
   for (const item of post?.media || []) {
-    if (!item?.url) continue;
-    const filename = path.basename(item.url);
-    const absolutePath = path.join(postMediaDir, filename);
-    if (fs.existsSync(absolutePath)) {
-      try {
-        fs.unlinkSync(absolutePath);
-      } catch (_err) {
-        // noop
+    for (const rawUrl of [item?.url, item?.thumbnailUrl]) {
+      if (!rawUrl) continue;
+      const absolutePath = path.join(postMediaDir, rawUrl.includes('/thumbnails/') ? path.join('thumbnails', path.basename(rawUrl)) : path.basename(rawUrl));
+      if (fs.existsSync(absolutePath)) {
+        try {
+          fs.unlinkSync(absolutePath);
+        } catch (_err) {
+          // noop
+        }
       }
     }
   }
@@ -125,16 +133,51 @@ function normalizePublicMediaUrl(url = "") {
   return `${MEDIA_PUBLIC_BASE_URL}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
-function buildMediaFromFiles(files = [], altText = "") {
-  return files.map((file, index) => ({
-    type: file.mimetype.startsWith("video/") ? "video" : "image",
-    url: normalizePublicMediaUrl(`/uploads/posts/${path.basename(file.path)}`),
-    filename: file.originalname,
-    mimeType: file.mimetype,
-    size: file.size,
-    order: index,
-    altText: altText || undefined,
-  }));
+async function buildVideoThumbnail(filePath, fileBaseName) {
+  const safeBase = path.basename(fileBaseName, path.extname(fileBaseName));
+  const thumbnailFilename = `${safeBase}-thumb.jpg`;
+  const thumbnailAbsolutePath = path.join(thumbnailDir, thumbnailFilename);
+
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-ss', '00:00:00.350',
+      '-i', filePath,
+      '-frames:v', '1',
+      '-vf', 'scale=640:-1:force_original_aspect_ratio=decrease',
+      thumbnailAbsolutePath,
+    ]);
+
+    return normalizePublicMediaUrl(`/uploads/posts/thumbnails/${thumbnailFilename}`);
+  } catch (error) {
+    console.error('buildVideoThumbnail failed:', error?.message || error);
+    return '';
+  }
+}
+
+async function buildMediaFromFiles(files = [], altText = "") {
+  const media = [];
+
+  for (const [index, file] of files.entries()) {
+    const isVideo = file.mimetype.startsWith("video/");
+    const item = {
+      type: isVideo ? "video" : "image",
+      url: normalizePublicMediaUrl(`/uploads/posts/${path.basename(file.path)}`),
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      order: index,
+      altText: altText || undefined,
+    };
+
+    if (isVideo) {
+      item.thumbnailUrl = await buildVideoThumbnail(file.path, path.basename(file.path));
+    }
+
+    media.push(item);
+  }
+
+  return media;
 }
 
 function detectMediaType(media) {
@@ -173,6 +216,7 @@ function serializePost(post, userId, commentsCount = 0) {
     ...item,
     type: item.type === "video" || item.mimeType?.startsWith("video/") ? "video" : "image",
     url: normalizePublicMediaUrl(item.url),
+    thumbnailUrl: normalizePublicMediaUrl(item.thumbnailUrl || ''),
     order: Number.isFinite(item.order) ? item.order : index,
   }));
   const imageUrls = media.filter((item) => item.type === "image").map((item) => item.url);
@@ -194,6 +238,17 @@ function serializePost(post, userId, commentsCount = 0) {
   };
 }
 
+
+async function resolvePostNotificationRecipient(post) {
+  if (post?.authorUsername) {
+    const owner = await User.findOne({ username: String(post.authorUsername) }).select('_id username').lean();
+    if (owner?._id) {
+      return { recipientId: String(owner._id), recipientUsername: owner.username || String(post.authorUsername || '') };
+    }
+  }
+  return { recipientId: String(post?.authorId || ''), recipientUsername: String(post?.authorUsername || '') };
+}
+
 async function getCommentsCountMap(postIds = []) {
   if (!postIds.length) return new Map();
   const counts = await Comment.aggregate([
@@ -207,7 +262,7 @@ async function createPost(req, res, next) {
   const uploadedFiles = req.files || [];
   try {
     const body = createPostSchema.parse(req.body || {});
-    const media = buildMediaFromFiles(uploadedFiles, body.altText);
+    const media = await buildMediaFromFiles(uploadedFiles, body.altText);
 
     if (!body.content && media.length === 0) {
       cleanupUploadedFiles(uploadedFiles);
@@ -436,8 +491,9 @@ async function toggleLike(req, res, next) {
       likedBy: req.user.username,
     });
 
+    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.notifyPostLike({
-      post,
+      post: { ...post.toObject(), authorId: recipient.recipientId, authorUsername: recipient.recipientUsername },
       actorId: req.user.sub,
       actorUsername: req.user.username,
     }).catch((error) => {
@@ -474,9 +530,10 @@ async function removeLike(req, res, next) {
       likedBy: req.user.username,
     });
 
+    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.removePostLikeActor({
       postId: post._id,
-      recipientId: post.authorId,
+      recipientId: recipient.recipientId,
       actorId: req.user.sub,
       actorUsername: req.user.username,
     }).catch((error) => {
@@ -557,8 +614,9 @@ async function addComment(req, res, next) {
       },
     });
 
+    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.notifyPostComment({
-      post,
+      post: { ...post.toObject(), authorId: recipient.recipientId, authorUsername: recipient.recipientUsername },
       actorId: req.user.sub,
       actorUsername: req.user.username,
       previewText: c.content.slice(0, 120),

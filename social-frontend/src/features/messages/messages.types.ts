@@ -4,6 +4,7 @@ export type MessageUser = {
   email?: string
   bio?: string
   avatarUrl?: string
+  createdAt?: string | null
 }
 
 export type ConversationItem = {
@@ -30,6 +31,7 @@ export type ChatMessage = {
 }
 
 export type SearchUsersResponse = {
+  recent: MessageUser[]
   following: MessageUser[]
   suggested: MessageUser[]
 }

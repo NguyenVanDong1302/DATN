@@ -2,6 +2,7 @@ export type PostMedia = {
   type?: 'image' | 'video' | string
   url?: string
   mimeType?: string
+  thumbnailUrl?: string
   filename?: string
 }
 

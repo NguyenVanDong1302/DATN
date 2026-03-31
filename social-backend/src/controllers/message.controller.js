@@ -1,6 +1,7 @@
 const {
   resolveCurrentUserFromReq,
   searchUsers,
+  listFollowingUsersForMessages,
   getOrCreateDirectConversation,
   listConversations,
   getConversationDetail,
@@ -16,9 +17,19 @@ async function searchMessageUsers(req, res, next) {
     const data = await searchUsers({
       currentUser,
       q: req.query.q || "",
-      limit: req.query.limit || 8,
+      limit: req.query.limit || 10,
     });
     res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listFollowingUsers(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const items = await listFollowingUsersForMessages({ currentUser });
+    res.json({ ok: true, data: { items } });
   } catch (err) {
     next(err);
   }
@@ -118,6 +129,7 @@ async function unreadSummary(req, res, next) {
 
 module.exports = {
   searchMessageUsers,
+  listFollowingUsers,
   createOrGetDirectConversation,
   getConversationList,
   getConversation,

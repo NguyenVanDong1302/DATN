@@ -4,6 +4,7 @@ const postMediaSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ["image", "video"], required: true },
     url: { type: String, required: true },
+    thumbnailUrl: { type: String, default: '' },
     filename: { type: String },
     mimeType: { type: String },
     size: { type: Number, min: 0 },

@@ -11,12 +11,14 @@ import { ToastHost, ToastProvider } from '../components/Toast'
 import { ModalProvider } from '../components/Modal'
 import ReelsPage from '../pages/Reel/Reel'
 import MessagesPage from '../pages/Messages/MessagesPage'
+import SearchPage from '../pages/SearchPage'
 import CreatePostPage from '../pages/CreatePostPage'
 import PostPage from '../pages/PostPage'
 import LoginPage from '../pages/Auth/LoginPage'
 import RegisterPage from '../pages/Auth/RegisterPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
+import { MessageIndicatorProvider } from '../features/messages/MessageIndicatorProvider'
 import ProtectedRoute from '../features/auth/ProtectedRoute'
 
 function ProtectedShell() {
@@ -33,8 +35,9 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <SocketProvider>
-            <NotificationProvider>
-              <ModalProvider>
+            <MessageIndicatorProvider>
+              <NotificationProvider>
+                <ModalProvider>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
@@ -48,14 +51,16 @@ export default function App() {
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/reels" element={<ReelsPage />} />
                       <Route path="/messages" element={<MessagesPage />} />
+                      <Route path="/search" element={<SearchPage />} />
                       <Route path="/create" element={<CreatePostPage />} />
                       <Route path="/post/:id" element={<PostPage />} />
                     </Route>
                   </Route>
                 </Routes>
-              </ModalProvider>
-              <ToastHost />
-            </NotificationProvider>
+                </ModalProvider>
+                <ToastHost />
+              </NotificationProvider>
+            </MessageIndicatorProvider>
           </SocketProvider>
         </AuthProvider>
       </ToastProvider>

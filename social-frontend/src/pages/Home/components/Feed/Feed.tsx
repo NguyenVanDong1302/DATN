@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../../../../lib/api'
 import { useModal } from '../../../../components/Modal'
@@ -6,18 +6,34 @@ import { useToast } from '../../../../components/Toast'
 import GlobalPostCard from '../../../../components/PostCard'
 import CommentSheet from '../../../../components/comments/CommentSheet'
 import type { Post } from '../../../../types'
+import { useUsersApi } from '../../../../features/users/users.api'
+import { useAppStore } from '../../../../state/store'
 import styles from './Feed.module.css'
 
 export default function Feed() {
   const api = useApi()
+  const usersApi = useUsersApi()
   const nav = useNavigate()
   const modal = useModal()
   const toast = useToast()
+  const { state } = useAppStore()
 
   const [items, setItems] = useState<Post[]>([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set())
+  const [followPendingMap, setFollowPendingMap] = useState<Record<string, boolean>>({})
+
+  const loadFollowState = useCallback(async () => {
+    if (!state.username) return
+    try {
+      const following = await usersApi.getFollowing(state.username)
+      setFollowingSet(new Set(following.map((user) => user.username)))
+    } catch {
+      // ignore follow state error on feed
+    }
+  }, [state.username, usersApi])
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -37,8 +53,13 @@ export default function Feed() {
     loadPosts()
   }, [loadPosts])
 
+  useEffect(() => {
+    loadFollowState()
+  }, [loadFollowState])
+
   const refresh = () => {
     loadPosts()
+    loadFollowState()
   }
 
   const updatePost = (postId: string, patch: Partial<Post>) => {
@@ -67,6 +88,40 @@ export default function Feed() {
     }
   }
 
+  const handleToggleFollow = async (post: Post) => {
+    const targetUsername = String(post.authorUsername || '').trim()
+    if (!targetUsername || targetUsername === state.username || followPendingMap[targetUsername]) return
+
+    const wasFollowing = followingSet.has(targetUsername)
+    setFollowPendingMap((prev) => ({ ...prev, [targetUsername]: true }))
+    setFollowingSet((prev) => {
+      const next = new Set(prev)
+      if (wasFollowing) next.delete(targetUsername)
+      else next.add(targetUsername)
+      return next
+    })
+
+    try {
+      if (wasFollowing) {
+        await usersApi.unfollowUser({ username: targetUsername })
+      } else {
+        await usersApi.followUser({ username: targetUsername })
+      }
+    } catch (error: any) {
+      setFollowingSet((prev) => {
+        const next = new Set(prev)
+        if (wasFollowing) next.add(targetUsername)
+        else next.delete(targetUsername)
+        return next
+      })
+      toast.push(error?.message || 'Không thể cập nhật follow')
+    } finally {
+      setFollowPendingMap((prev) => ({ ...prev, [targetUsername]: false }))
+    }
+  }
+
+  const followingLookup = useMemo(() => followingSet, [followingSet])
+
   return (
     <div className={styles.feed}>
       <div className={styles.topbar}>
@@ -82,23 +137,31 @@ export default function Feed() {
       {loading && !items.length ? <div className={styles.state}>Đang tải bài viết...</div> : null}
       {!loading && !items.length ? <div className={styles.state}>Chưa có bài viết nào.</div> : null}
 
-      {items.map((post) => (
-        <GlobalPostCard
-          key={post._id}
-          post={post}
-          onLike={() => toggleLike(post)}
-          onOpenComment={() =>
-            modal.open(
-              <CommentSheet
-                postId={post._id}
-                onChanged={(count) => updatePost(post._id, { commentsCount: count })}
-              />,
-            )
-          }
-          onOpenDetail={() => nav(`/post/${post._id}`)}
-          onOpenAuthor={() => nav(`/profile/${encodeURIComponent(post.authorUsername || post.authorId || 'user')}`)}
-        />
-      ))}
+      {items.map((post) => {
+        const authorUsername = String(post.authorUsername || '')
+        const showFollowButton = !!authorUsername && authorUsername !== state.username
+        return (
+          <GlobalPostCard
+            key={post._id}
+            post={post}
+            onLike={() => toggleLike(post)}
+            onOpenComment={() =>
+              modal.open(
+                <CommentSheet
+                  postId={post._id}
+                  onChanged={(count) => updatePost(post._id, { commentsCount: count })}
+                />,
+              )
+            }
+            onOpenDetail={() => nav(`/post/${post._id}`)}
+            onOpenAuthor={() => nav(`/profile/${encodeURIComponent(post.authorUsername || post.authorId || 'user')}`)}
+            showFollowButton={showFollowButton}
+            following={followingLookup.has(authorUsername)}
+            followPending={!!followPendingMap[authorUsername]}
+            onToggleFollow={() => handleToggleFollow(post)}
+          />
+        )
+      })}
 
       {items.length ? (
         <div className={styles.pagination}>

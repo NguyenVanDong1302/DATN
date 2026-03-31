@@ -1,13 +1,21 @@
 import { useApi } from '../../lib/api'
-import type { ChatMessage, ConversationItem, SearchUsersResponse } from './messages.types'
+import type { ChatMessage, ConversationItem, MessageUser, SearchUsersResponse } from './messages.types'
 
 export function useMessagesApi() {
   const api = useApi()
 
   return {
     searchUsers: async (q: string) => {
-      const res = await api.get(`/messages/search-users?q=${encodeURIComponent(q)}`)
-      return (res?.data || { following: [], suggested: [] }) as SearchUsersResponse
+      const res = await api.get(`/messages/search-users?q=${encodeURIComponent(q)}&limit=10`)
+      return (res?.data || { recent: [], following: [], suggested: [] }) as SearchUsersResponse
+    },
+    getAllUsers: async () => {
+      const res = await api.get('/users')
+      return (res?.data || []) as MessageUser[]
+    },
+    getFollowingUsers: async () => {
+      const res = await api.get('/messages/following-users')
+      return (res?.data?.items || []) as MessageUser[]
     },
     getConversations: async () => {
       const res = await api.get('/messages/conversations')
