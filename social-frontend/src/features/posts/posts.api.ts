@@ -1,5 +1,6 @@
 import type { CreatePostPayload, CreatePostResponse } from './posts.types'
 import type { ApiError } from '../../lib/api'
+import { useApi } from '../../lib/api'
 
 const API_BASE = '/api'
 
@@ -48,4 +49,15 @@ export async function createPostApi(args: {
   }
 
   return data
+}
+
+export function usePostsApi() {
+  const api = useApi()
+
+  return {
+    deletePost: async (postId: string) => {
+      const response = await api.del(`/posts/${postId}`)
+      return response?.data || response
+    },
+  }
 }

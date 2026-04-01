@@ -7,6 +7,7 @@ const Post = require("../models/Post");
 const User = require("../models/User");
 const { AppError } = require("../utils/errors");
 const Comment = require("../models/Comment");
+const Notification = require("../models/Notification");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
 const notificationService = require("../services/notification.service");
@@ -16,7 +17,7 @@ const thumbnailDir = path.join(postMediaDir, "thumbnails");
 fs.mkdirSync(thumbnailDir, { recursive: true });
 
 const visibilityEnum = ["public", "friends", "private"];
-const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\\/,/$/ ,"");
+const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
 
 const createPostSchema = z
   .object({
@@ -40,7 +41,7 @@ const createPostSchema = z
   }));
 
 const addCommentSchema = z.object({
-  content: z.string().trim().min(1).max(1000),
+  content: z.string().trim().max(1000).optional().default(""),
   parentCommentId: z.string().trim().optional().nullable(),
   replyToCommentId: z.string().trim().optional().nullable(),
 });
@@ -58,18 +59,10 @@ const updatePostSchema = z
   })
   .transform((data) => ({
     ...data,
-    ...(data.isAnonymous !== undefined
-      ? { isAnonymous: normalizeBoolean(data.isAnonymous, false) }
-      : {}),
-    ...(data.allowComments !== undefined
-      ? { allowComments: normalizeBoolean(data.allowComments, true) }
-      : {}),
-    ...(data.hideLikeCount !== undefined
-      ? { hideLikeCount: normalizeBoolean(data.hideLikeCount, false) }
-      : {}),
-    ...(data.collaborators !== undefined
-      ? { collaborators: normalizeStringList(data.collaborators) }
-      : {}),
+    ...(data.isAnonymous !== undefined ? { isAnonymous: normalizeBoolean(data.isAnonymous, false) } : {}),
+    ...(data.allowComments !== undefined ? { allowComments: normalizeBoolean(data.allowComments, true) } : {}),
+    ...(data.hideLikeCount !== undefined ? { hideLikeCount: normalizeBoolean(data.hideLikeCount, false) } : {}),
+    ...(data.collaborators !== undefined ? { collaborators: normalizeStringList(data.collaborators) } : {}),
     ...(data.tags !== undefined ? { tags: normalizeStringList(data.tags) } : {}),
   }));
 
@@ -108,7 +101,9 @@ function cleanupUploadedFiles(files = []) {
 }
 
 function removePostMediaFiles(post) {
-  for (const item of post?.media || []) {
+  const mediaItems = Array.isArray(post?.media) ? post.media : [];
+  const fallbackUrls = [post?.imageUrl].filter(Boolean).map((url) => ({ url, thumbnailUrl: '' }));
+  for (const item of [...mediaItems, ...fallbackUrls]) {
     for (const rawUrl of [item?.url, item?.thumbnailUrl]) {
       if (!rawUrl) continue;
       const absolutePath = path.join(postMediaDir, rawUrl.includes('/thumbnails/') ? path.join('thumbnails', path.basename(rawUrl)) : path.basename(rawUrl));
@@ -123,6 +118,21 @@ function removePostMediaFiles(post) {
   }
 }
 
+function removeCommentMediaFiles(comments = []) {
+  for (const comment of comments) {
+    const rawUrl = String(comment?.mediaUrl || '').trim();
+    if (!rawUrl) continue;
+    const fileName = path.basename(rawUrl);
+    const absolutePath = path.join(postMediaDir, 'comments', fileName);
+    if (!fs.existsSync(absolutePath)) continue;
+    try {
+      fs.unlinkSync(absolutePath);
+    } catch (_err) {
+      // noop
+    }
+  }
+}
+
 function normalizePublicMediaUrl(url = "") {
   const raw = String(url || "").trim().replace(/\\/g, "/");
   if (!raw) return "";
@@ -133,26 +143,61 @@ function normalizePublicMediaUrl(url = "") {
   return `${MEDIA_PUBLIC_BASE_URL}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
+async function getVideoDurationSeconds(filePath) {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ]);
+    const duration = Number.parseFloat(String(stdout || '').trim());
+    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  } catch (_error) {
+    return 0;
+  }
+}
+
 async function buildVideoThumbnail(filePath, fileBaseName) {
   const safeBase = path.basename(fileBaseName, path.extname(fileBaseName));
   const thumbnailFilename = `${safeBase}-thumb.jpg`;
   const thumbnailAbsolutePath = path.join(thumbnailDir, thumbnailFilename);
+  const duration = await getVideoDurationSeconds(filePath);
+  const seekSeconds = duration > 1 ? Math.max(0.6, Math.min(duration * 0.2, duration - 0.2)) : 0.35;
 
-  try {
-    await execFileAsync('ffmpeg', [
+  const attempts = [
+    [
       '-y',
-      '-ss', '00:00:00.350',
+      '-ss', seekSeconds.toFixed(2),
       '-i', filePath,
       '-frames:v', '1',
-      '-vf', 'scale=640:-1:force_original_aspect_ratio=decrease',
+      '-vf', 'thumbnail,scale=720:-1:force_original_aspect_ratio=decrease',
+      '-q:v', '2',
       thumbnailAbsolutePath,
-    ]);
+    ],
+    [
+      '-y',
+      '-i', filePath,
+      '-vf', `select=gte(t\,${seekSeconds.toFixed(2)}),scale=720:-1:force_original_aspect_ratio=decrease`,
+      '-frames:v', '1',
+      '-q:v', '2',
+      thumbnailAbsolutePath,
+    ],
+  ];
 
-    return normalizePublicMediaUrl(`/uploads/posts/thumbnails/${thumbnailFilename}`);
-  } catch (error) {
-    console.error('buildVideoThumbnail failed:', error?.message || error);
-    return '';
+  for (const args of attempts) {
+    try {
+      await execFileAsync('ffmpeg', args);
+      if (fs.existsSync(thumbnailAbsolutePath) && fs.statSync(thumbnailAbsolutePath).size > 0) {
+        return normalizePublicMediaUrl(`/uploads/posts/thumbnails/${thumbnailFilename}`);
+      }
+    } catch (_error) {
+      // try next strategy
+    }
   }
+
+  console.error('buildVideoThumbnail failed for', filePath);
+  return '';
 }
 
 async function buildMediaFromFiles(files = [], altText = "") {
@@ -168,6 +213,7 @@ async function buildMediaFromFiles(files = [], altText = "") {
       size: file.size,
       order: index,
       altText: altText || undefined,
+      thumbnailUrl: '',
     };
 
     if (isVideo) {
@@ -206,6 +252,8 @@ function serializeComment(comment, currentUserId, postAuthorId) {
     likedByMe: Array.isArray(obj.likes) ? obj.likes.includes(currentUserId) : false,
     likesCount: Array.isArray(obj.likes) ? obj.likes.length : 0,
     canDelete: Boolean(currentUserId) && (obj.authorId === currentUserId || postAuthorId === currentUserId),
+    mediaUrl: normalizePublicMediaUrl(obj.mediaUrl) || "",
+    mediaType: obj.mediaType || "",
   };
 }
 
@@ -222,6 +270,9 @@ function serializePost(post, userId, commentsCount = 0) {
   const imageUrls = media.filter((item) => item.type === "image").map((item) => item.url);
   const firstImageUrl = imageUrls[0] || normalizePublicMediaUrl(obj.imageUrl) || "";
 
+  const mediaType = detectMediaType(media);
+  const isReel = media.length === 1 && mediaType === "video";
+
   return {
     ...obj,
     imageUrl: firstImageUrl,
@@ -230,7 +281,8 @@ function serializePost(post, userId, commentsCount = 0) {
     images: imageUrls,
     imageUrl: firstImageUrl,
     mediaCount: media.length,
-    mediaType: detectMediaType(media),
+    mediaType,
+    isReel,
     likesCount: likesArr.length,
     displayLikesCount: obj.hideLikeCount ? null : likesArr.length,
     likedByMe: userId ? likesArr.includes(userId) : false,
@@ -247,6 +299,15 @@ async function resolvePostNotificationRecipient(post) {
     }
   }
   return { recipientId: String(post?.authorId || ''), recipientUsername: String(post?.authorUsername || '') };
+}
+
+function normalizeCommentMedia(file) {
+  if (!file) return { mediaUrl: "", mediaType: "" };
+  const relPath = `/uploads/posts/comments/${file.filename}`;
+  return {
+    mediaUrl: normalizePublicMediaUrl(relPath),
+    mediaType: String(file.mimetype || '').toLowerCase() === 'image/gif' ? 'gif' : 'image',
+  };
 }
 
 async function getCommentsCountMap(postIds = []) {
@@ -460,10 +521,30 @@ async function deletePost(req, res, next) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
+    const comments = await Comment.find({ postId: post._id }).select('_id mediaUrl');
+
     removePostMediaFiles(post);
-    await Post.deleteOne({ _id: post._id });
-    await Comment.deleteMany({ postId: post._id });
-    res.json({ ok: true, data: { id: post._id } });
+    removeCommentMediaFiles(comments);
+
+    await Promise.all([
+      Comment.deleteMany({ postId: post._id }),
+      Notification.deleteMany({
+        $or: [
+          { postId: String(post._id) },
+          { targetType: 'post', targetId: String(post._id) },
+        ],
+      }),
+      Post.deleteOne({ _id: post._id }),
+    ]);
+
+    res.json({
+      ok: true,
+      data: {
+        id: post._id,
+        deletedComments: comments.length,
+        deletedLikes: Array.isArray(post.likes) ? post.likes.length : 0,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -556,12 +637,17 @@ async function removeLike(req, res, next) {
 
 async function addComment(req, res, next) {
   try {
-    const body = addCommentSchema.parse(req.body);
+    const body = addCommentSchema.parse(req.body || {});
+    const commentMedia = normalizeCommentMedia(req.file);
 
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
     if (!post.allowComments) {
       throw new AppError("Comments are disabled for this post", 400, "COMMENTS_DISABLED");
+    }
+
+    if (!String(body.content || "").trim() && !commentMedia.mediaUrl) {
+      throw new AppError("Bình luận không được để trống", 400, "EMPTY_COMMENT");
     }
 
     let parentComment = null;
@@ -607,6 +693,8 @@ async function addComment(req, res, next) {
         _id: String(c._id),
         authorUsername: c.authorUsername,
         content: c.content,
+        mediaUrl: c.mediaUrl || "",
+        mediaType: c.mediaType || "",
         createdAt: c.createdAt,
         parentCommentId: c.parentCommentId ? String(c.parentCommentId) : null,
         replyToCommentId: c.replyToCommentId ? String(c.replyToCommentId) : null,
@@ -619,7 +707,7 @@ async function addComment(req, res, next) {
       post: { ...post.toObject(), authorId: recipient.recipientId, authorUsername: recipient.recipientUsername },
       actorId: req.user.sub,
       actorUsername: req.user.username,
-      previewText: c.content.slice(0, 120),
+      previewText: c.content ? c.content.slice(0, 120) : (c.mediaType === "gif" ? "đã bình luận một GIF" : c.mediaUrl ? "đã bình luận một hình ảnh" : ""),
     }).catch((error) => {
       console.error("notifyPostComment failed:", error?.message || error);
     });

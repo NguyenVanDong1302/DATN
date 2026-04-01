@@ -16,6 +16,14 @@ export type ConversationItem = {
   unreadCount: number
 }
 
+export type StoryReply = {
+  storyId: string
+  ownerUsername: string
+  mediaType: 'image' | 'video'
+  mediaUrl: string
+  thumbnailUrl?: string
+}
+
 export type ChatMessage = {
   id: string
   conversationId: string
@@ -25,6 +33,7 @@ export type ChatMessage = {
   receiverUsername: string
   type: 'text'
   text: string
+  storyReply?: StoryReply | null
   status: 'sent' | 'delivered' | 'seen'
   seenAt?: string | null
   createdAt: string

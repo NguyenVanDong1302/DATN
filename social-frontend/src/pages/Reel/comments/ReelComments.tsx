@@ -18,6 +18,8 @@ type ReelCommentsProps = {
   reelUsername: string;
   comments: ReelComment[];
   onClose: () => void;
+  onSubmitComment?: (content: string) => Promise<void> | void;
+  submitting?: boolean;
 };
 
 export default function ReelComments({
@@ -25,9 +27,12 @@ export default function ReelComments({
   reelUsername,
   comments,
   onClose,
+  onSubmitComment,
+  submitting = false,
 }: ReelCommentsProps) {
   const [isMounted, setIsMounted] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(isOpen);
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     if (isOpen) {
@@ -39,12 +44,21 @@ export default function ReelComments({
     setIsVisible(false);
     const timer = window.setTimeout(() => {
       setIsMounted(false);
+      setDraft("");
     }, 300);
 
     return () => window.clearTimeout(timer);
   }, [isOpen]);
 
   const title = useMemo(() => `Comments · ${reelUsername}`, [reelUsername]);
+  const canSubmit = Boolean(draft.trim()) && !submitting;
+
+  async function handleSubmit() {
+    const content = draft.trim();
+    if (!content || submitting) return;
+    await onSubmitComment?.(content);
+    setDraft("");
+  }
 
   if (!isMounted) return null;
 
@@ -70,7 +84,7 @@ export default function ReelComments({
         </div>
 
         <div className="ig-reel-comments__body">
-          {comments.map((comment) => (
+          {comments.length ? comments.map((comment) => (
             <article className="ig-reel-comments__item" key={comment.id}>
               <img className="ig-reel-comments__avatar" src={comment.avatarUrl} alt={comment.user} />
 
@@ -104,16 +118,22 @@ export default function ReelComments({
                 ♡
               </button>
             </article>
-          ))}
+          )) : <div className="ig-reel-comments__empty">Chưa có bình luận nào. Hãy là người đầu tiên bình luận.</div>}
         </div>
 
-        <div className="ig-reel-comments__composer">
+        <form className="ig-reel-comments__composer" onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}>
           <img className="ig-reel-comments__composerAvatar" src={`https://i.pravatar.cc/80?u=${reelUsername}`} alt="Bạn" />
-          <div className="ig-reel-comments__composerInput">Add a comment...</div>
-          <button className="ig-reel-comments__emoji" type="button" aria-label="Emoji">
-            ☺
+          <input
+            className="ig-reel-comments__composerInput"
+            placeholder="Add a comment..."
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            maxLength={500}
+          />
+          <button className="ig-reel-comments__send" type="submit" disabled={!canSubmit} aria-label="Gửi bình luận">
+            {submitting ? "..." : "Post"}
           </button>
-        </div>
+        </form>
       </aside>
     </>
   );

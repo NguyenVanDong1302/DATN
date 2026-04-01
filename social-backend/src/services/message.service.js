@@ -1,6 +1,5 @@
 const User = require("../models/User");
 const Follow = require("../models/Follow");
-const Notification = require("../models/Notification");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const ConversationMember = require("../models/ConversationMember");
@@ -370,6 +369,7 @@ async function listMessages({ currentUser, conversationId, limit = 50 }) {
     receiverUsername: row.receiverUsername,
     type: row.type,
     text: row.text || "",
+    storyReply: row.storyReply || null,
     status: row.status,
     seenAt: row.seenAt,
     createdAt: row.createdAt,
@@ -399,59 +399,16 @@ async function emitConversationSnapshot(io, conversationId, usernames) {
   }
 }
 
-async function createMessageNotification({ recipient, sender, message }) {
-  const doc = await Notification.create({
-    recipientId: String(recipient._id),
-    type: "message",
-    targetType: "conversation",
-    targetId: String(message._id),
-    postId: "",
-    actors: [String(sender._id)],
-    actorUsernames: [sender.username],
-    totalEvents: 1,
-    previewText: message.text || "",
-    isRead: false,
-    readAt: null,
-    lastEventAt: new Date(),
-  });
-
-  const io = getSocketIOOrNull();
-  if (io) {
-    const unreadCount = await Notification.countDocuments({ recipientId: String(recipient._id), isRead: false });
-    emitToUser(io, String(recipient._id), recipient.username, "notification:new", {
-      _id: String(doc._id),
-      recipientId: String(recipient._id),
-      type: "message",
-      targetType: "conversation",
-      targetId: String(message._id),
-      postId: "",
-      actors: [String(sender._id)],
-      actorUsernames: [sender.username],
-      totalEvents: 1,
-      previewText: message.text || "",
-      isRead: false,
-      readAt: null,
-      lastEventAt: doc.lastEventAt,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-      conversationId: message.conversationId,
-      messageId: String(message._id),
-    });
-    emitToUser(io, String(recipient._id), recipient.username, "notification:count", { unreadCount });
-    emitToUser(io, String(recipient._id), recipient.username, "notify", {
-      id: String(doc._id),
-      type: "message",
-      messageId: String(message._id),
-      conversationId: message.conversationId,
-      message: `${sender.username} đã gửi cho bạn một tin nhắn mới.`,
-      createdAt: doc.createdAt,
-    });
-  }
-}
-
-async function sendMessage({ currentUser, conversationId, text }) {
+async function sendMessage({ currentUser, conversationId, text, storyReply }) {
   const trimmed = String(text || "").trim();
-  if (!trimmed) {
+  const normalizedStoryReply = storyReply && storyReply.storyId ? {
+    storyId: String(storyReply.storyId || ''),
+    ownerUsername: String(storyReply.ownerUsername || ''),
+    mediaType: ['image','video'].includes(String(storyReply.mediaType || '')) ? String(storyReply.mediaType) : '',
+    mediaUrl: String(storyReply.mediaUrl || ''),
+    thumbnailUrl: String(storyReply.thumbnailUrl || ''),
+  } : null;
+  if (!trimmed && !normalizedStoryReply) {
     throw new AppError("Tin nhắn không được để trống", 400, "EMPTY_MESSAGE");
   }
 
@@ -473,8 +430,9 @@ async function sendMessage({ currentUser, conversationId, text }) {
     senderUsername: currentUser.username,
     receiverId: String(receiver._id),
     receiverUsername: receiver.username,
-    type: "text",
+    type: 'text',
     text: trimmed,
+    storyReply: normalizedStoryReply || undefined,
     status: nextStatus,
     seenAt: nextStatus === "seen" ? new Date() : null,
   });
@@ -483,7 +441,7 @@ async function sendMessage({ currentUser, conversationId, text }) {
     { _id: conversation._id },
     {
       $set: {
-        lastMessageText: trimmed,
+        lastMessageText: trimmed || `Đã trả lời tin của @${receiver.username}`,
         lastMessageAt: message.createdAt,
         lastMessageSenderId: String(currentUser._id),
         memberUsernames: [currentUser.username, receiver.username],
@@ -534,6 +492,7 @@ async function sendMessage({ currentUser, conversationId, text }) {
     receiverUsername: receiver.username,
     type: message.type,
     text: message.text,
+    storyReply: message.storyReply || null,
     status: message.status,
     seenAt: message.seenAt,
     createdAt: message.createdAt,
@@ -607,6 +566,9 @@ async function markConversationRead({ currentUser, conversationId }) {
       seenAt: now,
     });
     emitToUser(io, String(currentUser._id), currentUser.username, "inbox:refresh", { reason: "read" });
+    const otherUserId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
+    const otherUsername = conversation.memberUsernames.find((u) => u !== currentUser.username) || "";
+    emitToUser(io, String(otherUserId || ""), otherUsername, "inbox:refresh", { reason: "peer-read", conversationId: String(conversation._id) });
   }
 
   return { ok: true, seenAt: now };

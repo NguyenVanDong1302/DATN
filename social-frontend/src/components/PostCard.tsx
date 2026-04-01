@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { resolveMediaUrl } from '../lib/api'
+import { useAppStore } from '../state/store'
 import { Post } from '../types'
 
 type NormalizedMedia = {
@@ -220,6 +221,7 @@ export default function PostCard({
   following,
   followPending,
   onToggleFollow,
+  onDelete,
 }: {
   post: Post
   likePending?: boolean
@@ -232,12 +234,17 @@ export default function PostCard({
   following?: boolean
   followPending?: boolean
   onToggleFollow?: () => void
+  onDelete?: () => void
 }) {
   const likesCount = post.likesCount ?? (Array.isArray(post.likes) ? post.likes.length : 0)
   const likedByMe = !!post.likedByMe
   const commentsCount = post.commentsCount ?? 0
   const media = useMemo(() => getPostMedia(post), [post])
+  const { state } = useAppStore()
   const [heartBurst, setHeartBurst] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const isOwner = !!state.username && state.username === post.authorUsername
 
   useEffect(() => {
     if (!likedByMe) return
@@ -276,7 +283,34 @@ export default function PostCard({
               {followPending ? 'Đang xử lý...' : following ? 'Đang theo dõi' : 'Theo dõi'}
             </button>
           ) : null}
-          <div style={styles.moreBtn}>•••</div>
+          {isOwner && onDelete ? (
+            <div style={styles.menuWrap}>
+              <button type="button" style={styles.moreBtn} onClick={() => setMenuOpen((v) => !v)} aria-label="Tuỳ chọn bài viết">•••</button>
+              {menuOpen ? (
+                <div style={styles.menuPanel}>
+                  <button
+                    type="button"
+                    style={{ ...styles.menuItem, ...styles.menuItemDanger, ...(deletePending ? styles.buttonPending : {}) }}
+                    disabled={deletePending}
+                    onClick={async () => {
+                      if (!window.confirm('Bạn có chắc muốn xoá bài viết này?')) return
+                      setDeletePending(true)
+                      try {
+                        await onDelete()
+                        setMenuOpen(false)
+                      } catch (_error) {
+                        // parent handles toast
+                      } finally {
+                        setDeletePending(false)
+                      }
+                    }}
+                  >
+                    {deletePending ? 'Đang xoá...' : 'Xoá'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 

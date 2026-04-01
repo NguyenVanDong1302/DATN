@@ -99,7 +99,8 @@ async function postConversationMessage(req, res, next) {
     const message = await sendMessage({
       currentUser,
       conversationId: req.params.conversationId,
-      text: req.body?.text || "",
+      text: req.body?.text || '',
+      storyReply: req.body?.storyReply || null,
     });
     res.status(201).json({ ok: true, data: { message } });
   } catch (err) {

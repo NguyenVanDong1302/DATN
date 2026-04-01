@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useApi, resolveMediaUrl } from '../../lib/api'
 import { useUsersApi, type UserProfile } from '../../features/users/users.api'
 import { useAppStore } from '../../state/store'
 import { useMessagesApi } from '../../features/messages/messages.api'
-import type { Post, PostMedia } from '../../types'
+import type { Post } from '../../types'
+import CommentSheet from '../../components/comments/CommentSheet'
 import styles from './ProfilePage.module.css'
 
 type ModalMediaItem = {
@@ -39,128 +40,125 @@ function normalizeMedia(post: Post): ModalMediaItem[] {
   return []
 }
 
-function getPostPreview(post: Post) {
-  const media = normalizeMedia(post)
-  if (media[0]?.type === 'video') return media[0].thumbnailUrl || media[0].url
-  return media[0]?.url || ''
-}
-
 function formatNumber(value?: number) {
   return Number(value || 0).toLocaleString('vi-VN')
 }
 
+
+function VideoThumbnail({ src, poster, alt }: { src: string; poster?: string; alt: string }) {
+  const [preview, setPreview] = useState(poster || '')
+  const cacheKey = `${src}|${poster || ''}`
+  const doneRef = useRef('')
+
+  useEffect(() => {
+    if (poster) {
+      setPreview(poster)
+      doneRef.current = cacheKey
+      return
+    }
+    if (doneRef.current === cacheKey) return
+
+    let cancelled = false
+    const video = document.createElement('video')
+    video.src = src
+    video.muted = true
+    video.playsInline = true
+    video.preload = 'metadata'
+    video.crossOrigin = 'anonymous'
+
+    const cleanup = () => {
+      try {
+        video.pause()
+        video.removeAttribute('src')
+        video.load()
+      } catch {}
+    }
+
+    const capture = () => {
+      if (cancelled) return
+      try {
+        const width = Math.max(video.videoWidth || 720, 320)
+        const height = Math.max(video.videoHeight || 900, 320)
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('no-canvas')
+        ctx.drawImage(video, 0, 0, width, height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+        if (!cancelled) {
+          setPreview(dataUrl)
+          doneRef.current = cacheKey
+        }
+      } catch {
+        if (!cancelled) {
+          setPreview('')
+          doneRef.current = cacheKey
+        }
+      } finally {
+        cleanup()
+      }
+    }
+
+    const onLoaded = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 1
+      const seekTarget = duration > 1 ? Math.max(0.6, Math.min(duration * 0.2, duration - 0.2)) : 0.35
+      try {
+        video.currentTime = seekTarget
+      } catch {
+        capture()
+      }
+    }
+
+    video.addEventListener('loadeddata', onLoaded, { once: true })
+    video.addEventListener('seeked', capture, { once: true })
+    video.addEventListener('error', cleanup, { once: true })
+
+    return () => {
+      cancelled = true
+      cleanup()
+    }
+  }, [cacheKey, poster, src])
+
+  if (preview) return <img className={styles.tileMedia} src={preview} alt={alt} />
+  return <div className={styles.videoFallback}>▶</div>
+}
+
+
 function ProfilePostModal({
   posts,
   index,
-  profile,
   onClose,
   onMove,
+  onCommentsChanged,
 }: {
   posts: Post[]
   index: number
-  profile: UserProfile
   onClose: () => void
   onMove: (next: number) => void
+  onCommentsChanged: (postId: string, count: number) => void
 }) {
-  const navigate = useNavigate()
   const post = posts[index]
-  const media = useMemo(() => normalizeMedia(post), [post])
-  const [mediaIndex, setMediaIndex] = useState(0)
-
-  useEffect(() => {
-    setMediaIndex(0)
-  }, [post?._id])
+  const canPrevPost = index > 0
+  const canNextPost = index < posts.length - 1
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
-      if (event.key === 'ArrowRight') onMove(Math.min(posts.length - 1, index + 1))
-      if (event.key === 'ArrowLeft') onMove(Math.max(0, index - 1))
+      if (event.key === 'ArrowRight' && canNextPost) onMove(index + 1)
+      if (event.key === 'ArrowLeft' && canPrevPost) onMove(index - 1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, onClose, onMove, posts.length])
-
-  const currentMedia = media[mediaIndex]
-  const canPrevPost = index > 0
-  const canNextPost = index < posts.length - 1
-  const canSlideMedia = media.length > 1
+  }, [canNextPost, canPrevPost, index, onClose, onMove])
 
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
-      <div className={styles.modalShell} onClick={(event) => event.stopPropagation()}>
-        <button type="button" className={styles.modalClose} onClick={onClose}>
-          ✕
-        </button>
-
-        {canPrevPost ? (
-          <button type="button" className={`${styles.modalNav} ${styles.modalPrev}`} onClick={() => onMove(index - 1)}>
-            ‹
-          </button>
-        ) : null}
-        {canNextPost ? (
-          <button type="button" className={`${styles.modalNav} ${styles.modalNext}`} onClick={() => onMove(index + 1)}>
-            ›
-          </button>
-        ) : null}
-
-        <div className={styles.modalCard}>
-          <div className={styles.modalMediaCol}>
-            {currentMedia ? (
-              currentMedia.type === 'video' ? (
-                <video className={styles.modalMedia} src={currentMedia.url} poster={currentMedia.thumbnailUrl || currentMedia.url} controls autoPlay muted playsInline />
-              ) : (
-                <img className={styles.modalMedia} src={currentMedia.url} alt={post.authorUsername || profile.username} />
-              )
-            ) : (
-              <div className={styles.modalTextFallback}>{post.content || 'Bài viết không có media'}</div>
-            )}
-
-            {canSlideMedia ? (
-              <>
-                <button type="button" className={`${styles.mediaNav} ${styles.mediaPrev}`} onClick={() => setMediaIndex((value) => (value - 1 + media.length) % media.length)}>
-                  ‹
-                </button>
-                <button type="button" className={`${styles.mediaNav} ${styles.mediaNext}`} onClick={() => setMediaIndex((value) => (value + 1) % media.length)}>
-                  ›
-                </button>
-                <div className={styles.mediaDots}>
-                  {media.map((_, dotIndex) => (
-                    <button
-                      key={dotIndex}
-                      type="button"
-                      className={`${styles.mediaDot} ${dotIndex === mediaIndex ? styles.mediaDotActive : ''}`}
-                      onClick={() => setMediaIndex(dotIndex)}
-                    />
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          <div className={styles.modalAside}>
-            <div className={styles.modalHead}>
-              <button type="button" className={styles.modalAuthor} onClick={() => navigate(`/profile/${encodeURIComponent(profile.username)}`)}>
-                <img className={styles.modalAvatar} src={avatarOf(profile)} alt={profile.username} />
-                <div>
-                  <div className={styles.modalUsername}>{profile.username}</div>
-                  <div className={styles.modalSub}>{post.createdAt ? new Date(post.createdAt).toLocaleString('vi-VN') : 'Vừa xong'}</div>
-                </div>
-              </button>
-              <button type="button" className={styles.followMiniBtn}>Theo dõi</button>
-            </div>
-
-            <div className={styles.modalContent}>{post.content || 'Không có mô tả cho bài viết này.'}</div>
-
-            <div className={styles.modalStats}>
-              <span>♡ {formatNumber(post.likesCount)}</span>
-              <span>💬 {formatNumber(post.commentsCount)}</span>
-              <span>👁 {formatNumber(post.viewsCount)}</span>
-            </div>
-
-            <div className={styles.modalFooter}>Bài viết {index + 1} / {posts.length}</div>
-          </div>
-        </div>
+      <div className={styles.modalShellWide} onClick={(event) => event.stopPropagation()}>
+        <button type="button" className={styles.modalClose} onClick={onClose}>✕</button>
+        {canPrevPost ? <button type="button" className={`${styles.modalNav} ${styles.modalPrev}`} onClick={() => onMove(index - 1)}>‹</button> : null}
+        {canNextPost ? <button type="button" className={`${styles.modalNav} ${styles.modalNext}`} onClick={() => onMove(index + 1)}>›</button> : null}
+        <CommentSheet postId={post._id} onChanged={(count) => onCommentsChanged(post._id, count)} />
       </div>
     </div>
   )
@@ -189,10 +187,7 @@ export default function ProfilePage() {
       try {
         setLoading(true)
         setError('')
-        const [profileData, postsRes] = await Promise.all([
-          usersApi.getProfile(username),
-          api.get('/posts?page=1&limit=100'),
-        ])
+        const [profileData, postsRes] = await Promise.all([usersApi.getProfile(username), api.get('/posts?page=1&limit=100')])
         if (!mounted) return
         const allPosts = (postsRes?.data?.items || []) as Post[]
         setProfile(profileData)
@@ -210,10 +205,27 @@ export default function ProfilePage() {
     }
   }, [api, username, usersApi])
 
-  const postItems = useMemo(
-    () => posts.map((post) => ({ ...post, preview: getPostPreview(post), normalizedMedia: normalizeMedia(post) })),
-    [posts],
-  )
+  const postItems = useMemo(() => posts.map((post) => ({ ...post, normalizedMedia: normalizeMedia(post) })), [posts])
+
+  useEffect(() => {
+    const handlePostDeleted = (event: Event) => {
+      const postId = String((event as CustomEvent).detail?.postId || '')
+      if (!postId) return
+      setPosts((prev) => {
+        const next = prev.filter((item) => item._id !== postId)
+        setActivePostIndex((current) => {
+          if (current == null) return current
+          if (!next.length) return null
+          return Math.min(current, next.length - 1)
+        })
+        return next
+      })
+    }
+    window.addEventListener('post:deleted', handlePostDeleted as EventListener)
+    return () => window.removeEventListener('post:deleted', handlePostDeleted as EventListener)
+  }, [])
+
+
 
   const handleFollowToggle = async () => {
     if (!profile || followPending || isMe) return
@@ -243,7 +255,10 @@ export default function ProfilePage() {
         current
           ? {
               ...current,
-              counts: data.counts,
+              counts: {
+                ...current.counts,
+                followers: data.counts?.followers ?? current.counts?.followers ?? 0,
+              },
               relationship: {
                 ...current.relationship,
                 ...data.relationship,
@@ -291,6 +306,7 @@ export default function ProfilePage() {
           <div className={styles.meta}>
             <div className={styles.topRow}>
               <div className={styles.username}>{profile.username}</div>
+              {profile.showThreadsBadge ? <div className={styles.threadsBadge}>@</div> : null}
               <button className={styles.moreButton} type="button">
                 •••
               </button>
@@ -303,7 +319,12 @@ export default function ProfilePage() {
             </div>
 
             <div className={styles.bioBlock}>
-              <div className={styles.bioName}>{profile.username.toUpperCase()}</div>
+              <div className={styles.bioName}>{profile.fullName || profile.username.toUpperCase()}</div>
+              {profile.website ? (
+                <a className={styles.websiteLink} href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} target="_blank" rel="noreferrer">
+                  {profile.website}
+                </a>
+              ) : null}
               <div className={styles.bioText}>{profile.bio || 'Chưa có tiểu sử.'}</div>
             </div>
 
@@ -345,11 +366,16 @@ export default function ProfilePage() {
           {postItems.length ? (
             postItems.map((post, index) => {
               const firstMedia = post.normalizedMedia?.[0]
+              const preview = firstMedia?.thumbnailUrl || firstMedia?.url || resolveMediaUrl(post.imageUrl) || ''
               return (
                 <button key={post._id} type="button" className={styles.tile} onClick={() => setActivePostIndex(index)}>
-                  {post.preview ? (
+                  {preview ? (
                     <>
-                      <img src={post.preview} alt={post.authorUsername || profile.username} />
+                      {firstMedia?.type === 'video' ? (
+                        <VideoThumbnail src={firstMedia.url} poster={firstMedia.thumbnailUrl} alt={post.authorUsername || profile.username} />
+                      ) : (
+                        <img className={styles.tileMedia} src={preview} alt={post.authorUsername || profile.username} />
+                      )}
                       {firstMedia?.type === 'video' ? <div className={styles.videoBadge}>▶</div> : null}
                       {(post.normalizedMedia?.length || 0) > 1 ? <div className={styles.multiBadge}>◫</div> : null}
                     </>
@@ -370,13 +396,7 @@ export default function ProfilePage() {
       </div>
 
       {activePostIndex !== null ? (
-        <ProfilePostModal
-          posts={posts}
-          index={activePostIndex}
-          profile={profile}
-          onClose={() => setActivePostIndex(null)}
-          onMove={(next) => setActivePostIndex(next)}
-        />
+        <ProfilePostModal posts={posts} index={activePostIndex} onClose={() => setActivePostIndex(null)} onMove={(next) => setActivePostIndex(next)} onCommentsChanged={(postId, count) => setPosts((prev) => prev.map((post) => post._id === postId ? { ...post, commentsCount: count } : post))} />
       ) : null}
     </div>
   )

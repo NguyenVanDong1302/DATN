@@ -1,5 +1,5 @@
 import { useApi } from '../../lib/api'
-import type { ChatMessage, ConversationItem, MessageUser, SearchUsersResponse } from './messages.types'
+import type { ChatMessage, ConversationItem, MessageUser, SearchUsersResponse, StoryReply } from './messages.types'
 
 export function useMessagesApi() {
   const api = useApi()
@@ -33,8 +33,8 @@ export function useMessagesApi() {
       const res = await api.post('/messages/conversations/direct', { targetUserId })
       return res?.data?.conversation as ConversationItem
     },
-    sendMessageHttp: async (conversationId: string, text: string) => {
-      const res = await api.post(`/messages/conversations/${conversationId}/messages`, { text })
+    sendMessageHttp: async (conversationId: string, text: string, storyReply?: StoryReply | null) => {
+      const res = await api.post(`/messages/conversations/${conversationId}/messages`, { text, storyReply })
       return res?.data?.message as ChatMessage
     },
     markRead: async (conversationId: string) => {

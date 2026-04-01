@@ -6,7 +6,12 @@ export type UserSummary = {
   id: string
   username: string
   email?: string
+  fullName?: string
+  website?: string
   bio?: string
+  gender?: string
+  showThreadsBadge?: boolean
+  showSuggestedAccountsOnProfile?: boolean
   avatarUrl?: string
   createdAt?: string | null
 }
@@ -53,6 +58,19 @@ export function useUsersApi() {
           counts: { followers: number; following: number }
           relationship: UserRelationship
         }
+      },
+
+      updateMyProfile: async (payload: {
+        fullName?: string
+        website?: string
+        bio?: string
+        gender?: string
+        avatarUrl?: string
+        showThreadsBadge?: boolean
+        showSuggestedAccountsOnProfile?: boolean
+      }) => {
+        const res = await api.patch('/users/me/profile', payload)
+        return res?.data as UserProfile
       },
       unfollowUser: async (payload: { followingId?: string; username?: string }) => {
         const body = JSON.stringify(payload || {})

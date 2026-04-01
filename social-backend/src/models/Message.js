@@ -13,6 +13,13 @@ const messageSchema = new mongoose.Schema(
       default: "text",
     },
     text: { type: String, default: "" },
+    storyReply: {
+      storyId: { type: String, default: '' },
+      ownerUsername: { type: String, default: '' },
+      mediaType: { type: String, enum: ['image','video',''], default: '' },
+      mediaUrl: { type: String, default: '' },
+      thumbnailUrl: { type: String, default: '' },
+    },
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],

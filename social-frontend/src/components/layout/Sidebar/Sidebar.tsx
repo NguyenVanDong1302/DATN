@@ -7,16 +7,17 @@ import { useMessageIndicator } from '../../../features/messages/MessageIndicator
 import { useAppStore } from '../../../state/store'
 
 type NavItem = {
-  to: string
+  to?: string
   label: string
   icon: ReactNode
+  action?: () => void
 }
 
 function Icon({ children }: { children: ReactNode }) {
   return <span className={styles.icon}>{children}</span>
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onToggleNotifications, onToggleSearch, notificationsOpen = false, searchOpen = false }: { onToggleNotifications?: () => void; onToggleSearch?: () => void; notificationsOpen?: boolean; searchOpen?: boolean }) {
   const { user, logout } = useAuth()
   const { unreadCount } = useNotifications()
   const { unreadConversations } = useMessageIndicator()
@@ -32,9 +33,9 @@ export default function Sidebar() {
     { to: '/', label: 'Trang chủ', icon: <Icon>🏠</Icon> },
     { to: '/reels', label: 'Reels', icon: <Icon>🎬</Icon> },
     { to: '/messages', label: 'Tin nhắn', icon: <Icon>✉️</Icon> },
-    { to: '/search', label: 'Tìm kiếm', icon: <Icon>🔎</Icon> },
+    { label: 'Tìm kiếm', icon: <Icon>🔎</Icon>, action: onToggleSearch },
     { to: '/explore', label: 'Khám phá', icon: <Icon>🧭</Icon> },
-    { to: '/notifications', label: 'Thông báo', icon: <Icon>🤍</Icon> },
+    { label: 'Thông báo', icon: <Icon>{notificationsOpen ? '❤️' : '🤍'}</Icon>, action: onToggleNotifications },
     { to: '/create', label: 'Tạo', icon: <Icon>➕</Icon> },
     { to: `/profile/${profileSlug}`, label: 'Trang cá nhân', icon: <Icon>👤</Icon> },
   ]
@@ -56,21 +57,32 @@ export default function Sidebar() {
       </div>
 
       <nav className={styles.nav}>
-        {items.map((it) => (
-          <NavLink
-            key={it.label}
-            to={it.to}
-            className={({ isActive }) => `${styles.item} ${isActive ? styles.active : ''}`}
-            title={it.label}
-          >
-            <span className={styles.iconWrap}>
-              {it.icon}
-              {it.to === '/notifications' && unreadCount > 0 ? <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
-              {it.to === '/messages' && unreadConversations > 0 ? <span className={styles.badge}>{unreadConversations > 99 ? '99+' : unreadConversations}</span> : null}
-            </span>
-            <span className={styles.label}>{it.label}</span>
-          </NavLink>
-        ))}
+        
+{items.map((it) => (
+  it.to ? (
+    <NavLink
+      key={it.label}
+      to={it.to}
+      className={({ isActive }) => `${styles.item} ${isActive ? styles.active : ''}`}
+      title={it.label}
+    >
+      <span className={styles.iconWrap}>
+        {it.icon}
+        {it.to === '/messages' && unreadConversations > 0 ? <span className={styles.badge}>{unreadConversations > 99 ? '99+' : unreadConversations}</span> : null}
+      </span>
+      <span className={styles.label}>{it.label}</span>
+    </NavLink>
+  ) : (
+    <button key={it.label} type="button" className={`${styles.itemBtn} ${((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) ? styles.active : ''}`} title={it.label} onClick={it.action}>
+      <span className={styles.iconWrap}>
+        {it.icon}
+        {it.label === 'Thông báo' && unreadCount > 0 ? <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
+      </span>
+      <span className={styles.label}>{it.label}</span>
+    </button>
+  )
+))}
+
       </nav>
 
       <div className={styles.bottom}>

@@ -1,6 +1,8 @@
 const path = require('path');
 
-const mediaRoot = process.env.MEDIA_STORAGE_ROOT || 'D:\\Data';
+const mediaRoot = path.resolve(
+  process.env.MEDIA_STORAGE_ROOT || path.join(__dirname, '..', '..', 'public', 'uploads'),
+);
 const postMediaDir = path.join(mediaRoot, 'posts');
 const uploadsMountPath = '/uploads/posts';
 

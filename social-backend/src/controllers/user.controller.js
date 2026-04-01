@@ -14,7 +14,7 @@ async function resolveViewer(req) {
     return null;
   }
 
-  const user = await User.findOne({ username }).select("_id username email bio avatarUrl createdAt").lean();
+  const user = await User.findOne({ username }).select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt").lean();
   if (!user) {
     return null;
   }
@@ -29,7 +29,12 @@ function serializeUser(user) {
     id,
     username: user.username,
     email: user.email || "",
+    fullName: user.fullName || "",
+    website: user.website || "",
     bio: user.bio || "",
+    gender: user.gender || "",
+    showThreadsBadge: Boolean(user.showThreadsBadge),
+    showSuggestedAccountsOnProfile: user.showSuggestedAccountsOnProfile !== false,
     avatarUrl: user.avatarUrl || "",
     createdAt: user.createdAt || null,
   };
@@ -62,7 +67,7 @@ async function hydrateUsersByRefs({ ids = [], usernames = [] }) {
   if (!or.length) return [];
 
   const users = await User.find({ $or: or })
-    .select("_id username email bio avatarUrl createdAt")
+    .select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt")
     .sort({ username: 1 })
     .lean();
 
@@ -173,7 +178,7 @@ async function getProfile(req, res, next) {
   try {
     const { username } = req.params;
     const [user, viewer] = await Promise.all([
-      User.findOne({ username }).select("_id username email bio avatarUrl createdAt").lean(),
+      User.findOne({ username }).select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt").lean(),
       resolveViewer(req),
     ]);
 
@@ -219,7 +224,7 @@ async function follow(req, res, next) {
         ...(followingUsername ? [{ username: followingUsername }] : []),
       ],
     })
-      .select("_id username email bio avatarUrl createdAt")
+      .select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt")
       .lean();
 
     if (!targetUser) {
@@ -245,6 +250,7 @@ async function follow(req, res, next) {
 
     notificationService.notifyFollow({
       recipientId: String(targetUser._id),
+      recipientUsername: targetUser.username,
       actorId: String(viewer._id),
       actorUsername: viewer.username,
     }).catch((error) => {
@@ -289,7 +295,7 @@ async function unfollow(req, res, next) {
         ...(followingUsername ? [{ username: followingUsername }] : []),
       ],
     })
-      .select("_id username email bio avatarUrl createdAt")
+      .select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt")
       .lean();
 
     if (!targetUser) {
@@ -325,6 +331,7 @@ async function unfollow(req, res, next) {
 
     notificationService.removeFollowNotification({
       recipientId: String(targetUser._id),
+      recipientUsername: targetUser.username,
       actorId: String(viewer._id),
       actorUsername: viewer.username,
     }).catch((error) => {
@@ -398,13 +405,60 @@ async function listFollowing(req, res, next) {
 async function listUsers(req, res, next) {
   try {
     const users = await User.find({})
-      .select("_id username email bio avatarUrl createdAt")
+      .select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt")
       .sort({ createdAt: -1 })
       .lean();
 
     return res.json({
       ok: true,
       data: users.map(serializeUser),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+async function updateMyProfile(req, res, next) {
+  try {
+    const viewer = await resolveViewer(req);
+    if (!viewer) {
+      throw new AppError("Chưa xác thực người dùng", 401, "UNAUTHORIZED");
+    }
+
+    const payload = req.body || {};
+    const patch = {
+      fullName: String(payload.fullName || '').trim().slice(0, 80),
+      website: String(payload.website || '').trim().slice(0, 255),
+      bio: String(payload.bio || '').trim().slice(0, 150),
+      gender: String(payload.gender || '').trim().slice(0, 30),
+      avatarUrl: String(payload.avatarUrl || '').trim(),
+      showThreadsBadge: Boolean(payload.showThreadsBadge),
+      showSuggestedAccountsOnProfile: payload.showSuggestedAccountsOnProfile !== false,
+    };
+
+    const updated = await User.findByIdAndUpdate(
+      viewer._id,
+      { $set: patch },
+      { new: true, runValidators: true }
+    )
+      .select("_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile createdAt")
+      .lean();
+
+    const counts = await getCountsForUser(updated);
+
+    return res.json({
+      ok: true,
+      message: "Cập nhật hồ sơ thành công",
+      data: {
+        ...serializeUser(updated),
+        counts,
+        relationship: {
+          isMe: true,
+          isFollowing: false,
+          isFollowedBy: false,
+        },
+      },
     });
   } catch (err) {
     next(err);
@@ -418,4 +472,5 @@ module.exports = {
   listFollowers,
   listFollowing,
   listUsers,
+  updateMyProfile,
 };

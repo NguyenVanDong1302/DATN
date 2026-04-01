@@ -33,6 +33,11 @@ function buildNotifyMessage(notification) {
   }
 
   if (notification.type === 'like') {
+    if (notification.targetType === 'story') {
+      return others > 0
+        ? `${first} và ${others} người khác đã thích tin của bạn.`
+        : `${first} đã thích tin của bạn.`;
+    }
     return others > 0
       ? `${first} và ${others} người khác đã thích bài viết của bạn.`
       : `${first} đã thích bài viết của bạn.`;
@@ -45,6 +50,13 @@ function buildNotifyMessage(notification) {
   }
 
   return `${first} đã gửi cho bạn một tin nhắn mới.`;
+}
+
+
+function isSameActor({ recipientId, actorId, recipientUsername = '', actorUsername = '' }) {
+  if (recipientId && actorId && String(recipientId) === String(actorId)) return true;
+  if (recipientUsername && actorUsername && String(recipientUsername).trim().toLowerCase() === String(actorUsername).trim().toLowerCase()) return true;
+  return false;
 }
 
 async function emitNotification(recipientId, notification) {
@@ -170,6 +182,7 @@ async function removeNotificationActor({ type, targetType, targetId, recipientId
 
 async function notifyPostLike({ post, actorId, actorUsername }) {
   if (!post?.authorId) return null;
+  if (isSameActor({ recipientId: post.authorId, actorId, recipientUsername: post.authorUsername, actorUsername })) return null;
   return upsertNotification({
     type: 'like',
     targetType: 'post',
@@ -183,6 +196,7 @@ async function notifyPostLike({ post, actorId, actorUsername }) {
 
 async function notifyPostComment({ post, actorId, actorUsername, previewText }) {
   if (!post?.authorId) return null;
+  if (isSameActor({ recipientId: post.authorId, actorId, recipientUsername: post.authorUsername, actorUsername })) return null;
   return upsertNotification({
     type: 'comment',
     targetType: 'post',
@@ -195,8 +209,23 @@ async function notifyPostComment({ post, actorId, actorUsername, previewText }) 
   });
 }
 
-async function notifyFollow({ recipientId, actorId, actorUsername }) {
+async function notifyStoryLike({ story, actorId, actorUsername }) {
+  if (!story?.authorId) return null;
+  if (isSameActor({ recipientId: story.authorId, actorId, recipientUsername: story.authorUsername, actorUsername })) return null;
+  return upsertNotification({
+    type: 'like',
+    targetType: 'story',
+    targetId: String(story._id),
+    recipientId: String(story.authorId),
+    actorId: String(actorId),
+    actorUsername,
+    previewText: '',
+  });
+}
+
+async function notifyFollow({ recipientId, actorId, actorUsername, recipientUsername = '' }) {
   if (!recipientId || !actorId) return null;
+  if (isSameActor({ recipientId, actorId, recipientUsername, actorUsername })) return null;
   return upsertNotification({
     type: 'follow',
     targetType: 'user',
@@ -281,6 +310,7 @@ module.exports = {
   ensureIndexes,
   notifyPostLike,
   notifyPostComment,
+  notifyStoryLike,
   removeNotificationActor,
   removePostLikeActor: ({ postId, recipientId, actorId, actorUsername }) =>
     removeNotificationActor({ type: 'like', targetType: 'post', targetId: postId, recipientId, actorId, actorUsername }),

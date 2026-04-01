@@ -7,12 +7,14 @@ import GlobalPostCard from '../../../../components/PostCard'
 import CommentSheet from '../../../../components/comments/CommentSheet'
 import type { Post } from '../../../../types'
 import { useUsersApi } from '../../../../features/users/users.api'
+import { usePostsApi } from '../../../../features/posts/posts.api'
 import { useAppStore } from '../../../../state/store'
 import styles from './Feed.module.css'
 
 export default function Feed() {
   const api = useApi()
   const usersApi = useUsersApi()
+  const postsApi = usePostsApi()
   const nav = useNavigate()
   const modal = useModal()
   const toast = useToast()
@@ -120,6 +122,23 @@ export default function Feed() {
     }
   }
 
+
+  useEffect(() => {
+    const handlePostDeleted = (event: Event) => {
+      const postId = String((event as CustomEvent).detail?.postId || '')
+      if (!postId) return
+      setItems((prev) => prev.filter((item) => item._id !== postId))
+    }
+    window.addEventListener('post:deleted', handlePostDeleted as EventListener)
+    return () => window.removeEventListener('post:deleted', handlePostDeleted as EventListener)
+  }, [])
+
+  const handleDeletePost = async (post: Post) => {
+    await postsApi.deletePost(post._id)
+    setItems((prev) => prev.filter((item) => item._id !== post._id))
+    toast.push('Đã xoá bài viết')
+  }
+
   const followingLookup = useMemo(() => followingSet, [followingSet])
 
   return (
@@ -159,6 +178,7 @@ export default function Feed() {
             following={followingLookup.has(authorUsername)}
             followPending={!!followPendingMap[authorUsername]}
             onToggleFollow={() => handleToggleFollow(post)}
+            onDelete={() => handleDeletePost(post)}
           />
         )
       })}

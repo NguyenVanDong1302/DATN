@@ -45,4 +45,6 @@ export type PostComment = {
   likesCount?: number
   likedByMe?: boolean
   canDelete?: boolean
+  mediaUrl?: string
+  mediaType?: string
 }

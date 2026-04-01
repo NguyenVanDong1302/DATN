@@ -1,6 +1,7 @@
 const express = require("express");
 const { sessionUser } = require("../middlewares/sessionUser");
 const { uploadPostMedia } = require("../middlewares/uploadPostMedia");
+const { uploadCommentMedia } = require("../middlewares/uploadCommentMedia");
 const {
   createPost,
   listPosts,
@@ -28,7 +29,7 @@ router.delete("/:id", deletePost);
 router.post("/:id/like", toggleLike);
 router.delete("/:id/like", removeLike);
 
-router.post("/:id/comments", addComment);
+router.post("/:id/comments", uploadCommentMedia.single("media"), addComment);
 router.get("/:id/comments", listComments);
 router.delete("/:id/comments/:commentId", deleteComment);
 

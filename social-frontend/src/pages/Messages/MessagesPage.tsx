@@ -222,6 +222,11 @@ export default function MessagesPage() {
     if (!socket) return
 
     const onMessageNew = (message: ChatMessage) => {
+      const isIncomingActive = message.conversationId === activeId && message.senderUsername !== state.username
+      if (isIncomingActive) {
+        api.markRead(message.conversationId).catch(() => undefined)
+        markConversationReadRealtime(socket, message.conversationId)
+      }
       setMessagesByConversation((prev) => {
         const arr = prev[message.conversationId] ? [...prev[message.conversationId]] : []
         const optimisticIndex = arr.findIndex((item) => item.id.startsWith('temp-') && item.senderUsername === message.senderUsername && item.text === message.text)
@@ -247,6 +252,19 @@ export default function MessagesPage() {
       })
     }
 
+
+    const onMessageSeen = (payload: { conversationId?: string; seenAt?: string; username?: string }) => {
+      if (!payload?.conversationId) return
+      setMessagesByConversation((prev) => {
+        const items = prev[payload.conversationId || ''] || []
+        return {
+          ...prev,
+          [payload.conversationId || '']: items.map((item) => item.senderUsername === state.username ? { ...item, status: 'seen', seenAt: payload.seenAt || new Date().toISOString() } : item),
+        }
+      })
+      setConversations((prev) => prev.map((item) => item.id === payload.conversationId ? { ...item, unreadCount: 0 } : item))
+    }
+
     const onInboxRefresh = async () => {
       const items = await api.getConversations()
       setConversations(items)
@@ -256,11 +274,13 @@ export default function MessagesPage() {
     socket.on('message:new', onMessageNew)
     socket.on('inbox:refresh', onInboxRefresh)
     socket.on('conversation:updated', onInboxRefresh)
+    socket.on('message:seen', onMessageSeen)
 
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('inbox:refresh', onInboxRefresh)
       socket.off('conversation:updated', onInboxRefresh)
+      socket.off('message:seen', onMessageSeen)
     }
   }, [socket, activeId, state.username])
 
@@ -469,8 +489,8 @@ export default function MessagesPage() {
                     <div key={message.id} className={`ig-msg__row ${fromMe ? 'is-me' : 'is-them'}`}>
                       {!fromMe ? <img className="ig-msg__bubbleAvatar" src={avatarOf(activeConversation.peer)} alt="" /> : null}
                       <div className="ig-msg__bubbleWrap">
-                        <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>{message.text}</div>
-                        <div className="ig-msg__time">{formatTime(message.createdAt)}</div>
+                        <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>{message.storyReply ? <div style={{display:'grid',gap:8}}><div style={{fontSize:12,opacity:.75}}>Đã trả lời tin của @{message.storyReply.ownerUsername}</div><div style={{display:'flex',alignItems:'center',gap:8,padding:8,borderRadius:14,background:'rgba(255,255,255,.12)'}}><img src={message.storyReply.thumbnailUrl || message.storyReply.mediaUrl} alt='' style={{width:72,height:96,objectFit:'cover',borderRadius:12}} /><div style={{fontSize:12,opacity:.9}}>{message.storyReply.mediaType === 'video' ? 'Video story' : 'Ảnh story'}</div></div>{message.text ? <div>{message.text}</div> : null}</div> : message.text}</div>
+                        <div className="ig-msg__time">{formatTime(message.createdAt)}{fromMe ? ` · ${message.status === 'seen' ? 'Đã xem' : message.status === 'delivered' ? 'Đã nhận' : 'Đã gửi'}` : ''}</div>
                       </div>
                     </div>
                   )

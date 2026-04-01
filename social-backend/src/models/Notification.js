@@ -11,7 +11,7 @@ const notificationSchema = new mongoose.Schema(
     },
     targetType: {
       type: String,
-      enum: ['post', 'user', 'conversation'],
+      enum: ['post', 'user', 'conversation', 'story'],
       required: true,
       default: 'post',
       index: true,

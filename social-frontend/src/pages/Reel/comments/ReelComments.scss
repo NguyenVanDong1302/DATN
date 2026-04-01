@@ -59,7 +59,8 @@
 .ig-reel-comments__emoji,
 .ig-reel-comments__like,
 .ig-reel-comments__foot button,
-.ig-reel-comments__replies {
+.ig-reel-comments__replies,
+.ig-reel-comments__send {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -193,8 +194,34 @@
   display: flex;
   align-items: center;
   padding: 0 14px;
-  color: #8a8d95;
+  color: #17181d;
   font-size: 14px;
+  outline: none;
+}
+
+.ig-reel-comments__composerInput::placeholder {
+  color: #8a8d95;
+}
+
+.ig-reel-comments__composerInput:focus {
+  border-color: #c9ced8;
+}
+
+.ig-reel-comments__send {
+  color: #0095f6;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.ig-reel-comments__send:disabled {
+  color: #9ccdf7;
+  cursor: default;
+}
+
+.ig-reel-comments__empty {
+  padding: 20px 18px;
+  color: #8b8d96;
+  text-align: center;
 }
 
 @media (max-width: 1100px) {
