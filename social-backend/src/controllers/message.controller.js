@@ -1,7 +1,6 @@
 const {
   resolveCurrentUserFromReq,
   searchUsers,
-  listFollowingUsersForMessages,
   getOrCreateDirectConversation,
   listConversations,
   getConversationDetail,
@@ -9,6 +8,9 @@ const {
   sendMessage,
   markConversationRead,
   getUnreadSummary,
+  getConversationSettings,
+  updateConversationSettings,
+  clearConversationHistory,
 } = require("../services/message.service");
 
 async function searchMessageUsers(req, res, next) {
@@ -17,19 +19,9 @@ async function searchMessageUsers(req, res, next) {
     const data = await searchUsers({
       currentUser,
       q: req.query.q || "",
-      limit: req.query.limit || 10,
+      limit: req.query.limit || 8,
     });
     res.json({ ok: true, data });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function listFollowingUsers(req, res, next) {
-  try {
-    const currentUser = await resolveCurrentUserFromReq(req);
-    const items = await listFollowingUsersForMessages({ currentUser });
-    res.json({ ok: true, data: { items } });
   } catch (err) {
     next(err);
   }
@@ -51,6 +43,10 @@ async function createOrGetDirectConversation(req, res, next) {
           peer: result.peer,
           lastMessageText: result.conversation.lastMessageText || "",
           lastMessageAt: result.conversation.lastMessageAt,
+          unreadCount: 0,
+          nickname: result.member?.peerNickname || "",
+          isBlocked: Boolean(result.member?.blockedPeer),
+          blockedAt: result.member?.blockedAt || null,
         },
       },
     });
@@ -99,8 +95,7 @@ async function postConversationMessage(req, res, next) {
     const message = await sendMessage({
       currentUser,
       conversationId: req.params.conversationId,
-      text: req.body?.text || '',
-      storyReply: req.body?.storyReply || null,
+      text: req.body?.text || "",
     });
     res.status(201).json({ ok: true, data: { message } });
   } catch (err) {
@@ -128,9 +123,43 @@ async function unreadSummary(req, res, next) {
   }
 }
 
+async function getSettings(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const data = await getConversationSettings({ currentUser, conversationId: req.params.conversationId });
+    res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function patchSettings(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const data = await updateConversationSettings({
+      currentUser,
+      conversationId: req.params.conversationId,
+      nickname: req.body?.nickname,
+      isBlocked: typeof req.body?.isBlocked === 'boolean' ? req.body.isBlocked : undefined,
+    });
+    res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteHistory(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const data = await clearConversationHistory({ currentUser, conversationId: req.params.conversationId });
+    res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   searchMessageUsers,
-  listFollowingUsers,
   createOrGetDirectConversation,
   getConversationList,
   getConversation,
@@ -138,4 +167,7 @@ module.exports = {
   postConversationMessage,
   readConversation,
   unreadSummary,
+  getSettings,
+  patchSettings,
+  deleteHistory,
 };

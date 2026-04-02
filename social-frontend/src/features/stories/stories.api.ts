@@ -20,5 +20,13 @@ export function useStoriesApi() {
       const res = await api.post(`/stories/${storyId}/like`, {})
       return res?.data || { liked: false, likesCount: 0 }
     },
+    async hide(storyId: string): Promise<{ hiddenAuthorId?: string }> {
+      const res = await api.post(`/stories/${storyId}/hide`, {})
+      return res?.data || {}
+    },
+    async remove(storyId: string): Promise<{ removedId?: string }> {
+      const res = await api.del(`/stories/${storyId}`)
+      return res?.data || {}
+    },
   }), [api])
 }

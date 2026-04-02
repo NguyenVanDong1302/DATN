@@ -1,5 +1,8 @@
+const fs = require("fs");
+const path = require("path");
 const User = require("../models/User");
 const Follow = require("../models/Follow");
+const Notification = require("../models/Notification");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const ConversationMember = require("../models/ConversationMember");
@@ -31,7 +34,11 @@ async function ensureConversationMembers(conversation, users) {
             userId: String(user._id),
             username: user.username,
             unreadCount: 0,
+            peerNickname: "",
+            blockedPeer: false,
+            blockedAt: null,
           },
+          $set: { username: user.username },
         },
         { upsert: true },
       ),
@@ -40,10 +47,8 @@ async function ensureConversationMembers(conversation, users) {
 }
 
 function serializeUser(user) {
-  const id = String(user._id);
   return {
-    _id: id,
-    id,
+    id: String(user._id),
     username: user.username,
     email: user.email || "",
     bio: user.bio || "",
@@ -51,218 +56,63 @@ function serializeUser(user) {
   };
 }
 
-function escapeRegex(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function legacyUserId(username) {
-  const crypto = require("crypto");
-  return crypto
-    .createHash("sha256")
-    .update(String(username || ""))
-    .digest("hex")
-    .slice(0, 16);
-}
-
-function buildSearchScore(user, keyword, signals = {}) {
-  const query = String(keyword || "").trim().toLowerCase();
-  let score = 0;
-
-  const username = String(user.username || "").toLowerCase();
-  const email = String(user.email || "").toLowerCase();
-  const bio = String(user.bio || "").toLowerCase();
-
-  if (!query) {
-    if (signals.isRecent) score += 120;
-    if (signals.isFollowing) score += 80;
-    return score;
-  }
-
-  if (username === query) score += 1000;
-  if (email === query) score += 950;
-  if (username.startsWith(query)) score += 700;
-  if (email.startsWith(query)) score += 500;
-  if (bio.startsWith(query)) score += 250;
-  if (username.includes(query)) score += 300;
-  if (email.includes(query)) score += 220;
-  if (bio.includes(query)) score += 120;
-
-  if (signals.isRecent) score += 140;
-  if (signals.isFollowing) score += 110;
-  if (signals.recentOrder >= 0) score += Math.max(0, 40 - signals.recentOrder);
-
-  return score;
+function serializeConversation(row, currentUserId, currentUsername, peer, member) {
+  const peerId = row.memberIds.find((id) => String(id) !== String(currentUserId)) || "";
+  return {
+    id: String(row._id),
+    type: row.type,
+    peer: peer
+      ? {
+          id: String(peer._id),
+          username: peer.username,
+          email: peer.email || "",
+          bio: peer.bio || "",
+          avatarUrl: peer.avatarUrl || "",
+        }
+      : {
+          id: String(peerId),
+          username: row.memberUsernames.find((u) => u !== currentUsername) || "Người dùng",
+          email: "",
+          bio: "",
+          avatarUrl: "",
+        },
+    lastMessageText: row.lastMessageText || "",
+    lastMessageAt: row.lastMessageAt,
+    unreadCount: Number(member?.unreadCount || 0),
+    nickname: member?.peerNickname || "",
+    isBlocked: Boolean(member?.blockedPeer),
+    blockedAt: member?.blockedAt || null,
+  };
 }
 
 async function searchUsers({ currentUser, q = "", limit = 8 }) {
   const keyword = String(q || "").trim();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
-  const currentUserId = String(currentUser._id);
-  const currentUsername = String(currentUser.username || "");
 
-  const [followRows, recentConversations] = await Promise.all([
-    Follow.find({
-      $or: [{ followerId: currentUserId }, { followerUsername: currentUsername }],
-    })
-      .select("followingId followingUsername")
-      .lean(),
-    Conversation.find({
-      $or: [{ memberIds: currentUserId }, { memberUsernames: currentUsername }],
-    })
-      .sort({ lastMessageAt: -1, updatedAt: -1, createdAt: -1 })
-      .limit(20)
-      .lean(),
+  const followRows = await Follow.find({ followerId: String(currentUser._id) }).select("followingId").lean();
+  const followingIds = followRows.map((row) => String(row.followingId));
+
+  const regex = keyword ? new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
+
+  const followingFilter = {
+    _id: { $in: followingIds },
+    ...(regex ? { username: regex } : {}),
+  };
+
+  const suggestedFilter = {
+    _id: { $nin: [String(currentUser._id), ...followingIds] },
+    ...(regex ? { username: regex } : {}),
+  };
+
+  const [followingUsers, suggestedUsers] = await Promise.all([
+    User.find(followingFilter).select("_id username email bio avatarUrl").sort({ username: 1 }).limit(safeLimit).lean(),
+    User.find(suggestedFilter).select("_id username email bio avatarUrl").sort({ createdAt: -1 }).limit(safeLimit).lean(),
   ]);
 
-  const followingIdSet = new Set();
-  const followingUsernameSet = new Set();
-  for (const row of followRows) {
-    if (row?.followingId) followingIdSet.add(String(row.followingId));
-    if (row?.followingUsername) followingUsernameSet.add(String(row.followingUsername));
-  }
-
-  const recentIds = [];
-  const recentOrderMap = new Map();
-  for (const conversation of recentConversations) {
-    const peerId = (conversation.memberIds || []).find((id) => String(id) !== currentUserId);
-    const peerUsername = (conversation.memberUsernames || []).find((name) => String(name) !== currentUsername);
-    const recentKey = String(peerId || peerUsername || "");
-    if (!recentKey || recentOrderMap.has(recentKey)) continue;
-    recentOrderMap.set(recentKey, recentIds.length);
-    if (peerId) recentIds.push(String(peerId));
-  }
-
-  const regex = keyword ? new RegExp(escapeRegex(keyword), "i") : null;
-  const baseMatch = regex
-    ? {
-        $or: [{ username: regex }, { email: regex }, { bio: regex }],
-      }
-    : {};
-
-  const candidateLimit = Math.max(safeLimit * 5, 30);
-  const candidates = await User.find({
-    _id: { $nin: [currentUserId] },
-    ...baseMatch,
-  })
-    .select("_id username email bio avatarUrl createdAt")
-    .sort(regex ? { updatedAt: -1, createdAt: -1 } : { createdAt: -1 })
-    .limit(candidateLimit)
-    .lean();
-
-  const candidateMap = new Map();
-  for (const user of candidates) {
-    candidateMap.set(String(user._id), user);
-  }
-
-  const missingRecentIds = recentIds.filter((id) => !candidateMap.has(String(id)));
-  if (missingRecentIds.length) {
-    const recentUsers = await User.find({ _id: { $in: missingRecentIds } })
-      .select("_id username email bio avatarUrl createdAt")
-      .lean();
-    for (const user of recentUsers) {
-      candidateMap.set(String(user._id), user);
-    }
-  }
-
-  const allCandidates = Array.from(candidateMap.values())
-    .filter((user) => String(user._id) !== currentUserId)
-    .map((user) => {
-      const id = String(user._id);
-      const recentOrder = recentOrderMap.has(id)
-        ? recentOrderMap.get(id)
-        : recentOrderMap.has(String(user.username || ""))
-          ? recentOrderMap.get(String(user.username || ""))
-          : -1;
-      const isRecent = recentOrder >= 0;
-      const isFollowing = followingIdSet.has(id) || followingUsernameSet.has(String(user.username || ""));
-      return {
-        ...serializeUser(user),
-        _score: buildSearchScore(user, keyword, { isRecent, isFollowing, recentOrder }),
-        _isRecent: isRecent,
-        _isFollowing: isFollowing,
-        _recentOrder: recentOrder,
-      };
-    })
-    .filter((user) => (keyword ? user._score > 0 : true))
-    .sort((a, b) => {
-      if (b._score !== a._score) return b._score - a._score;
-      if (a._recentOrder !== b._recentOrder) {
-        const av = a._recentOrder < 0 ? Number.MAX_SAFE_INTEGER : a._recentOrder;
-        const bv = b._recentOrder < 0 ? Number.MAX_SAFE_INTEGER : b._recentOrder;
-        if (av !== bv) return av - bv;
-      }
-      return a.username.localeCompare(b.username, "vi");
-    });
-
-  const takeUnique = (items) => {
-    const seen = new Set();
-    const out = [];
-    for (const item of items) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      out.push({
-        id: item.id,
-        username: item.username,
-        email: item.email || "",
-        bio: item.bio || "",
-        avatarUrl: item.avatarUrl || "",
-      });
-      if (out.length >= safeLimit) break;
-    }
-    return out;
-  };
-
   return {
-    recent: takeUnique(allCandidates.filter((user) => user._isRecent)),
-    following: takeUnique(allCandidates.filter((user) => user._isFollowing)),
-    suggested: takeUnique(allCandidates.filter((user) => !user._isRecent && !user._isFollowing)),
+    following: followingUsers.map((u) => ({ id: String(u._id), username: u.username, email: u.email || "", bio: u.bio || "", avatarUrl: u.avatarUrl || "" })),
+    suggested: suggestedUsers.map((u) => ({ id: String(u._id), username: u.username, email: u.email || "", bio: u.bio || "", avatarUrl: u.avatarUrl || "" })),
   };
-}
-
-async function listFollowingUsersForMessages({ currentUser }) {
-  const currentUserId = String(currentUser._id);
-  const currentUsername = String(currentUser.username || "");
-  const followRows = await Follow.find({
-    $or: [{ followerId: currentUserId }, { followerUsername: currentUsername }],
-  })
-    .select("followingId followingUsername")
-    .lean();
-
-  const followingIds = new Set();
-  const followingUsernames = new Set();
-
-  for (const row of followRows) {
-    if (row?.followingId) followingIds.add(String(row.followingId));
-    if (row?.followingUsername) followingUsernames.add(String(row.followingUsername));
-  }
-
-  if (!followingIds.size && !followingUsernames.size) {
-    return [];
-  }
-
-  const users = await User.find({
-    $or: [
-      ...(followingIds.size ? [{ _id: { $in: Array.from(followingIds) } }] : []),
-      ...(followingUsernames.size ? [{ username: { $in: Array.from(followingUsernames) } }] : []),
-    ],
-  })
-    .select("_id username email bio avatarUrl createdAt")
-    .sort({ username: 1 })
-    .lean();
-
-  const deduped = [];
-  const seen = new Set();
-  for (const user of users) {
-    const id = String(user._id);
-    if (id === currentUserId || seen.has(id)) continue;
-    seen.add(id);
-    deduped.push({
-      ...serializeUser(user),
-      createdAt: user.createdAt || null,
-    });
-  }
-
-  return deduped;
 }
 
 async function getOrCreateDirectConversation({ currentUser, targetUserId }) {
@@ -290,10 +140,12 @@ async function getOrCreateDirectConversation({ currentUser, targetUserId }) {
   }
 
   await ensureConversationMembers(conversation, [currentUser, target]);
+  const member = await ConversationMember.findOne({ conversationId: String(conversation._id), userId: String(currentUser._id) }).lean();
 
   return {
     conversation,
     peer: serializeUser(target),
+    member,
   };
 }
 
@@ -314,16 +166,7 @@ async function listConversations({ currentUser, limit = 30 }) {
     const peerId = row.memberIds.find((id) => String(id) !== String(currentUser._id)) || "";
     const peer = peerMap.get(String(peerId));
     const member = memberMap.get(String(row._id));
-    return {
-      id: String(row._id),
-      type: row.type,
-      peer: peer
-        ? { id: String(peer._id), username: peer.username, email: peer.email || "", bio: peer.bio || "", avatarUrl: peer.avatarUrl || "" }
-        : { id: String(peerId), username: row.memberUsernames.find((u) => u !== currentUser.username) || "Người dùng", email: "", bio: "", avatarUrl: "" },
-      lastMessageText: row.lastMessageText || "",
-      lastMessageAt: row.lastMessageAt,
-      unreadCount: Number(member?.unreadCount || 0),
-    };
+    return serializeConversation(row, currentUser._id, currentUser.username, peer, member);
   });
 }
 
@@ -343,14 +186,7 @@ async function getConversationDetail({ currentUser, conversationId }) {
     ConversationMember.findOne({ conversationId: String(conversation._id), userId: String(currentUser._id) }).lean(),
   ]);
 
-  return {
-    id: String(conversation._id),
-    type: conversation.type,
-    peer: peer ? { id: String(peer._id), username: peer.username, email: peer.email || "", bio: peer.bio || "", avatarUrl: peer.avatarUrl || "" } : null,
-    lastMessageText: conversation.lastMessageText || "",
-    lastMessageAt: conversation.lastMessageAt,
-    unreadCount: Number(member?.unreadCount || 0),
-  };
+  return serializeConversation(conversation, currentUser._id, currentUser.username, peer, member);
 }
 
 async function listMessages({ currentUser, conversationId, limit = 50 }) {
@@ -369,7 +205,6 @@ async function listMessages({ currentUser, conversationId, limit = 50 }) {
     receiverUsername: row.receiverUsername,
     type: row.type,
     text: row.text || "",
-    storyReply: row.storyReply || null,
     status: row.status,
     seenAt: row.seenAt,
     createdAt: row.createdAt,
@@ -399,16 +234,63 @@ async function emitConversationSnapshot(io, conversationId, usernames) {
   }
 }
 
-async function sendMessage({ currentUser, conversationId, text, storyReply }) {
+async function createMessageNotification({ recipient, sender, message }) {
+  const doc = await Notification.create({
+    recipientId: String(recipient._id),
+    type: "message",
+    targetType: "conversation",
+    targetId: String(message._id),
+    postId: "",
+    actors: [String(sender._id)],
+    actorUsernames: [sender.username],
+    totalEvents: 1,
+    previewText: message.text || "",
+    isRead: false,
+    readAt: null,
+    lastEventAt: new Date(),
+  });
+
+  const io = getSocketIOOrNull();
+  if (io) {
+    const unreadCount = await Notification.countDocuments({ recipientId: String(recipient._id), isRead: false });
+    emitToUser(io, String(recipient._id), recipient.username, "notification:new", {
+      _id: String(doc._id),
+      recipientId: String(recipient._id),
+      type: "message",
+      targetType: "conversation",
+      targetId: String(message._id),
+      postId: "",
+      actors: [String(sender._id)],
+      actorUsernames: [sender.username],
+      totalEvents: 1,
+      previewText: message.text || "",
+      isRead: false,
+      readAt: null,
+      lastEventAt: doc.lastEventAt,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      conversationId: message.conversationId,
+      messageId: String(message._id),
+    });
+    emitToUser(io, String(recipient._id), recipient.username, "notification:count", { unreadCount });
+    emitToUser(io, String(recipient._id), recipient.username, "notify", {
+      id: String(doc._id),
+      type: "message",
+      messageId: String(message._id),
+      conversationId: message.conversationId,
+      message: `${sender.username} đã gửi cho bạn một tin nhắn mới.`,
+      createdAt: doc.createdAt,
+    });
+  }
+}
+
+async function getMemberState(conversationId, userId) {
+  return ConversationMember.findOne({ conversationId: String(conversationId), userId: String(userId) }).lean();
+}
+
+async function sendMessage({ currentUser, conversationId, text }) {
   const trimmed = String(text || "").trim();
-  const normalizedStoryReply = storyReply && storyReply.storyId ? {
-    storyId: String(storyReply.storyId || ''),
-    ownerUsername: String(storyReply.ownerUsername || ''),
-    mediaType: ['image','video'].includes(String(storyReply.mediaType || '')) ? String(storyReply.mediaType) : '',
-    mediaUrl: String(storyReply.mediaUrl || ''),
-    thumbnailUrl: String(storyReply.thumbnailUrl || ''),
-  } : null;
-  if (!trimmed && !normalizedStoryReply) {
+  if (!trimmed) {
     throw new AppError("Tin nhắn không được để trống", 400, "EMPTY_MESSAGE");
   }
 
@@ -418,6 +300,17 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
   const receiver = await User.findById(receiverId).select("_id username email bio avatarUrl");
   if (!receiver) {
     throw new AppError("Người nhận không tồn tại", 404, "RECEIVER_NOT_FOUND");
+  }
+
+  const [currentMember, receiverMember] = await Promise.all([
+    getMemberState(conversation._id, currentUser._id),
+    getMemberState(conversation._id, receiver._id),
+  ]);
+  if (currentMember?.blockedPeer) {
+    throw new AppError("Bạn đã chặn người dùng này. Hãy bỏ chặn để tiếp tục nhắn tin.", 403, "YOU_BLOCKED_THIS_USER");
+  }
+  if (receiverMember?.blockedPeer) {
+    throw new AppError("Bạn không thể nhắn tin cho người dùng này.", 403, "BLOCKED_BY_PEER");
   }
 
   const presence = getPresence(String(receiver._id));
@@ -430,9 +323,8 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
     senderUsername: currentUser.username,
     receiverId: String(receiver._id),
     receiverUsername: receiver.username,
-    type: 'text',
+    type: "text",
     text: trimmed,
-    storyReply: normalizedStoryReply || undefined,
     status: nextStatus,
     seenAt: nextStatus === "seen" ? new Date() : null,
   });
@@ -441,7 +333,7 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
     { _id: conversation._id },
     {
       $set: {
-        lastMessageText: trimmed || `Đã trả lời tin của @${receiver.username}`,
+        lastMessageText: trimmed,
         lastMessageAt: message.createdAt,
         lastMessageSenderId: String(currentUser._id),
         memberUsernames: [currentUser.username, receiver.username],
@@ -483,6 +375,10 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
     { upsert: true },
   );
 
+  if (presence?.screen !== "messages") {
+    await createMessageNotification({ recipient: receiver, sender: currentUser, message });
+  }
+
   const payload = {
     id: String(message._id),
     conversationId: String(conversation._id),
@@ -492,7 +388,6 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
     receiverUsername: receiver.username,
     type: message.type,
     text: message.text,
-    storyReply: message.storyReply || null,
     status: message.status,
     seenAt: message.seenAt,
     createdAt: message.createdAt,
@@ -501,8 +396,6 @@ async function sendMessage({ currentUser, conversationId, text, storyReply }) {
   const io = getSocketIOOrNull();
   if (io) {
     io.to(`conversation:${conversation._id}`).emit("message:new", payload);
-    emitToUser(io, String(receiver._id), receiver.username, "message:new", payload);
-    emitToUser(io, String(currentUser._id), currentUser.username, "message:new", payload);
     emitToUser(io, String(receiver._id), receiver.username, "inbox:update", {
       conversationId: String(conversation._id),
       unreadDelta: isViewingSameConversation ? 0 : 1,
@@ -566,9 +459,6 @@ async function markConversationRead({ currentUser, conversationId }) {
       seenAt: now,
     });
     emitToUser(io, String(currentUser._id), currentUser.username, "inbox:refresh", { reason: "read" });
-    const otherUserId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
-    const otherUsername = conversation.memberUsernames.find((u) => u !== currentUser.username) || "";
-    emitToUser(io, String(otherUserId || ""), otherUsername, "inbox:refresh", { reason: "peer-read", conversationId: String(conversation._id) });
   }
 
   return { ok: true, seenAt: now };
@@ -582,10 +472,129 @@ async function getUnreadSummary({ currentUser }) {
   };
 }
 
+async function getConversationSettings({ currentUser, conversationId }) {
+  const conversation = await getConversationOrThrow({ currentUser, conversationId });
+  const peerId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
+  const [member, peer] = await Promise.all([
+    ConversationMember.findOne({ conversationId: String(conversation._id), userId: String(currentUser._id) }).lean(),
+    User.findById(peerId).select("_id username avatarUrl bio").lean(),
+  ]);
+
+  return {
+    conversationId: String(conversation._id),
+    nickname: member?.peerNickname || "",
+    isBlocked: Boolean(member?.blockedPeer),
+    blockedAt: member?.blockedAt || null,
+    peer: peer
+      ? {
+          id: String(peer._id),
+          username: peer.username,
+          avatarUrl: peer.avatarUrl || "",
+          bio: peer.bio || "",
+        }
+      : null,
+  };
+}
+
+async function updateConversationSettings({ currentUser, conversationId, nickname, isBlocked }) {
+  const conversation = await getConversationOrThrow({ currentUser, conversationId });
+  const update = { username: currentUser.username };
+  if (typeof nickname !== "undefined") {
+    update.peerNickname = String(nickname || "").trim().slice(0, 80);
+  }
+  if (typeof isBlocked === "boolean") {
+    update.blockedPeer = isBlocked;
+    update.blockedAt = isBlocked ? new Date() : null;
+  }
+  await ConversationMember.updateOne(
+    { conversationId: String(conversation._id), userId: String(currentUser._id) },
+    { $set: update },
+    { upsert: true },
+  );
+  return getConversationSettings({ currentUser, conversationId });
+}
+
+function collectPossibleMediaPaths(messageDoc) {
+  const values = [
+    messageDoc?.mediaUrl,
+    messageDoc?.fileUrl,
+    messageDoc?.thumbnailUrl,
+    messageDoc?.imageUrl,
+    messageDoc?.videoUrl,
+    messageDoc?.storyReply?.mediaUrl,
+    messageDoc?.storyReply?.thumbnailUrl,
+  ].filter(Boolean);
+  return values.map((v) => String(v));
+}
+
+function resolveLocalPath(raw) {
+  if (!raw) return null;
+  const clean = String(raw).replace(/\\/g, "/").trim();
+  if (!clean) return null;
+  if (/^https?:\/\//i.test(clean) || /^data:/i.test(clean) || /^blob:/i.test(clean)) return null;
+  const uploadsIndex = clean.toLowerCase().indexOf("/uploads/");
+  const relative = uploadsIndex >= 0 ? clean.slice(uploadsIndex + 1) : clean.replace(/^\/+/, "");
+  const candidate = path.join(process.cwd(), "public", relative.replace(/^uploads\//, "uploads/"));
+  if (!candidate.includes(path.join(process.cwd(), "public"))) return null;
+  return candidate;
+}
+
+async function safeUnlink(filePath) {
+  if (!filePath) return;
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (_err) {}
+}
+
+async function clearConversationHistory({ currentUser, conversationId }) {
+  const conversation = await getConversationOrThrow({ currentUser, conversationId });
+  const messages = await Message.find({ conversationId: String(conversation._id) }).lean();
+  const files = new Set();
+  messages.forEach((message) => {
+    collectPossibleMediaPaths(message).forEach((p) => {
+      const resolved = resolveLocalPath(p);
+      if (resolved) files.add(resolved);
+    });
+  });
+
+  await Message.deleteMany({ conversationId: String(conversation._id) });
+  await Notification.deleteMany({ type: "message", targetType: "conversation", conversationId: String(conversation._id) }).catch(() => {});
+  await Conversation.updateOne(
+    { _id: conversation._id },
+    {
+      $set: {
+        lastMessageText: "",
+        lastMessageAt: null,
+        lastMessageSenderId: "",
+      },
+    },
+  );
+  await ConversationMember.updateMany(
+    { conversationId: String(conversation._id) },
+    {
+      $set: {
+        unreadCount: 0,
+        lastReadMessageId: "",
+      },
+    },
+  );
+  await Promise.all(Array.from(files).map((p) => safeUnlink(p)));
+
+  const io = getSocketIOOrNull();
+  if (io) {
+    io.to(`conversation:${conversation._id}`).emit("conversation:history-cleared", {
+      conversationId: String(conversation._id),
+      clearedBy: String(currentUser._id),
+    });
+    await emitConversationSnapshot(io, String(conversation._id), conversation.memberUsernames || []);
+  }
+
+  return { ok: true };
+}
+
 module.exports = {
   resolveCurrentUserFromReq,
   searchUsers,
-  listFollowingUsersForMessages,
   getOrCreateDirectConversation,
   listConversations,
   getConversationDetail,
@@ -593,4 +602,7 @@ module.exports = {
   sendMessage,
   markConversationRead,
   getUnreadSummary,
+  getConversationSettings,
+  updateConversationSettings,
+  clearConversationHistory,
 };

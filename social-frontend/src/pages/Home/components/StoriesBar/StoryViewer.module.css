@@ -1,18 +1,8 @@
-/* src/pages/Home/components/StoriesBar/StoryViewer.module.css */
 .stage {
   position: fixed;
   inset: 0;
-  background: #121212;
+  background: #0f1013;
   color: #fff;
-}
-
-.topLeftBrand {
-  position: absolute;
-  left: 20px;
-  top: 18px;
-  font-size: 28px;
-  font-weight: 700;
-  opacity: 0.9;
 }
 
 .closeBtn {
@@ -27,7 +17,8 @@
   color: #fff;
   font-size: 28px;
   cursor: pointer;
-  opacity: 0.9;
+  opacity: 0.92;
+  z-index: 40;
 }
 
 .viewerRow {
@@ -35,8 +26,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 22px;
-  padding: 0 28px;
+  gap: 18px;
+  padding: 0 24px;
+}
+
+.storyShell {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
 }
 
 .navBtn {
@@ -49,16 +47,23 @@
   font-size: 34px;
   line-height: 44px;
   cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.navBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(1.02);
 }
 
 .storyCard {
-  width: 420px;
-  height: 760px;
-  border-radius: 16px;
+  width: min(524px, calc(100vw - 420px));
+  min-width: min(524px, calc(100vw - 420px));
+  height: 100dvh;
   background: #111;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+  border-radius: 18px;
   user-select: none;
 }
 
@@ -69,20 +74,20 @@
   top: 10px;
   display: flex;
   gap: 6px;
-  z-index: 10;
+  z-index: 18;
 }
 
 .barTrack {
   flex: 1;
   height: 2px;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.24);
   border-radius: 999px;
   overflow: hidden;
 }
 
 .barFill {
   height: 100%;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   transform-origin: left center;
   transform: scaleX(0);
   will-change: transform;
@@ -96,16 +101,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  z-index: 12;
+  z-index: 20;
 }
 
 .headerLeft {
   display: flex;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 
-.headerAvatar {
+.headerAvatar,
+.sideAvatar {
   width: 34px;
   height: 34px;
   border-radius: 999px;
@@ -113,9 +120,6 @@
 }
 
 .headerMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 
@@ -132,50 +136,150 @@
 
 .headerTime {
   font-size: 14px;
-  opacity: 0.8;
+  opacity: 0.82;
 }
 
-.headerSub {
-  font-size: 12px;
-  opacity: 0.85;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
-}
-
-.headerRight {
+.headerActions {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
 }
 
-.iconBtn {
+.circleBtn,
+.footerIcon {
   width: 34px;
   height: 34px;
   border-radius: 999px;
   border: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.28);
   color: #fff;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.circleBtn:hover,
+.footerIcon:hover {
+  background: rgba(0, 0, 0, 0.42);
+  transform: translateY(-1px);
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 150px;
+  border-radius: 14px;
+  background: rgba(22, 22, 25, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.menuItem,
+.menuDanger {
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.menuItem:hover,
+.menuDanger:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menuDanger {
+  color: #ff6b72;
+  font-weight: 700;
 }
 
 .content {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  left: 0;
+  right: 0;
+  top: 58px;
+  bottom: 72px;
+  overflow: hidden;
 }
 
-.media {
+.slideStage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.paneCurrent,
+.paneIncoming {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.dirNext .paneIncoming {
+  transform: translateX(100%);
+}
+
+.dirPrev .paneIncoming {
+  transform: translateX(-100%);
+}
+
+.run.dirNext .paneCurrent {
+  animation: storySlideOutNext var(--slideMs) cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.run.dirNext .paneIncoming {
+  animation: storySlideInNext var(--slideMs) cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.run.dirPrev .paneCurrent {
+  animation: storySlideOutPrev var(--slideMs) cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.run.dirPrev .paneIncoming {
+  animation: storySlideInPrev var(--slideMs) cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes storySlideOutNext {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes storySlideInNext {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes storySlideOutPrev {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes storySlideInPrev {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.media,
+.sideMedia {
   width: 100%;
   height: 100%;
   object-fit: cover;
   background: #000;
-  border-radius: 0;
 }
 
 .footer {
@@ -186,7 +290,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  z-index: 12;
+  z-index: 20;
 }
 
 .replyBox {
@@ -198,163 +302,133 @@
   align-items: center;
   padding: 0 14px;
   font-size: 13px;
-  opacity: 0.9;
-  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.16);
 }
 
-.footerIcons {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+.replyBox::placeholder {
+  color: rgba(255, 255, 255, 0.78);
 }
 
-.footerIcon {
-  font-size: 22px;
-  opacity: 0.9;
+.ownerSpacer {
+  width: 100%;
+  height: 44px;
 }
 
-.previewCol {
-  width: 260px;
+.sideRail {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 20px;
+  max-width: 420px;
+  overflow: hidden;
 }
 
-.previewCard {
-  width: 220px;
-  height: 380px;
+.sideCard {
+  position: relative;
+  width: 206px;
+  height: 366px;
+  border: 0;
   border-radius: 14px;
   overflow: hidden;
-  position: relative;
-  background: #111;
-  opacity: 0.85;
+  background: #1b1d20;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.26);
+  transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 240ms ease;
 }
 
-.previewMedia {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(0px);
+.sideCard:hover {
+  transform: translateX(-6px) scale(1.02);
 }
 
-.previewOverlay {
+.sideOverlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.05));
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.44) 100%);
+  z-index: 1;
 }
 
-.previewCenter {
+.sideMeta {
+  position: absolute;
+  inset: auto 14px 18px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
   gap: 6px;
+  z-index: 2;
 }
 
-.previewRing {
-  width: 72px;
-  height: 72px;
-  border-radius: 999px;
-  background: conic-gradient(#f9ce34, #ee2a7b, #6228d7, #f9ce34);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.sideUser {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
 }
 
-.previewAvatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 999px;
-  border: 3px solid rgba(0, 0, 0, 0.15);
-  object-fit: cover;
-}
-
-.previewUser {
-  font-weight: 800;
-  font-size: 16px;
-}
-
-.previewTime {
+.sideTime {
   font-size: 14px;
-  opacity: 0.85;
+  opacity: 0.86;
 }
 
-.previewEmpty {
-  width: 220px;
-  height: 380px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
+@media (max-width: 1400px) {
+  .storyCard {
+    width: min(524px, calc(100vw - 280px));
+    min-width: min(524px, calc(100vw - 280px));
+  }
+
+  .sideCard {
+    width: 168px;
+    height: 300px;
+  }
+
+  .sideUser {
+    font-size: 18px;
+  }
 }
 
-/* ✅ UPDATE: src/pages/Home/components/StoriesBar/StoryViewer.module.css */
-/* Giữ nguyên phần cũ, CHỈ CẦN thêm các class bên dưới vào cuối file */
-/* ✅ REPLACE ONLY THE SLIDE PART: src/pages/Home/components/StoriesBar/StoryViewer.module.css */
-/* Xoá toàn bộ đoạn slide cũ và dán đoạn này vào cuối file */
+@media (max-width: 1180px) {
+  .sideRail {
+    display: none;
+  }
 
-.slideStage {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.paneCurrent,
-.paneIncoming {
-  position: absolute;
-  inset: 0;
-  will-change: transform;
+  .storyCard {
+    width: min(524px, calc(100vw - 136px));
+    min-width: min(524px, calc(100vw - 136px));
+  }
 }
 
-/* trạng thái "prep" (chưa có transition) */
-.paneCurrent {
-  transform: translateX(0);
-}
+@media (max-width: 640px) {
+  .viewerRow {
+    padding: 0;
+    gap: 0;
+  }
 
-/* incoming nằm ngoài màn theo hướng */
-.dirNext .paneIncoming {
-  transform: translateX(100%);
-}
-.dirPrev .paneIncoming {
-  transform: translateX(-100%);
-}
+  .storyCard {
+    width: 100vw;
+    min-width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
 
-/* khi phase === run -> bắt đầu transition */
-.run .paneCurrent,
-.run .paneIncoming {
-  transition: transform var(--slideMs, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1);
-}
+  .navBtn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.22);
+  }
 
-/* NEXT: current đi trái, incoming vào giữa */
-.run.dirNext .paneCurrent {
-  transform: translateX(-100%);
-}
-.run.dirNext .paneIncoming {
-  transform: translateX(0);
-}
+  .navBtn:first-of-type {
+    left: 8px;
+  }
 
-/* PREV: current đi phải, incoming vào giữa */
-.run.dirPrev .paneCurrent {
-  transform: translateX(100%);
-}
-.run.dirPrev .paneIncoming {
-  transform: translateX(0);
-}
+  .navBtn:last-of-type {
+    right: 8px;
+  }
 
-.soundBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 0;
-  background: rgba(0, 0, 0, 0.38);
-  color: #fff;
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-}
-
-.slideStage,
-.paneCurrent,
-.paneIncoming {
-  width: 100%;
-  height: 100%;
+  .content {
+    top: 58px;
+    bottom: 72px;
+  }
 }

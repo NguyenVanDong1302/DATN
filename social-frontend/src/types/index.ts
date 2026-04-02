@@ -2,7 +2,6 @@ export type PostMedia = {
   type?: 'image' | 'video' | string
   url?: string
   mimeType?: string
-  thumbnailUrl?: string
   filename?: string
 }
 
@@ -10,6 +9,7 @@ export type Post = {
   _id: string
   authorId?: string
   authorUsername?: string
+  authorAvatarUrl?: string
   content?: string
   imageUrl?: string
   visibility?: 'public' | 'friends' | 'private' | string
@@ -33,6 +33,7 @@ export type PostComment = {
   postId?: string
   authorId?: string
   authorUsername?: string
+  authorAvatarUrl?: string
   content: string
   createdAt?: string
   updatedAt?: string
@@ -45,6 +46,4 @@ export type PostComment = {
   likesCount?: number
   likedByMe?: boolean
   canDelete?: boolean
-  mediaUrl?: string
-  mediaType?: string
 }

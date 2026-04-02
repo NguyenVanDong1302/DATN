@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import styles from './CommentSheet.module.css'
 import { useApi, resolveMediaUrl } from '../../lib/api'
+import { getAvatarUrl } from '../../lib/avatar'
 import { useToast } from '../Toast'
-import { useModal } from '../Modal'
 import { useAppStore } from '../../state/store'
 import type { Post, PostComment } from '../../types'
 
 type Props = {
   postId: string
   onChanged?: (count: number) => void
+  mode?: 'full' | 'panel'
 }
 
 type NormalizedMedia = {
@@ -153,27 +154,17 @@ function MediaPreview({ media }: { media: NormalizedMedia[] }) {
   )
 }
 
-export default function CommentSheet({ postId, onChanged }: Props) {
+export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props) {
   const api = useApi()
   const toast = useToast()
-  const modal = useModal()
   const { state } = useAppStore()
   const [post, setPost] = useState<Post | null>(null)
   const [items, setItems] = useState<PostComment[]>([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [commentFile, setCommentFile] = useState<File | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [replyTo, setReplyTo] = useState<PostComment | null>(null)
   const [expandedRoots, setExpandedRoots] = useState<Record<string, boolean>>({})
-  const [postMenuOpen, setPostMenuOpen] = useState(false)
-  const [deletePending, setDeletePending] = useState(false)
-  const onChangedRef = useRef<Props['onChanged']>(onChanged)
-
-  useEffect(() => {
-    onChangedRef.current = onChanged
-  }, [onChanged])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -186,55 +177,39 @@ export default function CommentSheet({ postId, onChanged }: Props) {
       setPost(postRes?.data?.post || postRes?.data || postRes || null)
       const next = Array.isArray(commentRes?.data) ? commentRes.data : []
       setItems(next)
-      onChangedRef.current?.(next.length)
+      onChanged?.(next.length)
     } catch (error: any) {
       toast.push(error?.message || 'Không tải được bình luận')
     } finally {
       setLoading(false)
     }
-  }, [api, postId, toast])
+  }, [api, onChanged, postId, toast])
 
   useEffect(() => {
     load()
   }, [load])
 
-
-const submit = async () => {
-  const content = text.trim()
-  if ((!content && !commentFile) || submitting) return
-  setSubmitting(true)
-  try {
-    const form = new FormData()
-    form.append('content', content)
-    if (replyTo) {
-      form.append('parentCommentId', replyTo.parentCommentId || replyTo._id)
-      form.append('replyToCommentId', replyTo._id)
+  const submit = async () => {
+    const content = text.trim()
+    if (!content || submitting) return
+    setSubmitting(true)
+    try {
+      await api.post(`/posts/${postId}/comments`, {
+        content,
+        parentCommentId: replyTo ? replyTo.parentCommentId || replyTo._id : null,
+        replyToCommentId: replyTo?._id || null,
+      })
+      setText('')
+      setReplyTo(null)
+      await load()
+    } catch (error: any) {
+      toast.push(error?.message || 'Không thể gửi bình luận')
+    } finally {
+      setSubmitting(false)
     }
-    if (commentFile) form.append('media', commentFile)
-
-    const response = await fetch(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      headers: {
-        ...(localStorage.getItem('x_username') ? { 'X-Username': localStorage.getItem('x_username') || '' } : {}),
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-      },
-      body: form,
-    })
-    const json = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(json?.message || `HTTP ${response.status}`)
-    setText('')
-    setCommentFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    setReplyTo(null)
-    await load()
-  } catch (error: any) {
-    toast.push(error?.message || 'Không thể gửi bình luận')
-  } finally {
-    setSubmitting(false)
   }
-}
 
-const remove = async (comment: PostComment) => {
+  const remove = async (comment: PostComment) => {
     try {
       await api.del(`/posts/${postId}/comments/${comment._id}`)
       await load()
@@ -245,27 +220,6 @@ const remove = async (comment: PostComment) => {
 
   const toggleReplies = (rootId: string) => {
     setExpandedRoots((prev) => ({ ...prev, [rootId]: !prev[rootId] }))
-  }
-
-
-  const canDeletePost = Boolean(post && state.username && post.authorUsername === state.username)
-
-  const removePost = async () => {
-    if (!post || deletePending) return
-    if (!window.confirm('Bạn có chắc muốn xoá bài viết này? Tất cả bình luận, lượt thích, thông báo và media liên quan cũng sẽ bị xoá.')) return
-    setDeletePending(true)
-    try {
-      await api.del(`/posts/${post._id}`)
-      onChangedRef.current?.(0)
-      toast.push('Đã xoá bài viết')
-      window.dispatchEvent(new CustomEvent('post:deleted', { detail: { postId: post._id } }))
-      modal.close()
-    } catch (error: any) {
-      toast.push(error?.message || 'Không thể xoá bài viết')
-    } finally {
-      setDeletePending(false)
-      setPostMenuOpen(false)
-    }
   }
 
   const media = useMemo(() => getPostMedia(post), [post])
@@ -288,7 +242,7 @@ const remove = async (comment: PostComment) => {
 
     return (
       <div key={comment._id} className={`${styles.item} ${isReply ? styles.replyItem : ''}`}>
-        <div className={styles.itemAvatar}>{(comment.authorUsername || 'u').slice(0, 1).toUpperCase()}</div>
+        <img className={styles.itemAvatarImage} src={getAvatarUrl({ username: comment.authorUsername, avatarUrl: (comment as any).authorAvatarUrl })} alt={comment.authorUsername || 'user'} />
         <div className={styles.itemBody}>
           {isReply ? (
             <div className={styles.replyBadgeRow}>
@@ -305,13 +259,6 @@ const remove = async (comment: PostComment) => {
             <div className={styles.content}>
               {isReply && targetUsername ? <span className={styles.mention}>@{targetUsername} </span> : null}
               {comment.content}
-              {comment.mediaUrl ? (
-                comment.mediaType === 'gif' ? (
-                  <img className={styles.commentMedia} src={comment.mediaUrl} alt="gif comment" />
-                ) : (
-                  <img className={styles.commentMedia} src={comment.mediaUrl} alt="image comment" />
-                )
-              ) : null}
             </div>
           </div>
 
@@ -330,38 +277,28 @@ const remove = async (comment: PostComment) => {
     )
   }
 
-  return (
-    <div className={styles.shell}>
-      <div className={styles.previewCol}>
-        <MediaPreview media={media} />
-      </div>
+  const panelOnly = mode === 'panel'
 
-      <div className={styles.panelCol}>
+  return (
+    <div className={`${styles.shell} ${panelOnly ? styles.shellPanelOnly : ''}`}>
+      {!panelOnly ? (
+        <div className={styles.previewCol}>
+          <MediaPreview media={media} />
+        </div>
+      ) : null}
+
+      <div className={`${styles.panelCol} ${panelOnly ? styles.panelColOnly : ''}`}>
         <div className={styles.header}>
           <div className={styles.postMeta}>
-            <div className={styles.postAvatar}>{(post?.authorUsername || 'u').slice(0, 1).toUpperCase()}</div>
+            <img className={styles.postAvatarImage} src={getAvatarUrl({ username: post?.authorUsername, avatarUrl: (post as any)?.authorAvatarUrl })} alt={post?.authorUsername || 'user'} />
             <div>
               <div className={styles.postAuthor}>{post?.authorUsername || 'user'}</div>
               <div className={styles.postDate}>{post?.createdAt ? new Date(post.createdAt).toLocaleString() : 'Bài viết'}</div>
             </div>
           </div>
-          <div className={styles.postHeaderActions}>
-            <button className={styles.refreshBtn} type="button" onClick={load} disabled={loading}>
-              Làm mới
-            </button>
-            {canDeletePost ? (
-              <div className={styles.postMenuWrap}>
-                <button className={styles.postMenuToggle} type="button" onClick={() => setPostMenuOpen((v) => !v)}>•••</button>
-                {postMenuOpen ? (
-                  <div className={styles.postMenuPanel}>
-                    <button className={`${styles.postMenuItem} ${styles.postMenuDanger}`} type="button" onClick={removePost} disabled={deletePending}>
-                      {deletePending ? 'Đang xoá...' : 'Xoá'}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <button className={styles.refreshBtn} type="button" onClick={load} disabled={loading}>
+            Làm mới
+          </button>
         </div>
 
         {post?.content ? (
@@ -413,10 +350,8 @@ const remove = async (comment: PostComment) => {
             </div>
           ) : null}
 
-          {commentFile ? <div className={styles.filePreviewRow}><span className={styles.fileChip}>{commentFile.type === 'image/gif' ? 'GIF' : 'Ảnh'}: {commentFile.name}</span><button className={styles.clearFileBtn} type="button" onClick={() => { setCommentFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>×</button></div> : null}
           <div className={styles.composerRow}>
-            <button className={styles.composerIconBtn} type="button" onClick={() => fileInputRef.current?.click()}>☺</button>
-            <input ref={fileInputRef} type="file" accept="image/*,.gif" hidden onChange={(event) => setCommentFile(event.target.files?.[0] || null)} />
+            <div className={styles.composerIcon}>☺</div>
             <textarea
               className={styles.textarea}
               value={text}
@@ -424,7 +359,7 @@ const remove = async (comment: PostComment) => {
               placeholder={replyTo ? `Trả lời @${replyTo.authorUsername}...` : 'Thêm bình luận...'}
               rows={1}
             />
-            <button className={styles.submitBtn} type="button" onClick={submit} disabled={submitting || (!text.trim() && !commentFile)}>
+            <button className={styles.submitBtn} type="button" onClick={submit} disabled={submitting || !text.trim()}>
               {submitting ? 'Đang gửi...' : 'Đăng'}
             </button>
           </div>
