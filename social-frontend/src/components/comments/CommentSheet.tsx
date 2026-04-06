@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import styles from './CommentSheet.module.css'
 import { useApi, resolveMediaUrl } from '../../lib/api'
+import { getAvatarUrl } from '../../lib/avatar'
 import { useToast } from '../Toast'
-import { useModal } from '../Modal'
 import { useAppStore } from '../../state/store'
 import type { Post, PostComment } from '../../types'
 
 type Props = {
   postId: string
   onChanged?: (count: number) => void
+  mode?: 'full' | 'panel'
 }
 
 type NormalizedMedia = {
@@ -22,16 +23,12 @@ type GroupedComment = {
 }
 
 function detectMediaType(item: any): 'image' | 'video' | null {
-  const type = String(item?.type || '').toLowerCase()
+  const type = String(item?.type || item?.mediaType || '').toLowerCase()
   const mime = String(item?.mimeType || '').toLowerCase()
-  const url = String(item?.url || item || '').toLowerCase()
+  const url = String(item?.url || item?.mediaUrl || item || '').toLowerCase()
 
-  if (type === 'video' || mime.startsWith('video/') || /\.(mp4|webm|ogg|mov|m4v)$/i.test(url)) {
-    return 'video'
-  }
-  if (type === 'image' || mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|avif)$/i.test(url)) {
-    return 'image'
-  }
+  if (type === 'video' || mime.startsWith('video/') || /\.(mp4|webm|ogg|mov|m4v)$/i.test(url)) return 'video'
+  if (type === 'image' || type === 'gif' || mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|avif)$/i.test(url)) return 'image'
   return null
 }
 
@@ -87,10 +84,7 @@ function groupComments(items: PostComment[]): GroupedComment[] {
     replyItems.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
   }
 
-  return roots.map((root) => ({
-    root,
-    replies: repliesMap.get(root._id) || [],
-  }))
+  return roots.map((root) => ({ root, replies: repliesMap.get(root._id) || [] }))
 }
 
 function MediaPreview({ media }: { media: NormalizedMedia[] }) {
@@ -101,51 +95,23 @@ function MediaPreview({ media }: { media: NormalizedMedia[] }) {
   }, [media.length])
 
   const current = media[active]
-  if (!current) {
-    return <div className={styles.mediaEmpty}>Bài viết này chưa có ảnh hoặc video.</div>
-  }
+  if (!current) return <div className={styles.mediaEmpty}>Bài viết này chưa có ảnh hoặc video.</div>
 
   return (
     <div className={styles.mediaWrap}>
       <div className={styles.mediaStage}>
-        {current.type === 'video' ? (
-          <video className={styles.media} src={current.url} controls playsInline />
-        ) : (
-          <img className={styles.media} src={current.url} alt="post" />
-        )}
-
+        {current.type === 'video' ? <video className={styles.media} src={current.url} controls playsInline /> : <img className={styles.media} src={current.url} alt="post" />}
         {media.length > 1 ? (
           <>
-            <button
-              type="button"
-              className={`${styles.mediaNav} ${styles.mediaPrev}`}
-              onClick={() => setActive((v) => (v - 1 + media.length) % media.length)}
-              aria-label="Ảnh trước"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              className={`${styles.mediaNav} ${styles.mediaNext}`}
-              onClick={() => setActive((v) => (v + 1) % media.length)}
-              aria-label="Ảnh sau"
-            >
-              ›
-            </button>
+            <button type="button" className={`${styles.mediaNav} ${styles.mediaPrev}`} onClick={() => setActive((v) => (v - 1 + media.length) % media.length)} aria-label="Ảnh trước">‹</button>
+            <button type="button" className={`${styles.mediaNav} ${styles.mediaNext}`} onClick={() => setActive((v) => (v + 1) % media.length)} aria-label="Ảnh sau">›</button>
           </>
         ) : null}
       </div>
-
       {media.length > 1 ? (
         <div className={styles.mediaDots}>
           {media.map((_, index) => (
-            <button
-              key={index}
-              type="button"
-              className={`${styles.mediaDot} ${index === active ? styles.mediaDotActive : ''}`}
-              onClick={() => setActive(index)}
-              aria-label={`Chuyển đến media ${index + 1}`}
-            />
+            <button key={index} type="button" className={`${styles.mediaDot} ${index === active ? styles.mediaDotActive : ''}`} onClick={() => setActive(index)} aria-label={`Chuyển đến media ${index + 1}`} />
           ))}
         </div>
       ) : null}
@@ -153,88 +119,79 @@ function MediaPreview({ media }: { media: NormalizedMedia[] }) {
   )
 }
 
-export default function CommentSheet({ postId, onChanged }: Props) {
+function CommentAttachment({ comment }: { comment: PostComment }) {
+  const mediaType = detectMediaType({ mediaType: comment.mediaType, mediaUrl: comment.mediaUrl })
+  const url = resolveMediaUrl(comment.mediaUrl)
+  if (!mediaType || !url) return null
+  return mediaType === 'video' ? (
+    <video className={styles.commentMedia} src={url} controls playsInline />
+  ) : (
+    <img className={styles.commentMedia} src={url} alt="comment media" />
+  )
+}
+
+export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props) {
   const api = useApi()
   const toast = useToast()
-  const modal = useModal()
   const { state } = useAppStore()
   const [post, setPost] = useState<Post | null>(null)
   const [items, setItems] = useState<PostComment[]>([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [commentFile, setCommentFile] = useState<File | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [replyTo, setReplyTo] = useState<PostComment | null>(null)
   const [expandedRoots, setExpandedRoots] = useState<Record<string, boolean>>({})
-  const [postMenuOpen, setPostMenuOpen] = useState(false)
-  const [deletePending, setDeletePending] = useState(false)
-  const onChangedRef = useRef<Props['onChanged']>(onChanged)
-
-  useEffect(() => {
-    onChangedRef.current = onChanged
-  }, [onChanged])
+  const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [postRes, commentRes] = await Promise.all([
-        api.get(`/posts/${postId}`),
-        api.get(`/posts/${postId}/comments`),
-      ])
-
+      const [postRes, commentRes] = await Promise.all([api.get(`/posts/${postId}`), api.get(`/posts/${postId}/comments`)])
       setPost(postRes?.data?.post || postRes?.data || postRes || null)
       const next = Array.isArray(commentRes?.data) ? commentRes.data : []
       setItems(next)
-      onChangedRef.current?.(next.length)
+      onChanged?.(next.length)
     } catch (error: any) {
       toast.push(error?.message || 'Không tải được bình luận')
     } finally {
       setLoading(false)
     }
-  }, [api, postId, toast])
+  }, [api, onChanged, postId, toast])
 
   useEffect(() => {
     load()
   }, [load])
 
-
-const submit = async () => {
-  const content = text.trim()
-  if ((!content && !commentFile) || submitting) return
-  setSubmitting(true)
-  try {
-    const form = new FormData()
-    form.append('content', content)
-    if (replyTo) {
-      form.append('parentCommentId', replyTo.parentCommentId || replyTo._id)
-      form.append('replyToCommentId', replyTo._id)
-    }
-    if (commentFile) form.append('media', commentFile)
-
-    const response = await fetch(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      headers: {
-        ...(localStorage.getItem('x_username') ? { 'X-Username': localStorage.getItem('x_username') || '' } : {}),
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-      },
-      body: form,
-    })
-    const json = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(json?.message || `HTTP ${response.status}`)
-    setText('')
-    setCommentFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    setReplyTo(null)
-    await load()
-  } catch (error: any) {
-    toast.push(error?.message || 'Không thể gửi bình luận')
-  } finally {
-    setSubmitting(false)
+  const replaceComment = (nextComment: PostComment) => {
+    setItems((prev) => prev.map((item) => (item._id === nextComment._id ? { ...item, ...nextComment } : item)))
   }
-}
 
-const remove = async (comment: PostComment) => {
+  const submit = async () => {
+    if (submitting) return
+    const content = text.trim()
+    if (!content && !mediaFile) return
+    setSubmitting(true)
+    try {
+      const body = new FormData()
+      if (content) body.append('content', content)
+      if (mediaFile) body.append('media', mediaFile)
+      body.append('parentCommentId', replyTo ? replyTo.parentCommentId || replyTo._id : '')
+      body.append('replyToCommentId', replyTo?._id || '')
+      await api.postForm(`/posts/${postId}/comments`, body)
+      setText('')
+      setReplyTo(null)
+      setMediaFile(null)
+      if (mediaInputRef.current) mediaInputRef.current.value = ''
+      await load()
+    } catch (error: any) {
+      toast.push(error?.message || 'Không thể gửi bình luận')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const remove = async (comment: PostComment) => {
     try {
       await api.del(`/posts/${postId}/comments/${comment._id}`)
       await load()
@@ -243,52 +200,47 @@ const remove = async (comment: PostComment) => {
     }
   }
 
+  const toggleCommentLike = async (comment: PostComment) => {
+    try {
+      const next = comment.likedByMe
+        ? await api.del(`/posts/${postId}/comments/${comment._id}/like`)
+        : await api.post(`/posts/${postId}/comments/${comment._id}/like`, {})
+      replaceComment(next?.data || next)
+    } catch (error: any) {
+      toast.push(error?.message || 'Không thể thả tim bình luận')
+    }
+  }
+
   const toggleReplies = (rootId: string) => {
     setExpandedRoots((prev) => ({ ...prev, [rootId]: !prev[rootId] }))
   }
 
-
-  const canDeletePost = Boolean(post && state.username && post.authorUsername === state.username)
-
-  const removePost = async () => {
-    if (!post || deletePending) return
-    if (!window.confirm('Bạn có chắc muốn xoá bài viết này? Tất cả bình luận, lượt thích, thông báo và media liên quan cũng sẽ bị xoá.')) return
-    setDeletePending(true)
-    try {
-      await api.del(`/posts/${post._id}`)
-      onChangedRef.current?.(0)
-      toast.push('Đã xoá bài viết')
-      window.dispatchEvent(new CustomEvent('post:deleted', { detail: { postId: post._id } }))
-      modal.close()
-    } catch (error: any) {
-      toast.push(error?.message || 'Không thể xoá bài viết')
-    } finally {
-      setDeletePending(false)
-      setPostMenuOpen(false)
-    }
-  }
-
   const media = useMemo(() => getPostMedia(post), [post])
   const groups = useMemo(() => groupComments(items), [items])
+  const mediaPreviewUrl = useMemo(() => (mediaFile ? URL.createObjectURL(mediaFile) : ''), [mediaFile])
 
   useEffect(() => {
     setExpandedRoots((prev) => {
       const next: Record<string, boolean> = {}
-      for (const group of groups) {
-        next[group.root._id] = prev[group.root._id] ?? true
-      }
+      for (const group of groups) next[group.root._id] = prev[group.root._id] ?? true
       return next
     })
   }, [groups])
 
-  const renderComment = (comment: PostComment, mode: 'root' | 'reply') => {
+  useEffect(() => {
+    return () => {
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
+    }
+  }, [mediaPreviewUrl])
+
+  const renderComment = (comment: PostComment, modeValue: 'root' | 'reply') => {
     const canDelete = Boolean(comment.canDelete || (comment.authorUsername && state.username && comment.authorUsername === state.username))
     const targetUsername = comment.replyTo?.authorUsername || comment.replyToAuthorUsername
-    const isReply = mode === 'reply'
+    const isReply = modeValue === 'reply'
 
     return (
       <div key={comment._id} className={`${styles.item} ${isReply ? styles.replyItem : ''}`}>
-        <div className={styles.itemAvatar}>{(comment.authorUsername || 'u').slice(0, 1).toUpperCase()}</div>
+        <img className={styles.itemAvatarImage} src={getAvatarUrl({ username: comment.authorUsername, avatarUrl: (comment as any).authorAvatarUrl })} alt={comment.authorUsername || 'user'} />
         <div className={styles.itemBody}>
           {isReply ? (
             <div className={styles.replyBadgeRow}>
@@ -297,71 +249,45 @@ const remove = async (comment: PostComment) => {
             </div>
           ) : null}
 
-          <div className={`${styles.itemBubble} ${isReply ? styles.replyBubble : ''}`}>
-            <div className={styles.itemTopline}>
-              <span className={styles.author}>{comment.authorUsername || 'user'}</span>
-              <span className={styles.time}>{formatRelative(comment.createdAt)}</span>
-            </div>
-            <div className={styles.content}>
-              {isReply && targetUsername ? <span className={styles.mention}>@{targetUsername} </span> : null}
-              {comment.content}
-              {comment.mediaUrl ? (
-                comment.mediaType === 'gif' ? (
-                  <img className={styles.commentMedia} src={comment.mediaUrl} alt="gif comment" />
-                ) : (
-                  <img className={styles.commentMedia} src={comment.mediaUrl} alt="image comment" />
-                )
-              ) : null}
-            </div>
+          <div className={styles.itemTopline}>
+            <span className={styles.author}>{comment.authorUsername || 'user'}</span>
+            <span className={styles.time}>{formatRelative(comment.createdAt)}</span>
           </div>
+          <div className={styles.contentPlain}>
+            {isReply && targetUsername ? <span className={styles.mention}>@{targetUsername} </span> : null}
+            {comment.content}
+          </div>
+          <CommentAttachment comment={comment} />
 
           <div className={styles.actions}>
-            <button className={styles.actionBtn} type="button" onClick={() => setReplyTo(comment)}>
-              Trả lời
-            </button>
-            {canDelete ? (
-              <button className={`${styles.actionBtn} ${styles.actionDanger}`} type="button" onClick={() => remove(comment)}>
-                Xóa
-              </button>
-            ) : null}
+            <button className={styles.actionBtn} type="button" onClick={() => setReplyTo(comment)}>Trả lời</button>
+            {canDelete ? <button className={`${styles.actionBtn} ${styles.actionDanger}`} type="button" onClick={() => remove(comment)}>Xóa</button> : null}
           </div>
         </div>
+        <button className={styles.commentLikeBtn} type="button" onClick={() => void toggleCommentLike(comment)} aria-label={comment.likedByMe ? 'Bỏ tim bình luận' : 'Thả tim bình luận'}>
+          <span className={`${styles.commentHeart} ${comment.likedByMe ? styles.commentHeartActive : ''}`}>{comment.likedByMe ? '♥' : '♡'}</span>
+          {Number(comment.likesCount || 0) > 0 ? <span className={styles.commentLikeCount}>{comment.likesCount}</span> : null}
+        </button>
       </div>
     )
   }
 
-  return (
-    <div className={styles.shell}>
-      <div className={styles.previewCol}>
-        <MediaPreview media={media} />
-      </div>
+  const panelOnly = mode === 'panel'
 
-      <div className={styles.panelCol}>
+  return (
+    <div className={`${styles.shell} ${panelOnly ? styles.shellPanelOnly : ''}`}>
+      {!panelOnly ? <div className={styles.previewCol}><MediaPreview media={media} /></div> : null}
+
+      <div className={`${styles.panelCol} ${panelOnly ? styles.panelColOnly : ''}`}>
         <div className={styles.header}>
           <div className={styles.postMeta}>
-            <div className={styles.postAvatar}>{(post?.authorUsername || 'u').slice(0, 1).toUpperCase()}</div>
+            <img className={styles.postAvatarImage} src={getAvatarUrl({ username: post?.authorUsername, avatarUrl: (post as any)?.authorAvatarUrl })} alt={post?.authorUsername || 'user'} />
             <div>
               <div className={styles.postAuthor}>{post?.authorUsername || 'user'}</div>
               <div className={styles.postDate}>{post?.createdAt ? new Date(post.createdAt).toLocaleString() : 'Bài viết'}</div>
             </div>
           </div>
-          <div className={styles.postHeaderActions}>
-            <button className={styles.refreshBtn} type="button" onClick={load} disabled={loading}>
-              Làm mới
-            </button>
-            {canDeletePost ? (
-              <div className={styles.postMenuWrap}>
-                <button className={styles.postMenuToggle} type="button" onClick={() => setPostMenuOpen((v) => !v)}>•••</button>
-                {postMenuOpen ? (
-                  <div className={styles.postMenuPanel}>
-                    <button className={`${styles.postMenuItem} ${styles.postMenuDanger}`} type="button" onClick={removePost} disabled={deletePending}>
-                      {deletePending ? 'Đang xoá...' : 'Xoá'}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <button className={styles.refreshBtn} type="button" onClick={load} disabled={loading}>Làm mới</button>
         </div>
 
         {post?.content ? (
@@ -379,19 +305,11 @@ const remove = async (comment: PostComment) => {
               {renderComment(root, 'root')}
               {replies.length ? (
                 <div className={styles.repliesWrap}>
-                  <button
-                    type="button"
-                    className={styles.repliesToggle}
-                    onClick={() => toggleReplies(root._id)}
-                  >
+                  <button type="button" className={styles.repliesToggle} onClick={() => toggleReplies(root._id)}>
                     <span className={styles.repliesToggleLine} />
                     {expandedRoots[root._id] ? 'Ẩn câu trả lời' : `Xem ${replies.length} câu trả lời`}
                   </button>
-                  {expandedRoots[root._id] ? (
-                    <div className={styles.repliesStack}>
-                      {replies.map((reply) => renderComment(reply, 'reply'))}
-                    </div>
-                  ) : null}
+                  {expandedRoots[root._id] ? <div className={styles.repliesStack}>{replies.map((reply) => renderComment(reply, 'reply'))}</div> : null}
                 </div>
               ) : null}
             </div>
@@ -403,28 +321,31 @@ const remove = async (comment: PostComment) => {
             <div className={styles.replyHint}>
               <div>
                 Đang trả lời <strong>@{replyTo.authorUsername}</strong>
-                {replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername ? (
-                  <span className={styles.replyHintMeta}> trong luồng với @{replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername}</span>
-                ) : null}
+                {replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername ? <span className={styles.replyHintMeta}> trong luồng với @{replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername}</span> : null}
               </div>
-              <button className={styles.cancelReplyBtn} type="button" onClick={() => setReplyTo(null)}>
-                Hủy
-              </button>
+              <button className={styles.cancelReplyBtn} type="button" onClick={() => setReplyTo(null)}>Hủy</button>
             </div>
           ) : null}
 
-          {commentFile ? <div className={styles.filePreviewRow}><span className={styles.fileChip}>{commentFile.type === 'image/gif' ? 'GIF' : 'Ảnh'}: {commentFile.name}</span><button className={styles.clearFileBtn} type="button" onClick={() => { setCommentFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>×</button></div> : null}
+          {mediaFile && mediaPreviewUrl ? (
+            <div className={styles.pendingMediaWrap}>
+              {mediaFile.type.startsWith('video/') ? <video className={styles.pendingMedia} src={mediaPreviewUrl} controls playsInline /> : <img className={styles.pendingMedia} src={mediaPreviewUrl} alt="pending comment media" />}
+              <button type="button" className={styles.pendingMediaRemove} onClick={() => { setMediaFile(null); if (mediaInputRef.current) mediaInputRef.current.value = '' }}>×</button>
+            </div>
+          ) : null}
+
           <div className={styles.composerRow}>
-            <button className={styles.composerIconBtn} type="button" onClick={() => fileInputRef.current?.click()}>☺</button>
-            <input ref={fileInputRef} type="file" accept="image/*,.gif" hidden onChange={(event) => setCommentFile(event.target.files?.[0] || null)} />
-            <textarea
-              className={styles.textarea}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={replyTo ? `Trả lời @${replyTo.authorUsername}...` : 'Thêm bình luận...'}
-              rows={1}
+            <div className={styles.composerIcon}>☺</div>
+            <textarea className={styles.textarea} value={text} onChange={(event) => setText(event.target.value)} placeholder={replyTo ? `Trả lời @${replyTo.authorUsername}...` : 'Thêm bình luận...'} rows={1} />
+            <input
+              ref={mediaInputRef}
+              type="file"
+              accept="image/*,video/*"
+              hidden
+              onChange={(event) => setMediaFile(event.target.files?.[0] || null)}
             />
-            <button className={styles.submitBtn} type="button" onClick={submit} disabled={submitting || (!text.trim() && !commentFile)}>
+            <button className={styles.attachBtn} type="button" onClick={() => mediaInputRef.current?.click()}>🖼</button>
+            <button className={styles.submitBtn} type="button" onClick={submit} disabled={submitting || (!text.trim() && !mediaFile)}>
               {submitting ? 'Đang gửi...' : 'Đăng'}
             </button>
           </div>

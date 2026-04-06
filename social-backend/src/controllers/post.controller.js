@@ -1,23 +1,16 @@
 const fs = require("fs");
 const path = require("path");
-const { execFile } = require("child_process");
-const { promisify } = require("util");
 const { z } = require("zod");
 const Post = require("../models/Post");
-const User = require("../models/User");
 const { AppError } = require("../utils/errors");
 const Comment = require("../models/Comment");
-const Notification = require("../models/Notification");
+const User = require("../models/User");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
 const notificationService = require("../services/notification.service");
 
-const execFileAsync = promisify(execFile);
-const thumbnailDir = path.join(postMediaDir, "thumbnails");
-fs.mkdirSync(thumbnailDir, { recursive: true });
-
 const visibilityEnum = ["public", "friends", "private"];
-const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\\/,/$/ ,"");
 
 const createPostSchema = z
   .object({
@@ -59,10 +52,18 @@ const updatePostSchema = z
   })
   .transform((data) => ({
     ...data,
-    ...(data.isAnonymous !== undefined ? { isAnonymous: normalizeBoolean(data.isAnonymous, false) } : {}),
-    ...(data.allowComments !== undefined ? { allowComments: normalizeBoolean(data.allowComments, true) } : {}),
-    ...(data.hideLikeCount !== undefined ? { hideLikeCount: normalizeBoolean(data.hideLikeCount, false) } : {}),
-    ...(data.collaborators !== undefined ? { collaborators: normalizeStringList(data.collaborators) } : {}),
+    ...(data.isAnonymous !== undefined
+      ? { isAnonymous: normalizeBoolean(data.isAnonymous, false) }
+      : {}),
+    ...(data.allowComments !== undefined
+      ? { allowComments: normalizeBoolean(data.allowComments, true) }
+      : {}),
+    ...(data.hideLikeCount !== undefined
+      ? { hideLikeCount: normalizeBoolean(data.hideLikeCount, false) }
+      : {}),
+    ...(data.collaborators !== undefined
+      ? { collaborators: normalizeStringList(data.collaborators) }
+      : {}),
     ...(data.tags !== undefined ? { tags: normalizeStringList(data.tags) } : {}),
   }));
 
@@ -101,34 +102,16 @@ function cleanupUploadedFiles(files = []) {
 }
 
 function removePostMediaFiles(post) {
-  const mediaItems = Array.isArray(post?.media) ? post.media : [];
-  const fallbackUrls = [post?.imageUrl].filter(Boolean).map((url) => ({ url, thumbnailUrl: '' }));
-  for (const item of [...mediaItems, ...fallbackUrls]) {
-    for (const rawUrl of [item?.url, item?.thumbnailUrl]) {
-      if (!rawUrl) continue;
-      const absolutePath = path.join(postMediaDir, rawUrl.includes('/thumbnails/') ? path.join('thumbnails', path.basename(rawUrl)) : path.basename(rawUrl));
-      if (fs.existsSync(absolutePath)) {
-        try {
-          fs.unlinkSync(absolutePath);
-        } catch (_err) {
-          // noop
-        }
+  for (const item of post?.media || []) {
+    if (!item?.url) continue;
+    const filename = path.basename(item.url);
+    const absolutePath = path.join(postMediaDir, filename);
+    if (fs.existsSync(absolutePath)) {
+      try {
+        fs.unlinkSync(absolutePath);
+      } catch (_err) {
+        // noop
       }
-    }
-  }
-}
-
-function removeCommentMediaFiles(comments = []) {
-  for (const comment of comments) {
-    const rawUrl = String(comment?.mediaUrl || '').trim();
-    if (!rawUrl) continue;
-    const fileName = path.basename(rawUrl);
-    const absolutePath = path.join(postMediaDir, 'comments', fileName);
-    if (!fs.existsSync(absolutePath)) continue;
-    try {
-      fs.unlinkSync(absolutePath);
-    } catch (_err) {
-      // noop
     }
   }
 }
@@ -143,87 +126,16 @@ function normalizePublicMediaUrl(url = "") {
   return `${MEDIA_PUBLIC_BASE_URL}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
-async function getVideoDurationSeconds(filePath) {
-  try {
-    const { stdout } = await execFileAsync('ffprobe', [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
-      filePath,
-    ]);
-    const duration = Number.parseFloat(String(stdout || '').trim());
-    return Number.isFinite(duration) && duration > 0 ? duration : 0;
-  } catch (_error) {
-    return 0;
-  }
-}
-
-async function buildVideoThumbnail(filePath, fileBaseName) {
-  const safeBase = path.basename(fileBaseName, path.extname(fileBaseName));
-  const thumbnailFilename = `${safeBase}-thumb.jpg`;
-  const thumbnailAbsolutePath = path.join(thumbnailDir, thumbnailFilename);
-  const duration = await getVideoDurationSeconds(filePath);
-  const seekSeconds = duration > 1 ? Math.max(0.6, Math.min(duration * 0.2, duration - 0.2)) : 0.35;
-
-  const attempts = [
-    [
-      '-y',
-      '-ss', seekSeconds.toFixed(2),
-      '-i', filePath,
-      '-frames:v', '1',
-      '-vf', 'thumbnail,scale=720:-1:force_original_aspect_ratio=decrease',
-      '-q:v', '2',
-      thumbnailAbsolutePath,
-    ],
-    [
-      '-y',
-      '-i', filePath,
-      '-vf', `select=gte(t\,${seekSeconds.toFixed(2)}),scale=720:-1:force_original_aspect_ratio=decrease`,
-      '-frames:v', '1',
-      '-q:v', '2',
-      thumbnailAbsolutePath,
-    ],
-  ];
-
-  for (const args of attempts) {
-    try {
-      await execFileAsync('ffmpeg', args);
-      if (fs.existsSync(thumbnailAbsolutePath) && fs.statSync(thumbnailAbsolutePath).size > 0) {
-        return normalizePublicMediaUrl(`/uploads/posts/thumbnails/${thumbnailFilename}`);
-      }
-    } catch (_error) {
-      // try next strategy
-    }
-  }
-
-  console.error('buildVideoThumbnail failed for', filePath);
-  return '';
-}
-
-async function buildMediaFromFiles(files = [], altText = "") {
-  const media = [];
-
-  for (const [index, file] of files.entries()) {
-    const isVideo = file.mimetype.startsWith("video/");
-    const item = {
-      type: isVideo ? "video" : "image",
-      url: normalizePublicMediaUrl(`/uploads/posts/${path.basename(file.path)}`),
-      filename: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      order: index,
-      altText: altText || undefined,
-      thumbnailUrl: '',
-    };
-
-    if (isVideo) {
-      item.thumbnailUrl = await buildVideoThumbnail(file.path, path.basename(file.path));
-    }
-
-    media.push(item);
-  }
-
-  return media;
+function buildMediaFromFiles(files = [], altText = "") {
+  return files.map((file, index) => ({
+    type: file.mimetype.startsWith("video/") ? "video" : "image",
+    url: normalizePublicMediaUrl(`/uploads/posts/${path.basename(file.path)}`),
+    filename: file.originalname,
+    mimeType: file.mimetype,
+    size: file.size,
+    order: index,
+    altText: altText || undefined,
+  }));
 }
 
 function detectMediaType(media) {
@@ -233,7 +145,7 @@ function detectMediaType(media) {
   return types.has("video") ? "video" : "image";
 }
 
-function serializeComment(comment, currentUserId, postAuthorId) {
+function serializeComment(comment, currentUserId, postAuthorId, authorAvatarUrl = "") {
   const obj = comment.toObject ? comment.toObject() : comment;
   const parentCommentId = obj.parentCommentId ? String(obj.parentCommentId) : null;
   const replyToCommentId = obj.replyToCommentId ? String(obj.replyToCommentId) : null;
@@ -249,40 +161,37 @@ function serializeComment(comment, currentUserId, postAuthorId) {
           authorUsername: obj.replyToAuthorUsername,
         }
       : null,
+    authorAvatarUrl,
+    mediaUrl: normalizePublicMediaUrl(obj.mediaUrl || ""),
+    mediaType: obj.mediaType || "",
     likedByMe: Array.isArray(obj.likes) ? obj.likes.includes(currentUserId) : false,
     likesCount: Array.isArray(obj.likes) ? obj.likes.length : 0,
     canDelete: Boolean(currentUserId) && (obj.authorId === currentUserId || postAuthorId === currentUserId),
-    mediaUrl: normalizePublicMediaUrl(obj.mediaUrl) || "",
-    mediaType: obj.mediaType || "",
   };
 }
 
-function serializePost(post, userId, commentsCount = 0) {
+function serializePost(post, userId, commentsCount = 0, authorAvatarUrl = "") {
   const obj = post.toObject ? post.toObject() : post;
   const likesArr = obj.likes || [];
   const media = (Array.isArray(obj.media) ? obj.media : []).map((item, index) => ({
     ...item,
     type: item.type === "video" || item.mimeType?.startsWith("video/") ? "video" : "image",
     url: normalizePublicMediaUrl(item.url),
-    thumbnailUrl: normalizePublicMediaUrl(item.thumbnailUrl || ''),
     order: Number.isFinite(item.order) ? item.order : index,
   }));
   const imageUrls = media.filter((item) => item.type === "image").map((item) => item.url);
   const firstImageUrl = imageUrls[0] || normalizePublicMediaUrl(obj.imageUrl) || "";
 
-  const mediaType = detectMediaType(media);
-  const isReel = media.length === 1 && mediaType === "video";
-
   return {
     ...obj,
     imageUrl: firstImageUrl,
     authorUsername: obj.isAnonymous ? "anonymous" : obj.authorUsername,
+    authorAvatarUrl: obj.isAnonymous ? "" : authorAvatarUrl,
     media,
     images: imageUrls,
     imageUrl: firstImageUrl,
     mediaCount: media.length,
-    mediaType,
-    isReel,
+    mediaType: detectMediaType(media),
     likesCount: likesArr.length,
     displayLikesCount: obj.hideLikeCount ? null : likesArr.length,
     likedByMe: userId ? likesArr.includes(userId) : false,
@@ -291,23 +200,11 @@ function serializePost(post, userId, commentsCount = 0) {
 }
 
 
-async function resolvePostNotificationRecipient(post) {
-  if (post?.authorUsername) {
-    const owner = await User.findOne({ username: String(post.authorUsername) }).select('_id username').lean();
-    if (owner?._id) {
-      return { recipientId: String(owner._id), recipientUsername: owner.username || String(post.authorUsername || '') };
-    }
-  }
-  return { recipientId: String(post?.authorId || ''), recipientUsername: String(post?.authorUsername || '') };
-}
-
-function normalizeCommentMedia(file) {
-  if (!file) return { mediaUrl: "", mediaType: "" };
-  const relPath = `/uploads/posts/comments/${file.filename}`;
-  return {
-    mediaUrl: normalizePublicMediaUrl(relPath),
-    mediaType: String(file.mimetype || '').toLowerCase() === 'image/gif' ? 'gif' : 'image',
-  };
+async function buildAvatarMapByUsername(usernames = []) {
+  const unique = [...new Set((usernames || []).map((x) => String(x || '').trim()).filter(Boolean))]
+  if (!unique.length) return new Map()
+  const users = await User.find({ username: { $in: unique } }).select('username avatarUrl')
+  return new Map(users.map((u) => [String(u.username), String(u.avatarUrl || '')]))
 }
 
 async function getCommentsCountMap(postIds = []) {
@@ -323,7 +220,7 @@ async function createPost(req, res, next) {
   const uploadedFiles = req.files || [];
   try {
     const body = createPostSchema.parse(req.body || {});
-    const media = await buildMediaFromFiles(uploadedFiles, body.altText);
+    const media = buildMediaFromFiles(uploadedFiles, body.altText);
 
     if (!body.content && media.length === 0) {
       cleanupUploadedFiles(uploadedFiles);
@@ -355,7 +252,7 @@ async function createPost(req, res, next) {
     res.status(201).json({
       ok: true,
       message: "Post created successfully",
-      data: serializePost(post, req.user.sub, 0),
+      data: serializePost(post, req.user.sub, 0, req.user.avatarUrl || ""),
     });
   } catch (err) {
     cleanupUploadedFiles(uploadedFiles);
@@ -401,9 +298,10 @@ async function listPosts(req, res, next) {
 
     const postIds = items.map((p) => p._id);
     const countMap = await getCommentsCountMap(postIds);
+    const avatarMap = await buildAvatarMapByUsername(items.map((p) => p.authorUsername));
 
     const mapped = items.map((p) =>
-      serializePost(p, viewerId, countMap.get(String(p._id)) || 0),
+      serializePost(p, viewerId, countMap.get(String(p._id)) || 0, avatarMap.get(String(p.authorUsername || '')) || ''),
     );
 
     res.json({
@@ -431,12 +329,13 @@ async function getPost(req, res, next) {
     }
 
     const comments = await Comment.find({ postId: post._id }).sort({ createdAt: -1 }).limit(30);
+    const avatarMap = await buildAvatarMapByUsername([post.authorUsername, ...comments.map((item) => item.authorUsername)]);
 
     res.json({
       ok: true,
       data: {
-        post: serializePost(post, req.user?.sub, comments.length),
-        comments: comments.map((item) => serializeComment(item, req.user?.sub, post.authorId)),
+        post: serializePost(post, req.user?.sub, comments.length, avatarMap.get(String(post.authorUsername || '')) || ''),
+        comments: comments.map((item) => serializeComment(item, req.user?.sub, post.authorId, avatarMap.get(String(item.authorUsername || '')) || '')),
       },
     });
   } catch (err) {
@@ -460,7 +359,7 @@ async function recordView(req, res, next) {
         postId: post._id,
         viewsCount: post.viewsCount,
         lastViewedAt: post.lastViewedAt,
-        post: serializePost(post, req.user?.sub, commentsCount),
+        post: serializePost(post, req.user?.sub, commentsCount, req.user?.username === post.authorUsername ? (req.user?.avatarUrl || "") : ""),
       },
     });
   } catch (err) {
@@ -497,7 +396,7 @@ async function updatePost(req, res, next) {
 
     await post.save();
     const commentsCount = await Comment.countDocuments({ postId: post._id });
-    res.json({ ok: true, data: serializePost(post, req.user.sub, commentsCount) });
+    res.json({ ok: true, data: serializePost(post, req.user.sub, commentsCount, req.user?.avatarUrl || "") });
   } catch (err) {
     if (err?.name === "ZodError") {
       return next(
@@ -521,30 +420,10 @@ async function deletePost(req, res, next) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    const comments = await Comment.find({ postId: post._id }).select('_id mediaUrl');
-
     removePostMediaFiles(post);
-    removeCommentMediaFiles(comments);
-
-    await Promise.all([
-      Comment.deleteMany({ postId: post._id }),
-      Notification.deleteMany({
-        $or: [
-          { postId: String(post._id) },
-          { targetType: 'post', targetId: String(post._id) },
-        ],
-      }),
-      Post.deleteOne({ _id: post._id }),
-    ]);
-
-    res.json({
-      ok: true,
-      data: {
-        id: post._id,
-        deletedComments: comments.length,
-        deletedLikes: Array.isArray(post.likes) ? post.likes.length : 0,
-      },
-    });
+    await Post.deleteOne({ _id: post._id });
+    await Comment.deleteMany({ postId: post._id });
+    res.json({ ok: true, data: { id: post._id } });
   } catch (err) {
     next(err);
   }
@@ -572,9 +451,8 @@ async function toggleLike(req, res, next) {
       likedBy: req.user.username,
     });
 
-    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.notifyPostLike({
-      post: { ...post.toObject(), authorId: recipient.recipientId, authorUsername: recipient.recipientUsername },
+      post,
       actorId: req.user.sub,
       actorUsername: req.user.username,
     }).catch((error) => {
@@ -611,10 +489,9 @@ async function removeLike(req, res, next) {
       likedBy: req.user.username,
     });
 
-    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.removePostLikeActor({
       postId: post._id,
-      recipientId: recipient.recipientId,
+      recipientId: post.authorId,
       actorId: req.user.sub,
       actorUsername: req.user.username,
     }).catch((error) => {
@@ -637,17 +514,12 @@ async function removeLike(req, res, next) {
 
 async function addComment(req, res, next) {
   try {
-    const body = addCommentSchema.parse(req.body || {});
-    const commentMedia = normalizeCommentMedia(req.file);
+    const body = addCommentSchema.parse(req.body);
 
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
     if (!post.allowComments) {
       throw new AppError("Comments are disabled for this post", 400, "COMMENTS_DISABLED");
-    }
-
-    if (!String(body.content || "").trim() && !commentMedia.mediaUrl) {
-      throw new AppError("Bình luận không được để trống", 400, "EMPTY_COMMENT");
     }
 
     let parentComment = null;
@@ -675,15 +547,25 @@ async function addComment(req, res, next) {
       }
     }
 
+    const file = req.file || null;
+    const content = String(body.content || "").trim();
+    if (!content && !file) {
+      throw new AppError("Comment must contain text, image, or video", 400, "EMPTY_COMMENT");
+    }
+    const mediaType = file ? (file.mimetype?.startsWith("video/") ? "video" : file.mimetype === "image/gif" ? "gif" : "image") : "";
+    const mediaUrl = file ? normalizePublicMediaUrl(`/uploads/posts/comments/${path.basename(file.path)}`) : "";
+
     const c = await Comment.create({
       postId: post._id,
       authorId: req.user.sub,
       authorUsername: req.user.username,
-      content: body.content,
+      content,
       parentCommentId: parentComment?._id || null,
       replyToCommentId: replyTarget?._id || null,
       replyToAuthorId: replyTarget?.authorId || null,
       replyToAuthorUsername: replyTarget?.authorUsername || null,
+      mediaUrl,
+      mediaType,
     });
     const io = getIO();
 
@@ -702,17 +584,16 @@ async function addComment(req, res, next) {
       },
     });
 
-    const recipient = await resolvePostNotificationRecipient(post);
     notificationService.notifyPostComment({
-      post: { ...post.toObject(), authorId: recipient.recipientId, authorUsername: recipient.recipientUsername },
+      post,
       actorId: req.user.sub,
       actorUsername: req.user.username,
-      previewText: c.content ? c.content.slice(0, 120) : (c.mediaType === "gif" ? "đã bình luận một GIF" : c.mediaUrl ? "đã bình luận một hình ảnh" : ""),
+      previewText: c.content.slice(0, 120),
     }).catch((error) => {
       console.error("notifyPostComment failed:", error?.message || error);
     });
 
-    res.status(201).json({ ok: true, data: serializeComment(c, req.user.sub, post.authorId) });
+    res.status(201).json({ ok: true, data: serializeComment(c, req.user.sub, post.authorId, req.user?.avatarUrl || "") });
   } catch (err) {
     if (err?.name === "ZodError") {
       return next(
@@ -733,7 +614,8 @@ async function listComments(req, res, next) {
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
     const items = await Comment.find({ postId: post._id }).sort({ createdAt: 1, _id: 1 });
-    res.json({ ok: true, data: items.map((item) => serializeComment(item, req.user?.sub, post.authorId)) });
+    const avatarMap = await buildAvatarMapByUsername(items.map((item) => item.authorUsername));
+    res.json({ ok: true, data: items.map((item) => serializeComment(item, req.user?.sub, post.authorId, avatarMap.get(String(item.authorUsername || '')) || '')) });
   } catch (err) {
     next(err);
   }
@@ -762,6 +644,39 @@ async function deleteComment(req, res, next) {
   }
 }
 
+
+async function addCommentLike(req, res, next) {
+  try {
+    const post = await Post.findById(req.params.id).select('_id authorId');
+    if (!post) throw new AppError('Post not found', 404, 'NOT_FOUND');
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment || String(comment.postId) !== String(post._id)) throw new AppError('Comment not found', 404, 'NOT_FOUND');
+    const userId = req.user.sub;
+    comment.likes = Array.from(new Set([...(comment.likes || []), userId]));
+    await comment.save();
+    const avatarMap = await buildAvatarMapByUsername([comment.authorUsername]);
+    res.json({ ok: true, data: serializeComment(comment, userId, post.authorId, avatarMap.get(String(comment.authorUsername || "")) || "") });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function removeCommentLike(req, res, next) {
+  try {
+    const post = await Post.findById(req.params.id).select('_id authorId');
+    if (!post) throw new AppError('Post not found', 404, 'NOT_FOUND');
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment || String(comment.postId) !== String(post._id)) throw new AppError('Comment not found', 404, 'NOT_FOUND');
+    const userId = req.user.sub;
+    comment.likes = (comment.likes || []).filter((item) => item !== userId);
+    await comment.save();
+    const avatarMap = await buildAvatarMapByUsername([comment.authorUsername]);
+    res.json({ ok: true, data: serializeComment(comment, userId, post.authorId, avatarMap.get(String(comment.authorUsername || "")) || "") });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createPost,
   listPosts,
@@ -774,4 +689,6 @@ module.exports = {
   addComment,
   listComments,
   deleteComment,
+  addCommentLike,
+  removeCommentLike,
 };

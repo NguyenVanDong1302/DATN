@@ -26,7 +26,7 @@ const commentSchema = new mongoose.Schema(
     replyToAuthorUsername: { type: String, default: null },
     likes: { type: [String], default: [] },
     mediaUrl: { type: String, default: "" },
-    mediaType: { type: String, enum: ["", "image", "gif"], default: "" },
+    mediaType: { type: String, enum: ["", "image", "gif", "video"], default: "" },
   },
   { timestamps: true },
 );

@@ -1,7 +1,13 @@
+const crypto = require('crypto');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const { getIO } = require('../realtime/socket');
 
 let indexesEnsured = false;
+
+function legacyUserId(username) {
+  return crypto.createHash('sha256').update(String(username || '').trim()).digest('hex').slice(0, 16);
+}
 
 async function ensureIndexes() {
   if (indexesEnsured) return;
@@ -52,11 +58,36 @@ function buildNotifyMessage(notification) {
   return `${first} đã gửi cho bạn một tin nhắn mới.`;
 }
 
-
 function isSameActor({ recipientId, actorId, recipientUsername = '', actorUsername = '' }) {
   if (recipientId && actorId && String(recipientId) === String(actorId)) return true;
   if (recipientUsername && actorUsername && String(recipientUsername).trim().toLowerCase() === String(actorUsername).trim().toLowerCase()) return true;
   return false;
+}
+
+async function getRecipientRooms(recipientId) {
+  const normalizedRecipientId = String(recipientId || '').trim();
+  const rooms = new Set();
+  if (!normalizedRecipientId) return [];
+
+  rooms.add(`user:${normalizedRecipientId}`);
+
+  const user = await User.findById(normalizedRecipientId).select('_id username').lean().catch(() => null);
+  if (user?._id) rooms.add(`user:${String(user._id)}`);
+  if (user?.username) {
+    rooms.add(`username:${String(user.username)}`);
+    rooms.add(`user:${legacyUserId(user.username)}`);
+  }
+
+  return Array.from(rooms);
+}
+
+async function emitToRecipient(io, recipientId, event, payload) {
+  if (!io) return;
+  const rooms = await getRecipientRooms(recipientId);
+  if (!rooms.length) return;
+  for (const room of rooms) {
+    io.to(room).emit(event, payload);
+  }
 }
 
 async function emitNotification(recipientId, notification) {
@@ -68,12 +99,14 @@ async function emitNotification(recipientId, notification) {
   }
 
   const unreadCount = await Notification.countDocuments({ recipientId, isRead: false });
-  io.to(`user:${recipientId}`).emit('notification:new', notification);
-  io.to(`user:${recipientId}`).emit('notification:count', { unreadCount });
-  io.to(`user:${recipientId}`).emit('notify', {
+  await emitToRecipient(io, recipientId, 'notification:new', notification);
+  await emitToRecipient(io, recipientId, 'notification:count', { unreadCount });
+  await emitToRecipient(io, recipientId, 'notify', {
     id: notification._id,
     type: notification.type,
     postId: notification.postId,
+    targetType: notification.targetType,
+    targetId: notification.targetId,
     message: buildNotifyMessage(notification),
     createdAt: notification.lastEventAt,
   });
@@ -296,10 +329,11 @@ async function markAllRead({ userIds, userId }) {
     { $set: { isRead: true, readAt: new Date() } },
   );
   const unreadCount = await Notification.countDocuments({ recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false });
-  let io;
   try {
-    io = getIO();
-    for (const recipientId of recipientIds) io.to(`user:${recipientId}`).emit('notification:count', { unreadCount });
+    const io = getIO();
+    for (const recipientId of recipientIds) {
+      await emitToRecipient(io, recipientId, 'notification:count', { unreadCount });
+    }
   } catch (_err) {
     // ignore
   }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { resolveMediaUrl } from '../lib/api'
-import { useAppStore } from '../state/store'
+import { getAvatarUrl } from '../lib/avatar'
 import { Post } from '../types'
 
 type NormalizedMedia = {
@@ -217,11 +217,6 @@ export default function PostCard({
   onOpenComment,
   onOpenDetail,
   onOpenAuthor,
-  showFollowButton,
-  following,
-  followPending,
-  onToggleFollow,
-  onDelete,
 }: {
   post: Post
   likePending?: boolean
@@ -230,21 +225,12 @@ export default function PostCard({
   onOpenComment: () => void
   onOpenDetail: () => void
   onOpenAuthor: () => void
-  showFollowButton?: boolean
-  following?: boolean
-  followPending?: boolean
-  onToggleFollow?: () => void
-  onDelete?: () => void
 }) {
   const likesCount = post.likesCount ?? (Array.isArray(post.likes) ? post.likes.length : 0)
   const likedByMe = !!post.likedByMe
   const commentsCount = post.commentsCount ?? 0
   const media = useMemo(() => getPostMedia(post), [post])
-  const { state } = useAppStore()
   const [heartBurst, setHeartBurst] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [deletePending, setDeletePending] = useState(false)
-  const isOwner = !!state.username && state.username === post.authorUsername
 
   useEffect(() => {
     if (!likedByMe) return
@@ -257,7 +243,7 @@ export default function PostCard({
     <div style={styles.post}>
       <div style={styles.header}>
         <div style={styles.userBlock}>
-          <div style={styles.avatar} />
+          <img style={styles.avatarImg} src={getAvatarUrl({ username: post.authorUsername, authorAvatarUrl: (post as any).authorAvatarUrl })} alt={post.authorUsername || 'user'} />
           <div>
             <div style={styles.username} onClick={onOpenAuthor}>
               {post.authorUsername || post.authorId || 'user'}
@@ -268,50 +254,7 @@ export default function PostCard({
           </div>
         </div>
 
-        <div style={styles.headerActions}>
-          {showFollowButton ? (
-            <button
-              type="button"
-              style={{
-                ...styles.followBtn,
-                ...(following ? styles.followBtnSecondary : {}),
-                ...(followPending ? styles.buttonPending : {}),
-              }}
-              onClick={onToggleFollow}
-              disabled={!!followPending}
-            >
-              {followPending ? 'Đang xử lý...' : following ? 'Đang theo dõi' : 'Theo dõi'}
-            </button>
-          ) : null}
-          {isOwner && onDelete ? (
-            <div style={styles.menuWrap}>
-              <button type="button" style={styles.moreBtn} onClick={() => setMenuOpen((v) => !v)} aria-label="Tuỳ chọn bài viết">•••</button>
-              {menuOpen ? (
-                <div style={styles.menuPanel}>
-                  <button
-                    type="button"
-                    style={{ ...styles.menuItem, ...styles.menuItemDanger, ...(deletePending ? styles.buttonPending : {}) }}
-                    disabled={deletePending}
-                    onClick={async () => {
-                      if (!window.confirm('Bạn có chắc muốn xoá bài viết này?')) return
-                      setDeletePending(true)
-                      try {
-                        await onDelete()
-                        setMenuOpen(false)
-                      } catch (_error) {
-                        // parent handles toast
-                      } finally {
-                        setDeletePending(false)
-                      }
-                    }}
-                  >
-                    {deletePending ? 'Đang xoá...' : 'Xoá'}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        <div style={styles.moreBtn}>•••</div>
       </div>
 
       {post.content && <div style={styles.content}>{post.content}</div>}
@@ -380,6 +323,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 2,
     position: 'relative',
   },
+  avatarImg: {
+    width: 38,
+    height: 38,
+    minWidth: 38,
+    borderRadius: '50%',
+    display: 'block',
+    objectFit: 'cover',
+    background: '#d8dde6',
+    overflow: 'hidden',
+    flex: '0 0 38px',
+  },
   username: {
     fontWeight: 700,
     fontSize: 15,
@@ -390,25 +344,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: '#777',
     marginTop: 2,
-  },
-  headerActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-  },
-  followBtn: {
-    border: 'none',
-    borderRadius: 999,
-    padding: '8px 14px',
-    background: '#1877f2',
-    color: '#fff',
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: 'pointer',
-  },
-  followBtnSecondary: {
-    background: '#efefef',
-    color: '#111',
   },
   moreBtn: {
     fontSize: 18,

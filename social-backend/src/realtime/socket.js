@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const {
@@ -7,6 +8,14 @@ const {
 const { setPresence, clearPresence } = require("../utils/presenceStore");
 
 let ioRef = null;
+
+function legacyUserId(username) {
+  return crypto
+    .createHash("sha256")
+    .update(String(username || "").trim())
+    .digest("hex")
+    .slice(0, 16);
+}
 
 async function resolveSocketUser(socket) {
   const auth = socket.handshake.auth || {};
@@ -39,11 +48,18 @@ function initSocket(io) {
     const me = await resolveSocketUser(socket);
 
     if (me) {
-      socket.data.userId = String(me._id);
-      socket.data.username = me.username;
-      socket.join(`user:${me._id}`);
-      socket.join(`username:${me.username}`);
-      setPresence(String(me._id), { screen: "other", activeConversationId: "" });
+      const normalizedUserId = String(me._id);
+      const normalizedUsername = String(me.username || "").trim();
+      const normalizedLegacyUserId = legacyUserId(normalizedUsername);
+
+      socket.data.userId = normalizedUserId;
+      socket.data.username = normalizedUsername;
+      socket.data.legacyUserId = normalizedLegacyUserId;
+
+      socket.join(`user:${normalizedUserId}`);
+      socket.join(`user:${normalizedLegacyUserId}`);
+      socket.join(`username:${normalizedUsername}`);
+      setPresence(normalizedUserId, { screen: "other", activeConversationId: "" });
     }
 
     socket.on("presence:update", (payload = {}) => {

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
-import { joinConversation, leaveConversation, markConversationReadRealtime, sendRealtimeMessage } from '../../features/messages/messages.socket'
-import type { ChatMessage, ConversationItem, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
+import { joinConversation, leaveConversation, markConversationReadRealtime } from '../../features/messages/messages.socket'
+import type { ChatMessage, ConversationItem, ConversationSettings, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
 import './Messages.scss'
+
+const TIME_GROUP_MS = 3 * 60 * 1000
+const TIME_SEPARATOR_MS = 10 * 60 * 1000
 
 function formatTime(value?: string | null) {
   if (!value) return ''
@@ -27,211 +30,198 @@ function avatarOf(user?: Pick<MessageUser, 'avatarUrl' | 'username'> | null) {
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`
 }
 
-function normalizeText(value?: string | null) {
-  return String(value || '').trim().toLowerCase()
+function shouldShowInlineTime(messages: ChatMessage[], index: number) {
+  const current = messages[index]
+  const next = messages[index + 1]
+  if (!current) return false
+  if (!next) return true
+  const currentTs = new Date(current.createdAt).getTime()
+  const nextTs = new Date(next.createdAt).getTime()
+  if (!Number.isFinite(currentTs) || !Number.isFinite(nextTs)) return true
+  return nextTs - currentTs > TIME_GROUP_MS || next.senderUsername !== current.senderUsername
 }
 
-function buildUserMatchScore(user: MessageUser, rawQuery: string) {
-  const query = normalizeText(rawQuery)
-  if (!query) return 0
-
-  const username = normalizeText(user.username)
-  const email = normalizeText(user.email)
-  const bio = normalizeText(user.bio)
-
-  let score = 0
-  if (username === query) score += 1200
-  if (email === query) score += 1000
-  if (username.startsWith(query)) score += 800
-  if (email.startsWith(query)) score += 520
-  if (bio.startsWith(query)) score += 280
-  if (username.includes(query)) score += 360
-  if (email.includes(query)) score += 220
-  if (bio.includes(query)) score += 120
-
-  return score
+function shouldShowCenterTime(messages: ChatMessage[], index: number) {
+  const current = messages[index]
+  const previous = messages[index - 1]
+  if (!current) return false
+  if (!previous) return true
+  const currentTs = new Date(current.createdAt).getTime()
+  const previousTs = new Date(previous.createdAt).getTime()
+  if (!Number.isFinite(currentTs) || !Number.isFinite(previousTs)) return false
+  return currentTs - previousTs >= TIME_SEPARATOR_MS
 }
 
-function sortUsersForSearch(items: MessageUser[], query: string) {
-  const normalizedQuery = normalizeText(query)
-  return [...items].sort((a, b) => {
-    const scoreDiff = buildUserMatchScore(b, normalizedQuery) - buildUserMatchScore(a, normalizedQuery)
-    if (scoreDiff !== 0) return scoreDiff
+function messagePreview(message: ChatMessage) {
+  if (message.type === 'image') return 'Đã gửi một ảnh'
+  if (message.type === 'video') return 'Đã gửi một video'
+  return message.text
+}
 
-    const aTime = new Date(a.createdAt || 0).getTime()
-    const bTime = new Date(b.createdAt || 0).getTime()
-    if (aTime !== bTime) return bTime - aTime
-
-    return a.username.localeCompare(b.username, 'vi')
-  })
+function MessageMedia({ message }: { message: ChatMessage }) {
+  if (!message.mediaUrl) return null
+  return message.type === 'video' ? (
+    <video className="ig-msg__media" src={message.mediaUrl} controls playsInline />
+  ) : (
+    <img className="ig-msg__media" src={message.mediaUrl} alt={message.fileName || 'message media'} />
+  )
 }
 
 export default function MessagesPage() {
   const api = useMessagesApi()
-  const { state } = useAppStore()
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { state } = useAppStore()
   const { socket } = useSocket()
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [savingDetail, setSavingDetail] = useState(false)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeId, setActiveId] = useState('')
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>({})
   const [query, setQuery] = useState('')
-  const [allUsers, setAllUsers] = useState<MessageUser[]>([])
-  const [followingUsers, setFollowingUsers] = useState<MessageUser[]>([])
+  const [searchResults, setSearchResults] = useState<SearchUsersResponse>({ following: [], suggested: [] })
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [settings, setSettings] = useState<ConversationSettings | null>(null)
+  const [nicknameDraft, setNicknameDraft] = useState('')
   const [text, setText] = useState('')
   const [error, setError] = useState('')
-  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [hoveredMessageId, setHoveredMessageId] = useState('')
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const contentScrollRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
-  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const activeConversation = useMemo(
-    () => conversations.find((item) => item.id === activeId) || null,
-    [conversations, activeId],
-  )
+  const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId) || null, [conversations, activeId])
+  const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
+  const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
+  const isBlocked = Boolean(settings?.isBlocked || activeConversation?.isBlocked)
+  const mediaPreviewUrl = useMemo(() => (mediaFile ? URL.createObjectURL(mediaFile) : ''), [mediaFile])
 
-  const activeMessages = useMemo(
-    () => messagesByConversation[activeId] || [],
-    [messagesByConversation, activeId],
-  )
-
-  const navigateToProfile = (user?: MessageUser | null) => {
-    if (!user?.username) return
-    navigate(`/profile/${encodeURIComponent(user.username)}`)
-  }
-
-  const searchResults = useMemo<SearchUsersResponse>(() => {
-    const followingIdSet = new Set(followingUsers.map((user) => user.id))
-    const normalizedQuery = normalizeText(query)
-
-    const matchedUsers = allUsers
-      .filter((user) => user.username !== state.username)
-      .filter((user) => {
-        if (!normalizedQuery) return true
-        return buildUserMatchScore(user, normalizedQuery) > 0
-      })
-
-    const following = sortUsersForSearch(
-      matchedUsers.filter((user) => followingIdSet.has(user.id)),
-      normalizedQuery,
-    )
-
-    const suggested = sortUsersForSearch(
-      matchedUsers.filter((user) => !followingIdSet.has(user.id)),
-      normalizedQuery,
-    )
-
-    return {
-      recent: [],
-      following: following.slice(0, 50),
-      suggested: suggested.slice(0, 50),
+  useEffect(() => {
+    const root = document.documentElement
+    const body = document.body
+    const prevRootOverflow = root.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevBodyHeight = body.style.height
+    root.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.height = '100dvh'
+    return () => {
+      root.style.overflow = prevRootOverflow
+      body.style.overflow = prevBodyOverflow
+      body.style.height = prevBodyHeight
     }
-  }, [allUsers, followingUsers, query, state.username])
+  }, [])
+
+  useEffect(() => () => {
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
+  }, [mediaPreviewUrl])
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         setLoading(true)
-        setDirectoryLoading(true)
-        const [items, users, following] = await Promise.all([
-          api.getConversations(),
-          api.getAllUsers(),
-          api.getFollowingUsers(),
-        ])
+        const items = await api.getConversations()
         if (!mounted) return
         setConversations(items)
-        setAllUsers(users)
-        setFollowingUsers(following)
-        const wantedConversationId = searchParams.get('conversation')
-        if (wantedConversationId && items.some((item) => item.id === wantedConversationId)) {
-          setActiveId(wantedConversationId)
-        } else if (items[0]?.id) {
-          setActiveId((prev) => prev || items[0].id)
-        }
+        if (items[0]?.id) setActiveId((prev) => prev || items[0].id)
       } catch (err: any) {
         if (!mounted) return
-        setError(err?.message || 'Không tải được dữ liệu tin nhắn')
+        setError(err?.message || 'Không tải được danh sách chat')
       } finally {
-        if (mounted) {
-          setLoading(false)
-          setDirectoryLoading(false)
-        }
+        if (mounted) setLoading(false)
       }
     })()
-
     return () => {
       mounted = false
     }
-  }, [searchParams])
+  }, [api])
+
+  useEffect(() => {
+    if (!isSearchOpen) return
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      try {
+        setSearchLoading(true)
+        const data = await api.searchUsers(query)
+        if (!cancelled) setSearchResults(data)
+      } catch {
+        if (!cancelled) setSearchResults({ following: [], suggested: [] })
+      } finally {
+        if (!cancelled) setSearchLoading(false)
+      }
+    }, query.trim() ? 250 : 0)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [api, query, isSearchOpen])
 
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
       const target = event.target as Node | null
-      if (searchRef.current && target && !searchRef.current.contains(target)) {
-        setIsSearchOpen(false)
-      }
+      if (searchRef.current && target && !searchRef.current.contains(target)) setIsSearchOpen(false)
     }
-
     document.addEventListener('mousedown', handleDocumentClick)
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentClick)
-    }
+    return () => document.removeEventListener('mousedown', handleDocumentClick)
   }, [])
 
   useEffect(() => {
     if (!activeId) return
     let mounted = true
-
     ;(async () => {
       try {
-        const items = await api.getMessages(activeId)
+        setDetailLoading(true)
+        const [items, detail, detailSettings] = await Promise.all([
+          api.getMessages(activeId),
+          api.getConversation(activeId),
+          api.getSettings(activeId),
+        ])
         if (!mounted) return
         setMessagesByConversation((prev) => ({ ...prev, [activeId]: items }))
-        setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, unreadCount: 0 } : item)))
+        setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, ...detail, unreadCount: 0, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item)))
+        setSettings(detailSettings)
+        setNicknameDraft(detailSettings.nickname || '')
         await api.markRead(activeId)
         markConversationReadRealtime(socket, activeId)
       } catch (err: any) {
         if (mounted) setError(err?.message || 'Không tải được tin nhắn')
+      } finally {
+        if (mounted) setDetailLoading(false)
       }
     })()
-
     return () => {
       mounted = false
     }
-  }, [activeId, socket])
+  }, [activeId, api, socket])
 
   useEffect(() => {
     socket?.emit('presence:update', { screen: 'messages', activeConversationId: activeId || '' })
     if (!socket || !activeId) return
     joinConversation(socket, activeId)
-    return () => {
-      leaveConversation(socket, activeId)
-    }
+    return () => leaveConversation(socket, activeId)
   }, [socket, activeId])
 
   useEffect(() => {
-    const el = bodyRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!contentScrollRef.current) return
+    contentScrollRef.current.scrollTop = contentScrollRef.current.scrollHeight
   }, [activeMessages.length, activeId])
 
   useEffect(() => {
     if (!socket) return
 
     const onMessageNew = (message: ChatMessage) => {
-      const isIncomingActive = message.conversationId === activeId && message.senderUsername !== state.username
-      if (isIncomingActive) {
-        api.markRead(message.conversationId).catch(() => undefined)
-        markConversationReadRealtime(socket, message.conversationId)
-      }
       setMessagesByConversation((prev) => {
         const arr = prev[message.conversationId] ? [...prev[message.conversationId]] : []
-        const optimisticIndex = arr.findIndex((item) => item.id.startsWith('temp-') && item.senderUsername === message.senderUsername && item.text === message.text)
-        if (optimisticIndex >= 0) arr.splice(optimisticIndex, 1, message)
-        else if (!arr.some((item) => item.id === message.id)) arr.push(message)
+        const existedIndex = arr.findIndex((item) => item.id === message.id)
+        if (existedIndex >= 0) arr.splice(existedIndex, 1, message)
+        else arr.push(message)
         return { ...prev, [message.conversationId]: arr }
       })
 
@@ -243,26 +233,32 @@ export default function MessagesPage() {
           const shouldIncrease = message.conversationId !== activeId && message.senderUsername !== state.username
           return {
             ...item,
-            lastMessageText: message.text,
+            lastMessageText: messagePreview(message),
             lastMessageAt: message.createdAt,
             unreadCount: shouldIncrease ? item.unreadCount + 1 : 0,
           }
         })
-        return [...next].sort((a, b) => (new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()))
+        return [...next].sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
       })
     }
 
+    const onMessageReaction = (message: ChatMessage) => {
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [message.conversationId]: (prev[message.conversationId] || []).map((item) => (item.id === message.id ? { ...item, ...message } : item)),
+      }))
+    }
 
-    const onMessageSeen = (payload: { conversationId?: string; seenAt?: string; username?: string }) => {
-      if (!payload?.conversationId) return
-      setMessagesByConversation((prev) => {
-        const items = prev[payload.conversationId || ''] || []
-        return {
-          ...prev,
-          [payload.conversationId || '']: items.map((item) => item.senderUsername === state.username ? { ...item, status: 'seen', seenAt: payload.seenAt || new Date().toISOString() } : item),
+    const onConversationUpdated = async ({ conversationId }: { conversationId?: string } = {}) => {
+      if (!conversationId) return
+      try {
+        const [detail, detailSettings] = await Promise.all([api.getConversation(conversationId), api.getSettings(conversationId)])
+        setConversations((prev) => prev.map((item) => (item.id === conversationId ? { ...item, ...detail, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item)))
+        if (conversationId === activeId) {
+          setSettings(detailSettings)
+          setNicknameDraft(detailSettings.nickname || '')
         }
-      })
-      setConversations((prev) => prev.map((item) => item.id === payload.conversationId ? { ...item, unreadCount: 0 } : item))
+      } catch {}
     }
 
     const onInboxRefresh = async () => {
@@ -271,92 +267,120 @@ export default function MessagesPage() {
       if (!activeId && items[0]?.id) setActiveId(items[0].id)
     }
 
+    const onHistoryCleared = ({ conversationId }: { conversationId?: string } = {}) => {
+      if (!conversationId) return
+      setMessagesByConversation((prev) => ({ ...prev, [conversationId]: [] }))
+      setConversations((prev) => prev.map((item) => (item.id === conversationId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item)))
+    }
+
     socket.on('message:new', onMessageNew)
+    socket.on('message:reaction', onMessageReaction)
     socket.on('inbox:refresh', onInboxRefresh)
-    socket.on('conversation:updated', onInboxRefresh)
-    socket.on('message:seen', onMessageSeen)
+    socket.on('conversation:updated', onConversationUpdated)
+    socket.on('conversation:history-cleared', onHistoryCleared)
 
     return () => {
       socket.off('message:new', onMessageNew)
+      socket.off('message:reaction', onMessageReaction)
       socket.off('inbox:refresh', onInboxRefresh)
-      socket.off('conversation:updated', onInboxRefresh)
-      socket.off('message:seen', onMessageSeen)
+      socket.off('conversation:updated', onConversationUpdated)
+      socket.off('conversation:history-cleared', onHistoryCleared)
     }
-  }, [socket, activeId, state.username])
+  }, [socket, activeId, state.username, api])
 
   const handlePickUser = async (user: MessageUser) => {
     try {
-      const conversation = await api.createDirectConversation(user.id)
+      const conversation = await api.createDirectConversation({ targetUserId: user.id, username: user.username })
       setConversations((prev) => {
         const existed = prev.some((item) => item.id === conversation.id)
-        const next = existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev]
-        return [...next].sort((a, b) => (new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()))
+        return existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev]
       })
       setActiveId(conversation.id)
       setIsSearchOpen(false)
       setQuery('')
-      const items = await api.getMessages(conversation.id)
-      setMessagesByConversation((prev) => ({ ...prev, [conversation.id]: items }))
     } catch (err: any) {
       setError(err?.message || 'Không thể mở đoạn chat')
     }
   }
 
   const handleSend = async () => {
+    if (!activeId || sending || isBlocked) return
     const value = text.trim()
-    if (!value || !activeId || sending || !activeConversation) return
+    if (!value && !mediaFile) return
     setSending(true)
     setError('')
-
-    const optimisticMessage: ChatMessage = {
-      id: `temp-${Date.now()}`,
-      conversationId: activeId,
-      senderId: 'me',
-      senderUsername: state.username,
-      receiverId: activeConversation.peer.id,
-      receiverUsername: activeConversation.peer.username,
-      type: 'text',
-      text: value,
-      status: 'sent',
-      seenAt: null,
-      createdAt: new Date().toISOString(),
-    }
-
-    setMessagesByConversation((prev) => ({
-      ...prev,
-      [activeId]: [...(prev[activeId] || []), optimisticMessage],
-    }))
-    setConversations((prev) =>
-      [...prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: value, lastMessageAt: optimisticMessage.createdAt } : item))].sort(
-        (a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime(),
-      ),
-    )
-    setText('')
-
     try {
-      const ack: any = await sendRealtimeMessage(socket, activeId, value)
-      if (ack?.ok && ack?.data?.message) {
-        const delivered = ack.data.message as ChatMessage
-        setMessagesByConversation((prev) => ({
-          ...prev,
-          [activeId]: (prev[activeId] || []).map((item) => (item.id === optimisticMessage.id ? delivered : item)),
-        }))
-      } else {
-        const fallback = await api.sendMessageHttp(activeId, value)
-        setMessagesByConversation((prev) => ({
-          ...prev,
-          [activeId]: (prev[activeId] || []).map((item) => (item.id === optimisticMessage.id ? fallback : item)),
-        }))
-      }
+      const message = await api.sendMessageHttp(activeId, { text: value, media: mediaFile, replyToMessageId: replyTo?.id || null })
+      setMessagesByConversation((prev) => {
+        const arr = prev[activeId] || []
+        return arr.some((item) => item.id === message.id) ? prev : { ...prev, [activeId]: [...arr, message] }
+      })
+      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: messagePreview(message), lastMessageAt: message.createdAt } : item)))
+      setText('')
+      setReplyTo(null)
+      setMediaFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (err: any) {
-      setMessagesByConversation((prev) => ({
-        ...prev,
-        [activeId]: (prev[activeId] || []).filter((item) => item.id !== optimisticMessage.id),
-      }))
-      setText(value)
       setError(err?.message || 'Gửi tin nhắn thất bại')
     } finally {
       setSending(false)
+    }
+  }
+
+  const toggleMessageHeart = async (message: ChatMessage) => {
+    if (!activeId) return
+    try {
+      const next = await api.toggleMessageHeart(activeId, message.id, !message.heartedByMe)
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [activeId]: (prev[activeId] || []).map((item) => (item.id === message.id ? { ...item, ...next } : item)),
+      }))
+    } catch (err: any) {
+      setError(err?.message || 'Không thể thả tim tin nhắn')
+    }
+  }
+
+  const saveNickname = async () => {
+    if (!activeId || savingDetail) return
+    try {
+      setSavingDetail(true)
+      const next = await api.updateSettings(activeId, { nickname: nicknameDraft })
+      setSettings(next)
+      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, nickname: next.nickname } : item)))
+    } catch (err: any) {
+      setError(err?.message || 'Không thể cập nhật biệt danh')
+    } finally {
+      setSavingDetail(false)
+    }
+  }
+
+  const toggleBlock = async () => {
+    if (!activeId || savingDetail) return
+    try {
+      setSavingDetail(true)
+      const next = await api.updateSettings(activeId, { isBlocked: !isBlocked })
+      setSettings(next)
+      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, isBlocked: next.isBlocked } : item)))
+    } catch (err: any) {
+      setError(err?.message || 'Không thể cập nhật trạng thái chặn')
+    } finally {
+      setSavingDetail(false)
+    }
+  }
+
+  const clearHistory = async () => {
+    if (!activeId || savingDetail) return
+    const ok = window.confirm('Xóa toàn bộ lịch sử đoạn chat này? Các file ảnh/video gắn với tin nhắn cũng sẽ bị xóa.')
+    if (!ok) return
+    try {
+      setSavingDetail(true)
+      await api.clearHistory(activeId)
+      setMessagesByConversation((prev) => ({ ...prev, [activeId]: [] }))
+      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item)))
+    } catch (err: any) {
+      setError(err?.message || 'Không thể xóa lịch sử đoạn chat')
+    } finally {
+      setSavingDetail(false)
     }
   }
 
@@ -366,7 +390,7 @@ export default function MessagesPage() {
       <div className="ig-msg__searchGroup">
         <div className="ig-msg__searchHeading">{label}</div>
         {items.map((user) => (
-          <button key={user.id} type="button" className="ig-msg__searchItem" onClick={() => handlePickUser(user)}>
+          <button key={user.id} type="button" className="ig-msg__searchItem" onClick={() => void handlePickUser(user)}>
             <img className="ig-msg__avatar" src={avatarOf(user)} alt={user.username} />
             <div className="ig-msg__searchMeta">
               <div className="ig-msg__itemName">{user.username}</div>
@@ -380,28 +404,20 @@ export default function MessagesPage() {
 
   return (
     <div className="ig-msg">
-      <div className="ig-msg__wrap">
+      <div className={`ig-msg__wrap ${isDetailOpen ? 'is-detail-open' : ''}`}>
         <aside className="ig-msg__left">
           <div className="ig-msg__leftTop">
             <button className="ig-msg__userBtn" type="button">
               <span className="ig-msg__userName">{state.username || 'instagram_user'}</span>
               <span className="ig-msg__chev">▾</span>
             </button>
-            <button
-              className="ig-msg__compose"
-              type="button"
-              onClick={() => {
-                setIsSearchOpen(true)
-                window.setTimeout(() => searchInputRef.current?.focus(), 0)
-              }}
-            >✎</button>
+            <button className="ig-msg__compose" type="button">✎</button>
           </div>
 
           <div className="ig-msg__searchWrap" ref={searchRef}>
             <div className="ig-msg__search">
               <span className="ig-msg__searchIcon">⌕</span>
               <input
-                ref={searchInputRef}
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value)
@@ -416,16 +432,12 @@ export default function MessagesPage() {
 
             {isSearchOpen ? (
               <div className="ig-msg__searchDropdown">
-                {directoryLoading ? <div className="ig-msg__searchEmpty">Đang tải danh sách người dùng...</div> : null}
-                {!directoryLoading ? (
+                {searchLoading ? <div className="ig-msg__searchEmpty">Đang tải danh sách người dùng...</div> : null}
+                {!searchLoading ? (
                   <>
                     {renderSearchGroup('Đang follow', searchResults.following)}
                     {renderSearchGroup('Đề xuất', searchResults.suggested)}
-                    {!searchResults.following.length && !searchResults.suggested.length ? (
-                      <div className="ig-msg__searchEmpty">
-                        {query.trim() ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng để gợi ý.'}
-                      </div>
-                    ) : null}
+                    {!searchResults.following.length && !searchResults.suggested.length ? <div className="ig-msg__searchEmpty">{query.trim() ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng để gợi ý.'}</div> : null}
                   </>
                 ) : null}
               </div>
@@ -443,9 +455,7 @@ export default function MessagesPage() {
               <button key={item.id} type="button" className={`ig-msg__item ${item.id === activeId ? 'is-selected' : ''}`} onClick={() => setActiveId(item.id)}>
                 <img className="ig-msg__avatar" src={avatarOf(item.peer)} alt={item.peer.username} />
                 <div className="ig-msg__itemMid">
-                  <div className="ig-msg__itemTitle">
-                    <span className="ig-msg__itemName">{item.peer.username}</span>
-                  </div>
+                  <div className="ig-msg__itemTitle"><span className="ig-msg__itemName">{item.nickname?.trim() || item.peer.username}</span></div>
                   <div className="ig-msg__itemSub">
                     <span className="ig-msg__itemLast">{item.lastMessageText || 'Hãy bắt đầu cuộc trò chuyện'}</span>
                     {item.lastMessageAt ? <><span className="ig-msg__sep">·</span><span className="ig-msg__itemTime">{formatConversationTime(item.lastMessageAt)}</span></> : null}
@@ -461,68 +471,140 @@ export default function MessagesPage() {
           {activeConversation ? (
             <>
               <div className="ig-msg__rightTop">
-                <button className="ig-msg__peer" type="button" onClick={() => navigateToProfile(activeConversation.peer)} style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}>
+                <div className="ig-msg__peer">
                   <img className="ig-msg__peerAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                   <div className="ig-msg__peerMeta">
-                    <div className="ig-msg__peerName">{activeConversation.peer.username}</div>
+                    <div className="ig-msg__peerName">{displayPeerName}</div>
                     <div className="ig-msg__peerUser">{activeConversation.peer.bio || 'Instagram User'}</div>
                   </div>
-                </button>
+                </div>
                 <div className="ig-msg__actions">
                   <button className="ig-msg__iconBtn" type="button">📞</button>
                   <button className="ig-msg__iconBtn" type="button">📹</button>
-                  <button className="ig-msg__iconBtn" type="button">ⓘ</button>
+                  <button className="ig-msg__iconBtn" type="button" onClick={() => setIsDetailOpen((prev) => !prev)} aria-pressed={isDetailOpen}>ⓘ</button>
                 </div>
               </div>
 
-              <div className="ig-msg__hero">
-                <img className="ig-msg__heroAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
-                <div className="ig-msg__heroName">{activeConversation.peer.username}</div>
-                <div className="ig-msg__heroUser">{activeConversation.peer.bio || 'Instagram'}</div>
-                <button className="ig-msg__profileBtn" type="button" onClick={() => navigateToProfile(activeConversation.peer)}>View profile</button>
-              </div>
+              <div className="ig-msg__mainShell">
+                <div className="ig-msg__mainCol">
+                  <div className="ig-msg__contentScroll" ref={contentScrollRef}>
+                    <div className="ig-msg__hero">
+                      <img className="ig-msg__heroAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
+                      <div className="ig-msg__heroName">{displayPeerName}</div>
+                      <div className="ig-msg__heroUser">{activeConversation.peer.bio || 'Instagram'}</div>
+                      <button className="ig-msg__profileBtn" type="button" onClick={() => navigate(`/profile/${activeConversation.peer.username}`)}>View profile</button>
+                    </div>
 
-              <div className="ig-msg__body" ref={bodyRef}>
-                {activeMessages.map((message) => {
-                  const fromMe = message.senderUsername === state.username
-                  return (
-                    <div key={message.id} className={`ig-msg__row ${fromMe ? 'is-me' : 'is-them'}`}>
-                      {!fromMe ? <img className="ig-msg__bubbleAvatar" src={avatarOf(activeConversation.peer)} alt="" /> : null}
-                      <div className="ig-msg__bubbleWrap">
-                        <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>{message.storyReply ? <div style={{display:'grid',gap:8}}><div style={{fontSize:12,opacity:.75}}>Đã trả lời tin của @{message.storyReply.ownerUsername}</div><div style={{display:'flex',alignItems:'center',gap:8,padding:8,borderRadius:14,background:'rgba(255,255,255,.12)'}}><img src={message.storyReply.thumbnailUrl || message.storyReply.mediaUrl} alt='' style={{width:72,height:96,objectFit:'cover',borderRadius:12}} /><div style={{fontSize:12,opacity:.9}}>{message.storyReply.mediaType === 'video' ? 'Video story' : 'Ảnh story'}</div></div>{message.text ? <div>{message.text}</div> : null}</div> : message.text}</div>
-                        <div className="ig-msg__time">{formatTime(message.createdAt)}{fromMe ? ` · ${message.status === 'seen' ? 'Đã xem' : message.status === 'delivered' ? 'Đã nhận' : 'Đã gửi'}` : ''}</div>
+                    <div className="ig-msg__body">
+                      {detailLoading ? <div className="ig-msg__empty">Đang tải tin nhắn...</div> : null}
+                      {!detailLoading && !activeMessages.length ? <div className="ig-msg__empty">Chưa có tin nhắn nào.</div> : null}
+                      {activeMessages.map((message, index) => {
+                        const fromMe = message.senderUsername === state.username
+                        const showInlineTime = shouldShowInlineTime(activeMessages, index)
+                        const showCenterTime = shouldShowCenterTime(activeMessages, index)
+                        const showActions = hoveredMessageId === message.id
+                        return (
+                          <div key={message.id}>
+                            {showCenterTime ? <div className="ig-msg__centerTime">{formatTime(message.createdAt)}</div> : null}
+                            <div className={`ig-msg__row ${fromMe ? 'is-me' : 'is-them'}`} onMouseEnter={() => setHoveredMessageId(message.id)} onMouseLeave={() => setHoveredMessageId((prev) => (prev === message.id ? '' : prev))}>
+                              {!fromMe ? <img className="ig-msg__bubbleAvatar" src={avatarOf(activeConversation.peer)} alt="" /> : null}
+                              <div className="ig-msg__bubbleWrap">
+                                <div className={`ig-msg__messageCard ${fromMe ? 'is-me' : 'is-them'}`}>
+                                  {showActions ? (
+                                    <div className={`ig-msg__hoverTools ${fromMe ? 'is-me' : 'is-them'}`}>
+                                      <button className="ig-msg__tinyIcon" type="button" onClick={() => setReplyTo(message)} title="Trả lời">↩</button>
+                                      <button className="ig-msg__tinyIcon" type="button" onClick={() => void toggleMessageHeart(message)} title="Thả tim">☺</button>
+                                    </div>
+                                  ) : null}
+                                  {message.replyToMessageId ? (
+                                    <div className="ig-msg__replyBlock">
+                                      <div className="ig-msg__replyAuthor">{message.replyToSenderUsername || 'Tin nhắn gốc'}</div>
+                                      <div className="ig-msg__replyText">{message.replyToType === 'text' ? (message.replyToText || 'Tin nhắn') : message.replyToType === 'image' ? 'Ảnh' : 'Video'}</div>
+                                    </div>
+                                  ) : null}
+                                  <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>
+                                    {message.text ? <div className="ig-msg__bubbleText">{message.text}</div> : null}
+                                    <MessageMedia message={message} />
+                                  </div>
+                                  {message.heartCount ? <div className="ig-msg__messageHeart">❤️</div> : null}
+                                </div>
+                                {showInlineTime && !showCenterTime ? <div className="ig-msg__time">{formatTime(message.createdAt)}</div> : null}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="ig-msg__composerWrap">
+                    {replyTo ? (
+                      <div className="ig-msg__replyComposer">
+                        <div>
+                          <div className="ig-msg__replyComposerLabel">Đang trả lời {replyTo.senderUsername === state.username ? 'chính bạn' : replyTo.senderUsername}</div>
+                          <div className="ig-msg__replyComposerText">{replyTo.type === 'text' ? (replyTo.text || 'Tin nhắn') : replyTo.type === 'image' ? 'Ảnh' : 'Video'}</div>
+                        </div>
+                        <button className="ig-msg__tinyIcon" type="button" onClick={() => setReplyTo(null)}>×</button>
+                      </div>
+                    ) : null}
+                    {mediaFile && mediaPreviewUrl ? (
+                      <div className="ig-msg__pendingMediaBox">
+                        {mediaFile.type.startsWith('video/') ? <video className="ig-msg__pendingMedia" src={mediaPreviewUrl} controls playsInline /> : <img className="ig-msg__pendingMedia" src={mediaPreviewUrl} alt="pending media" />}
+                        <button className="ig-msg__tinyIcon ig-msg__pendingRemove" type="button" onClick={() => { setMediaFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>×</button>
+                      </div>
+                    ) : null}
+                    {isBlocked ? <div className="ig-msg__blockedHint">Bạn đã chặn người dùng này. Hãy bỏ chặn để tiếp tục nhắn tin.</div> : null}
+                    <div className="ig-msg__composer">
+                      <button className="ig-msg__emoji" type="button">☺</button>
+                      <input
+                        className="ig-msg__input"
+                        placeholder={isBlocked ? 'Đã chặn người dùng' : 'Message...'}
+                        value={text}
+                        disabled={isBlocked}
+                        onChange={(e) => setText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void handleSend()
+                          }
+                        }}
+                      />
+                      <input ref={fileInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
+                      <div className="ig-msg__composerActions">
+                        <button className="ig-msg__iconBtn" type="button">🎤</button>
+                        <button className="ig-msg__iconBtn" type="button" onClick={() => fileInputRef.current?.click()}>🖼</button>
+                        <button className="ig-msg__iconBtn" type="button" onClick={() => void handleSend()} disabled={sending || (!text.trim() && !mediaFile) || isBlocked}>{sending ? '...' : '➤'}</button>
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-
-              <div className="ig-msg__composer">
-                <button className="ig-msg__emoji" type="button">☺</button>
-                <input
-                  className="ig-msg__input"
-                  placeholder="Message..."
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      void handleSend()
-                    }
-                  }}
-                />
-                <div className="ig-msg__composerActions">
-                  <button className="ig-msg__iconBtn" type="button">🎤</button>
-                  <button className="ig-msg__iconBtn" type="button">🖼</button>
-                  <button className="ig-msg__iconBtn" type="button" onClick={() => void handleSend()} disabled={sending || !text.trim()}>
-                    {sending ? '...' : '➤'}
-                  </button>
+                  </div>
                 </div>
+
+                {isDetailOpen ? (
+                  <aside className="ig-msg__detail">
+                    <div className="ig-msg__detailTitle">Chi tiết</div>
+                    <div className="ig-msg__detailCard">
+                      <img className="ig-msg__detailAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
+                      <div>
+                        <div className="ig-msg__detailName">{activeConversation.peer.username}</div>
+                        <div className="ig-msg__detailSub">{activeConversation.peer.bio || 'Instagram User'}</div>
+                      </div>
+                    </div>
+
+                    <label className="ig-msg__field">
+                      <span className="ig-msg__fieldLabel">Biệt danh</span>
+                      <div className="ig-msg__fieldRow">
+                        <input className="ig-msg__fieldInput" value={nicknameDraft} onChange={(e) => setNicknameDraft(e.target.value)} placeholder="Nhập biệt danh" />
+                        <button type="button" className="ig-msg__fieldBtn" onClick={() => void saveNickname()} disabled={savingDetail}>Lưu</button>
+                      </div>
+                    </label>
+
+                    <button type="button" className="ig-msg__detailAction" onClick={() => void toggleBlock()} disabled={savingDetail}>{isBlocked ? 'Bỏ chặn người dùng' : 'Chặn người dùng'}</button>
+                    <button type="button" className="ig-msg__detailDanger" onClick={() => void clearHistory()} disabled={savingDetail}>Xóa lịch sử đoạn chat</button>
+                  </aside>
+                ) : null}
               </div>
             </>
-          ) : (
-            <div className="ig-msg__blank">Chọn một cuộc trò chuyện để bắt đầu nhắn tin.</div>
-          )}
+          ) : <div className="ig-msg__blank">Chọn một cuộc trò chuyện để bắt đầu nhắn tin.</div>}
           {error ? <div className="ig-msg__error">{error}</div> : null}
         </section>
       </div>

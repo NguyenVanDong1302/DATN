@@ -8,6 +8,9 @@ const conversationMemberSchema = new mongoose.Schema(
     unreadCount: { type: Number, default: 0 },
     lastReadMessageId: { type: String, default: "" },
     lastReadAt: { type: Date, default: null },
+    peerNickname: { type: String, default: "", trim: true, maxlength: 80 },
+    blockedPeer: { type: Boolean, default: false },
+    blockedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

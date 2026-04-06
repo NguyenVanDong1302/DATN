@@ -14,6 +14,8 @@ const {
   addComment,
   listComments,
   deleteComment,
+  addCommentLike,
+  removeCommentLike,
 } = require("../controllers/post.controller");
 
 const router = express.Router();
@@ -32,5 +34,7 @@ router.delete("/:id/like", removeLike);
 router.post("/:id/comments", uploadCommentMedia.single("media"), addComment);
 router.get("/:id/comments", listComments);
 router.delete("/:id/comments/:commentId", deleteComment);
+router.post("/:id/comments/:commentId/like", addCommentLike);
+router.delete("/:id/comments/:commentId/like", removeCommentLike);
 
 module.exports = router;

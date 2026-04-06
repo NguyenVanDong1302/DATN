@@ -4,7 +4,6 @@ export type MessageUser = {
   email?: string
   bio?: string
   avatarUrl?: string
-  createdAt?: string | null
 }
 
 export type ConversationItem = {
@@ -14,14 +13,9 @@ export type ConversationItem = {
   lastMessageText: string
   lastMessageAt?: string | null
   unreadCount: number
-}
-
-export type StoryReply = {
-  storyId: string
-  ownerUsername: string
-  mediaType: 'image' | 'video'
-  mediaUrl: string
-  thumbnailUrl?: string
+  nickname?: string
+  isBlocked?: boolean
+  blockedAt?: string | null
 }
 
 export type ChatMessage = {
@@ -31,16 +25,35 @@ export type ChatMessage = {
   senderUsername: string
   receiverId: string
   receiverUsername: string
-  type: 'text'
+  type: 'text' | 'image' | 'video'
   text: string
-  storyReply?: StoryReply | null
+  mediaUrl?: string
+  thumbnailUrl?: string
+  fileName?: string
+  mimeType?: string
+  durationSec?: number
+  heartCount?: number
+  heartedByMe?: boolean
+  replyToMessageId?: string
+  replyToText?: string
+  replyToSenderUsername?: string
+  replyToType?: '' | 'text' | 'image' | 'video'
+  replyToMediaUrl?: string
   status: 'sent' | 'delivered' | 'seen'
   seenAt?: string | null
   createdAt: string
+  optimistic?: boolean
 }
 
 export type SearchUsersResponse = {
-  recent: MessageUser[]
   following: MessageUser[]
   suggested: MessageUser[]
+}
+
+export type ConversationSettings = {
+  conversationId: string
+  nickname: string
+  isBlocked: boolean
+  blockedAt?: string | null
+  peer: MessageUser | null
 }

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useNotificationsApi } from './notifications.api'
 import type { NotificationItem } from './notifications.types'
 import { useSocket } from '../../state/socket'
@@ -33,6 +33,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const refreshTimerRef = useRef<number | null>(null)
 
   const refresh = useCallback(
     async (onlyUnread = false) => {
@@ -48,16 +49,35 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [api],
   )
 
+  const scheduleRefresh = useCallback(
+    (onlyUnread = false, delay = 120) => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = window.setTimeout(() => {
+        refresh(onlyUnread).catch(() => undefined)
+      }, delay)
+    },
+    [refresh],
+  )
+
   useEffect(() => {
     if (!state.username) return
     refresh().catch(() => undefined)
   }, [refresh, state.username])
 
   useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!socket) return
 
     const onNew = (payload: NotificationItem) => {
-      if (!payload?._id) return
+      if (!payload?._id) {
+        scheduleRefresh(false, 0)
+        return
+      }
       setItems((prev) => {
         const existed = prev.find((item) => item._id === payload._id)
         setUnreadCount((count) => {
@@ -73,14 +93,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setUnreadCount(Number(payload?.unreadCount) || 0)
     }
 
+    const onNotify = () => {
+      scheduleRefresh(false, 0)
+    }
+
+    const onReconnect = () => {
+      scheduleRefresh(false, 0)
+    }
+
     socket.on('notification:new', onNew)
     socket.on('notification:count', onCount)
+    socket.on('notify', onNotify)
+    socket.on('connect', onReconnect)
 
     return () => {
       socket.off('notification:new', onNew)
       socket.off('notification:count', onCount)
+      socket.off('notify', onNotify)
+      socket.off('connect', onReconnect)
     }
-  }, [socket])
+  }, [socket, scheduleRefresh])
 
   const markRead = useCallback(
     async (id: string) => {

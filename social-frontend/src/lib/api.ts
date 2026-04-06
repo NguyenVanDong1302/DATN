@@ -10,7 +10,8 @@ export function resolveMediaUrl(url?: string | null) {
   if (!url) return ''
   const raw = String(url).trim().replace(/\\/g, '/')
   if (!raw) return ''
-  if (/^https?:\/\//i.test(raw)) return raw
+  if (/^(https?:)?\/\//i.test(raw)) return raw
+  if (/^(data:|blob:)/i.test(raw)) return raw
 
   const uploadsIndex = raw.toLowerCase().indexOf('/uploads/')
   if (uploadsIndex >= 0) return `${MEDIA_BASE_URL}${raw.slice(uploadsIndex)}`
