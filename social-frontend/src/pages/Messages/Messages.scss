@@ -348,6 +348,16 @@
   position: relative;
 }
 
+.ig-msg__messageStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.ig-msg__messageStack.is-me {
+  align-items: flex-end;
+}
+
 .ig-msg__bubble {
   padding: 12px 16px;
   border-radius: 22px;
@@ -375,6 +385,30 @@
   width: min(280px, 100%);
   margin-top: 8px;
   border-radius: 18px;
+  background: #ececec;
+  object-fit: cover;
+}
+
+.ig-msg__mediaGrid {
+  width: min(320px, 100%);
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ig-msg__mediaGridItem {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 14px;
+  background: #ececec;
+}
+
+.ig-msg__messageStack > .ig-msg__media:first-child,
+.ig-msg__messageStack > .ig-msg__mediaGrid:first-child {
+  margin-top: 0;
 }
 
 .ig-msg__hoverTools {
@@ -384,6 +418,7 @@
   align-items: center;
   gap: 6px;
   opacity: 0.96;
+  z-index: 3;
 }
 
 .ig-msg__hoverTools.is-me {
@@ -422,19 +457,85 @@
   color: #737373;
 }
 
-.ig-msg__messageHeart {
+.ig-msg__messageReaction {
   position: absolute;
   right: 10px;
   bottom: -10px;
-  width: 22px;
-  height: 22px;
+  min-height: 24px;
+  padding: 0 8px;
   border-radius: 999px;
   background: #fff;
   border: 1px solid #dbdbdb;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+
+.ig-msg__reactionPicker,
+.ig-msg__messageMenu {
+  position: absolute;
+  top: -54px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+  z-index: 4;
+}
+
+.ig-msg__reactionPicker.is-me,
+.ig-msg__messageMenu.is-me {
+  right: 0;
+}
+
+.ig-msg__reactionPicker.is-them,
+.ig-msg__messageMenu.is-them {
+  left: 0;
+}
+
+.ig-msg__reactionOption {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ig-msg__reactionOption:hover,
+.ig-msg__reactionOption.is-active {
+  background: #f3f3f3;
+}
+
+.ig-msg__messageMenu {
+  top: -10px;
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.ig-msg__messageMenuItem {
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.ig-msg__messageMenuItem:hover {
+  background: #f6f6f6;
+}
+
+.ig-msg__messageMenuItem.is-danger {
+  color: #ed4956;
 }
 
 .ig-msg__time {
@@ -482,23 +583,38 @@
   color: #737373;
 }
 
+.ig-msg__pendingMediaList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 8px 10px;
+}
+
 .ig-msg__pendingMediaBox {
   position: relative;
-  margin: 0 8px 10px;
-  display: inline-block;
+  width: 80px;
+  height: 80px;
+  flex: 0 0 80px;
 }
 
 .ig-msg__pendingMedia {
   display: block;
-  width: min(180px, 100%);
-  border-radius: 16px;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 14px;
   border: 1px solid #dbdbdb;
+  background: #ececec;
 }
 
 .ig-msg__pendingRemove {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .ig-msg__blockedHint {

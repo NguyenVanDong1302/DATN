@@ -28,6 +28,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.storyBtn:hover .ring {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(17, 17, 17, 0.12);
+}
+
+.ringSeen {
+  background: linear-gradient(180deg, #d8d8d8 0%, #bdbdbd 100%);
+  filter: saturate(0.9);
+}
+
+.ringUnseen {
+  background: conic-gradient(#f9ce34, #ee2a7b, #6228d7, #f9ce34);
 }
 
 .avatar {

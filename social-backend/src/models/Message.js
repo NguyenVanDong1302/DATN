@@ -1,5 +1,30 @@
 const mongoose = require("mongoose");
 
+const messageMediaSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ["image", "video"],
+      required: true,
+    },
+    mediaUrl: { type: String, default: "" },
+    thumbnailUrl: { type: String, default: "" },
+    fileName: { type: String, default: "" },
+    mimeType: { type: String, default: "" },
+    durationSec: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
+const messageReactionSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    username: { type: String, default: "" },
+    emoji: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const messageSchema = new mongoose.Schema(
   {
     conversationId: { type: String, required: true, index: true },
@@ -18,6 +43,8 @@ const messageSchema = new mongoose.Schema(
     fileName: { type: String, default: "" },
     mimeType: { type: String, default: "" },
     durationSec: { type: Number, default: 0 },
+    mediaItems: { type: [messageMediaSchema], default: [] },
+    reactions: { type: [messageReactionSchema], default: [] },
     reactionUserIds: { type: [String], default: [] },
     replyToMessageId: { type: String, default: "" },
     replyToText: { type: String, default: "" },

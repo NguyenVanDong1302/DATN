@@ -253,10 +253,12 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
             <span className={styles.author}>{comment.authorUsername || 'user'}</span>
             <span className={styles.time}>{formatRelative(comment.createdAt)}</span>
           </div>
-          <div className={styles.contentPlain}>
-            {isReply && targetUsername ? <span className={styles.mention}>@{targetUsername} </span> : null}
-            {comment.content}
-          </div>
+          {(comment.content || (isReply && targetUsername)) ? (
+            <div className={styles.contentPlain}>
+              {isReply && targetUsername ? <span className={styles.mention}>@{targetUsername} </span> : null}
+              {comment.content}
+            </div>
+          ) : null}
           <CommentAttachment comment={comment} />
 
           <div className={styles.actions}>

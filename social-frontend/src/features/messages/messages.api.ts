@@ -30,12 +30,12 @@ export function useMessagesApi() {
       },
       sendMessageHttp: async (
         conversationId: string,
-        payload: { text?: string; media?: File | null; replyToMessageId?: string | null },
+        payload: { text?: string; media?: File[] | null; replyToMessageId?: string | null },
       ) => {
         const body = new FormData()
         if (payload.text) body.append('text', payload.text)
         if (payload.replyToMessageId) body.append('replyToMessageId', payload.replyToMessageId)
-        if (payload.media) body.append('media', payload.media)
+        for (const file of payload.media || []) body.append('media', file)
         const res = await api.postForm(`/messages/conversations/${conversationId}/messages`, body)
         return res?.data?.message as ChatMessage
       },
@@ -44,6 +44,18 @@ export function useMessagesApi() {
           ? await api.post(`/messages/conversations/${conversationId}/messages/${messageId}/heart`, {})
           : await api.del(`/messages/conversations/${conversationId}/messages/${messageId}/heart`)
         return res?.data?.message as ChatMessage
+      },
+      setMessageReaction: async (conversationId: string, messageId: string, emoji: string) => {
+        const res = await api.post(`/messages/conversations/${conversationId}/messages/${messageId}/reaction`, { emoji })
+        return res?.data?.message as ChatMessage
+      },
+      removeMessageReaction: async (conversationId: string, messageId: string) => {
+        const res = await api.del(`/messages/conversations/${conversationId}/messages/${messageId}/reaction`)
+        return res?.data?.message as ChatMessage
+      },
+      deleteMessage: async (conversationId: string, messageId: string) => {
+        const res = await api.del(`/messages/conversations/${conversationId}/messages/${messageId}`)
+        return res?.data as { conversationId: string; messageId: string; lastMessageText?: string; lastMessageAt?: string | null }
       },
       markRead: async (conversationId: string) => {
         await api.post(`/messages/conversations/${conversationId}/read`, {})

@@ -8,8 +8,19 @@ export type StoryItem = {
   caption?: string
   likesCount: number
   likedByMe: boolean
+  viewersCount: number
+  viewedByMe: boolean
   createdAt: string
   expiresAt: string
+  archivedAt?: string | null
+  isArchived?: boolean
+}
+
+export type StoryViewerUser = {
+  userId: string
+  username: string
+  avatarUrl?: string
+  viewedAt?: string | null
 }
 
 export type StoryGroup = {

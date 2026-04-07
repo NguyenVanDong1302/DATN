@@ -6,13 +6,26 @@ const {
   getConversationDetail,
   listMessages,
   sendMessage,
+  setMessageReaction,
   toggleMessageHeart: toggleMessageHeartService,
   markConversationRead,
   getUnreadSummary,
   getConversationSettings,
   updateConversationSettings,
   clearConversationHistory,
+  deleteMessage,
 } = require("../services/message.service");
+
+async function cleanupUploadedFiles(files = []) {
+  const list = Array.isArray(files) ? files : [files];
+  await Promise.all(
+    list
+      .filter((file) => file?.path)
+      .map((file) =>
+        require("fs").promises.unlink(file.path).catch(() => {}),
+      ),
+  );
+}
 
 async function searchMessageUsers(req, res, next) {
   try {
@@ -98,11 +111,12 @@ async function postConversationMessage(req, res, next) {
       currentUser,
       conversationId: req.params.conversationId,
       text: req.body?.text || "",
-      file: req.file || null,
+      files: req.files || [],
       replyToMessageId: req.body?.replyToMessageId || "",
     });
     res.status(201).json({ ok: true, data: { message } });
   } catch (err) {
+    await cleanupUploadedFiles(req.files || req.file || []);
     next(err);
   }
 }
@@ -116,6 +130,36 @@ async function toggleMessageHeart(req, res, next) {
       conversationId: req.params.conversationId,
       messageId: req.params.messageId,
       shouldLike: req.method !== "DELETE",
+    });
+    res.json({ ok: true, data: { message } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reactToMessage(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const message = await setMessageReaction({
+      currentUser,
+      conversationId: req.params.conversationId,
+      messageId: req.params.messageId,
+      emoji: req.body?.emoji || "",
+    });
+    res.json({ ok: true, data: { message } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function removeMessageReaction(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const message = await setMessageReaction({
+      currentUser,
+      conversationId: req.params.conversationId,
+      messageId: req.params.messageId,
+      emoji: "",
     });
     res.json({ ok: true, data: { message } });
   } catch (err) {
@@ -178,6 +222,20 @@ async function deleteHistory(req, res, next) {
   }
 }
 
+async function deleteConversationMessage(req, res, next) {
+  try {
+    const currentUser = await resolveCurrentUserFromReq(req);
+    const data = await deleteMessage({
+      currentUser,
+      conversationId: req.params.conversationId,
+      messageId: req.params.messageId,
+    });
+    res.json({ ok: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   searchMessageUsers,
   createOrGetDirectConversation,
@@ -186,9 +244,12 @@ module.exports = {
   getConversationMessages,
   postConversationMessage,
   toggleMessageHeart,
+  reactToMessage,
+  removeMessageReaction,
   readConversation,
   unreadSummary,
   getSettings,
   patchSettings,
   deleteHistory,
+  deleteConversationMessage,
 };

@@ -1,5 +1,14 @@
 const mongoose = require('mongoose');
 
+const storyViewSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    username: { type: String, default: '' },
+    viewedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const storySchema = new mongoose.Schema(
   {
     authorId: { type: String, required: true, index: true },
@@ -9,7 +18,9 @@ const storySchema = new mongoose.Schema(
     thumbnailUrl: { type: String, default: '' },
     caption: { type: String, default: '', trim: true, maxlength: 300 },
     likes: { type: [String], default: [] },
+    views: { type: [storyViewSchema], default: [] },
     expiresAt: { type: Date, required: true, index: true },
+    archivedAt: { type: Date, default: null, index: true },
   },
   { timestamps: true },
 );

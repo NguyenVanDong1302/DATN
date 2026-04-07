@@ -4,11 +4,20 @@ import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
 import { joinConversation, leaveConversation, markConversationReadRealtime } from '../../features/messages/messages.socket'
-import type { ChatMessage, ConversationItem, ConversationSettings, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
+import type { ChatMessage, ChatMessageMediaItem, ConversationItem, ConversationSettings, DeletedMessageEvent, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
 import './Messages.scss'
 
-const TIME_GROUP_MS = 3 * 60 * 1000
 const TIME_SEPARATOR_MS = 10 * 60 * 1000
+const MAX_MESSAGE_MEDIA_FILES = 10
+const MAX_MESSAGE_VIDEO_BYTES = 15 * 1024 * 1024
+const MESSAGE_REACTIONS = ['\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F621}', '\u{1F44D}'] as const
+
+type PendingMediaItem = {
+  id: string
+  file: File
+  previewUrl: string
+  type: 'image' | 'video'
+}
 
 function formatTime(value?: string | null) {
   if (!value) return ''
@@ -24,21 +33,14 @@ function formatConversationTime(value?: string | null) {
   return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
 }
 
+function sortConversationsByLastMessage(items: ConversationItem[]) {
+  return [...items].sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
+}
+
 function avatarOf(user?: Pick<MessageUser, 'avatarUrl' | 'username'> | null) {
   if (user?.avatarUrl) return user.avatarUrl
   const seed = encodeURIComponent(user?.username || 'instagram_user')
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`
-}
-
-function shouldShowInlineTime(messages: ChatMessage[], index: number) {
-  const current = messages[index]
-  const next = messages[index + 1]
-  if (!current) return false
-  if (!next) return true
-  const currentTs = new Date(current.createdAt).getTime()
-  const nextTs = new Date(next.createdAt).getTime()
-  if (!Number.isFinite(currentTs) || !Number.isFinite(nextTs)) return true
-  return nextTs - currentTs > TIME_GROUP_MS || next.senderUsername !== current.senderUsername
 }
 
 function shouldShowCenterTime(messages: ChatMessage[], index: number) {
@@ -52,18 +54,65 @@ function shouldShowCenterTime(messages: ChatMessage[], index: number) {
   return currentTs - previousTs >= TIME_SEPARATOR_MS
 }
 
-function messagePreview(message: ChatMessage) {
-  if (message.type === 'image') return 'Đã gửi một ảnh'
-  if (message.type === 'video') return 'Đã gửi một video'
+function getMessageMediaItems(message: ChatMessage): ChatMessageMediaItem[] {
+  if (Array.isArray(message.mediaItems) && message.mediaItems.length) {
+    return message.mediaItems.filter((item) => Boolean(item?.mediaUrl))
+  }
+  if (!message.mediaUrl) return []
+  return [{
+    type: message.type === 'video' ? 'video' : 'image',
+    mediaUrl: message.mediaUrl,
+    thumbnailUrl: message.thumbnailUrl,
+    fileName: message.fileName,
+    mimeType: message.mimeType,
+    durationSec: message.durationSec,
+  }]
+}
+
+function getMessageReactionDisplay(message: ChatMessage) {
+  const summary = message.reactionSummary || []
+  if (!summary.length) return ''
+  const emojis = summary.slice(0, 3).map((item) => item.emoji).join(' ')
+  const count = Number(message.reactionCount || summary.reduce((total, item) => total + Number(item.count || 0), 0))
+  return count > 1 ? `${emojis} ${count}` : emojis
+}
+
+function buildMessagePreview(message: ChatMessage) {
+  const mediaItems = getMessageMediaItems(message)
+  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Da gui 1 video' : 'Da gui 1 anh'
+  if (mediaItems.length > 1) {
+    const videoCount = mediaItems.filter((item) => item.type === 'video').length
+    const imageCount = mediaItems.length - videoCount
+    if (videoCount === mediaItems.length) return `Da gui ${videoCount} video`
+    if (imageCount === mediaItems.length) return `Da gui ${imageCount} anh`
+    return `Da gui ${mediaItems.length} tep`
+  }
   return message.text
 }
 
-function MessageMedia({ message }: { message: ChatMessage }) {
-  if (!message.mediaUrl) return null
-  return message.type === 'video' ? (
-    <video className="ig-msg__media" src={message.mediaUrl} controls playsInline />
-  ) : (
-    <img className="ig-msg__media" src={message.mediaUrl} alt={message.fileName || 'message media'} />
+function RichMessageMedia({ message }: { message: ChatMessage }) {
+  const mediaItems = getMessageMediaItems(message)
+  if (!mediaItems.length) return null
+
+  if (mediaItems.length === 1) {
+    const item = mediaItems[0]
+    return item.type === 'video' ? (
+      <video className="ig-msg__media" src={item.mediaUrl} controls playsInline />
+    ) : (
+      <img className="ig-msg__media" src={item.mediaUrl} alt={item.fileName || 'message media'} />
+    )
+  }
+
+  return (
+    <div className="ig-msg__mediaGrid">
+      {mediaItems.map((item, index) => (
+        item.type === 'video' ? (
+          <video key={`${item.mediaUrl}-${index}`} className="ig-msg__mediaGridItem" src={item.mediaUrl} controls playsInline />
+        ) : (
+          <img key={`${item.mediaUrl}-${index}`} className="ig-msg__mediaGridItem" src={item.mediaUrl} alt={item.fileName || `message media ${index + 1}`} />
+        )
+      ))}
+    </div>
   )
 }
 
@@ -89,17 +138,19 @@ export default function MessagesPage() {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [hoveredMessageId, setHoveredMessageId] = useState('')
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState('')
+  const [actionMenuMessageId, setActionMenuMessageId] = useState('')
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
-  const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [mediaFiles, setMediaFiles] = useState<PendingMediaItem[]>([])
   const contentScrollRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const pendingMediaRef = useRef<PendingMediaItem[]>([])
 
   const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId) || null, [conversations, activeId])
   const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
   const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
   const isBlocked = Boolean(settings?.isBlocked || activeConversation?.isBlocked)
-  const mediaPreviewUrl = useMemo(() => (mediaFile ? URL.createObjectURL(mediaFile) : ''), [mediaFile])
 
   useEffect(() => {
     const root = document.documentElement
@@ -117,9 +168,13 @@ export default function MessagesPage() {
     }
   }, [])
 
+  useEffect(() => {
+    pendingMediaRef.current = mediaFiles
+  }, [mediaFiles])
+
   useEffect(() => () => {
-    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
-  }, [mediaPreviewUrl])
+    for (const item of pendingMediaRef.current) URL.revokeObjectURL(item.previewUrl)
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -166,7 +221,11 @@ export default function MessagesPage() {
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
       const target = event.target as Node | null
+      const element = event.target as Element | null
+      if (element?.closest('[data-msg-flyout="true"]')) return
       if (searchRef.current && target && !searchRef.current.contains(target)) setIsSearchOpen(false)
+      setReactionPickerMessageId('')
+      setActionMenuMessageId('')
     }
     document.addEventListener('mousedown', handleDocumentClick)
     return () => document.removeEventListener('mousedown', handleDocumentClick)
@@ -209,6 +268,11 @@ export default function MessagesPage() {
   }, [socket, activeId])
 
   useEffect(() => {
+    setReactionPickerMessageId('')
+    setActionMenuMessageId('')
+  }, [activeId])
+
+  useEffect(() => {
     if (!contentScrollRef.current) return
     contentScrollRef.current.scrollTop = contentScrollRef.current.scrollHeight
   }, [activeMessages.length, activeId])
@@ -233,12 +297,12 @@ export default function MessagesPage() {
           const shouldIncrease = message.conversationId !== activeId && message.senderUsername !== state.username
           return {
             ...item,
-            lastMessageText: messagePreview(message),
+            lastMessageText: buildMessagePreview(message),
             lastMessageAt: message.createdAt,
             unreadCount: shouldIncrease ? item.unreadCount + 1 : 0,
           }
         })
-        return [...next].sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
+        return sortConversationsByLastMessage(next)
       })
     }
 
@@ -249,11 +313,15 @@ export default function MessagesPage() {
       }))
     }
 
+    const onMessageDeleted = (payload: DeletedMessageEvent) => {
+      applyDeletedMessage(payload)
+    }
+
     const onConversationUpdated = async ({ conversationId }: { conversationId?: string } = {}) => {
       if (!conversationId) return
       try {
         const [detail, detailSettings] = await Promise.all([api.getConversation(conversationId), api.getSettings(conversationId)])
-        setConversations((prev) => prev.map((item) => (item.id === conversationId ? { ...item, ...detail, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item)))
+        setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, ...detail, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item))))
         if (conversationId === activeId) {
           setSettings(detailSettings)
           setNicknameDraft(detailSettings.nickname || '')
@@ -262,19 +330,22 @@ export default function MessagesPage() {
     }
 
     const onInboxRefresh = async () => {
-      const items = await api.getConversations()
-      setConversations(items)
-      if (!activeId && items[0]?.id) setActiveId(items[0].id)
+      try {
+        const items = await api.getConversations()
+        setConversations(items)
+        if (!activeId && items[0]?.id) setActiveId(items[0].id)
+      } catch {}
     }
 
     const onHistoryCleared = ({ conversationId }: { conversationId?: string } = {}) => {
       if (!conversationId) return
       setMessagesByConversation((prev) => ({ ...prev, [conversationId]: [] }))
-      setConversations((prev) => prev.map((item) => (item.id === conversationId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item)))
+      setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
     }
 
     socket.on('message:new', onMessageNew)
     socket.on('message:reaction', onMessageReaction)
+    socket.on('message:deleted', onMessageDeleted)
     socket.on('inbox:refresh', onInboxRefresh)
     socket.on('conversation:updated', onConversationUpdated)
     socket.on('conversation:history-cleared', onHistoryCleared)
@@ -282,6 +353,7 @@ export default function MessagesPage() {
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('message:reaction', onMessageReaction)
+      socket.off('message:deleted', onMessageDeleted)
       socket.off('inbox:refresh', onInboxRefresh)
       socket.off('conversation:updated', onConversationUpdated)
       socket.off('conversation:history-cleared', onHistoryCleared)
@@ -293,7 +365,7 @@ export default function MessagesPage() {
       const conversation = await api.createDirectConversation({ targetUserId: user.id, username: user.username })
       setConversations((prev) => {
         const existed = prev.some((item) => item.id === conversation.id)
-        return existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev]
+        return sortConversationsByLastMessage(existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev])
       })
       setActiveId(conversation.id)
       setIsSearchOpen(false)
@@ -303,23 +375,101 @@ export default function MessagesPage() {
     }
   }
 
+  const clearPendingMedia = () => {
+    setMediaFiles((prev) => {
+      for (const item of prev) URL.revokeObjectURL(item.previewUrl)
+      return []
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const removePendingMedia = (id: string) => {
+    setMediaFiles((prev) => prev.filter((item) => {
+      if (item.id === id) {
+        URL.revokeObjectURL(item.previewUrl)
+        return false
+      }
+      return true
+    }))
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const appendPendingFiles = (fileList?: FileList | null) => {
+    const selected = Array.from(fileList || [])
+    if (!selected.length) return
+
+    let nextError = ''
+    setMediaFiles((prev) => {
+      const next = [...prev]
+      for (const file of selected) {
+        const isImage = file.type.startsWith('image/')
+        const isVideo = file.type.startsWith('video/')
+
+        if (!isImage && !isVideo) {
+          nextError = 'Chỉ hỗ trợ ảnh hoặc video trong tin nhắn'
+          continue
+        }
+
+        if (isVideo && file.size > MAX_MESSAGE_VIDEO_BYTES) {
+          nextError = 'Mỗi video trong tin nhắn chỉ được tối đa 15MB'
+          continue
+        }
+
+        if (next.length >= MAX_MESSAGE_MEDIA_FILES) {
+          nextError = `Chỉ được chọn tối đa ${MAX_MESSAGE_MEDIA_FILES} ảnh/video mỗi lần`
+          break
+        }
+
+        next.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+          type: isVideo ? 'video' : 'image',
+        })
+      }
+      return next
+    })
+
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setError(nextError)
+  }
+
+  const applyDeletedMessage = (payload: DeletedMessageEvent) => {
+    if (!payload?.conversationId || !payload?.messageId) return
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [payload.conversationId]: (prev[payload.conversationId] || []).filter((item) => item.id !== payload.messageId),
+    }))
+    setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (
+      item.id === payload.conversationId
+        ? {
+            ...item,
+            lastMessageText: payload.lastMessageText || '',
+            lastMessageAt: payload.lastMessageAt || null,
+          }
+        : item
+    ))))
+    setReplyTo((prev) => (prev?.id === payload.messageId ? null : prev))
+    setReactionPickerMessageId((prev) => (prev === payload.messageId ? '' : prev))
+    setActionMenuMessageId((prev) => (prev === payload.messageId ? '' : prev))
+  }
+
   const handleSend = async () => {
     if (!activeId || sending || isBlocked) return
     const value = text.trim()
-    if (!value && !mediaFile) return
+    if (!value && !mediaFiles.length) return
     setSending(true)
     setError('')
     try {
-      const message = await api.sendMessageHttp(activeId, { text: value, media: mediaFile, replyToMessageId: replyTo?.id || null })
+      const message = await api.sendMessageHttp(activeId, { text: value, media: mediaFiles.map((item) => item.file), replyToMessageId: replyTo?.id || null })
       setMessagesByConversation((prev) => {
         const arr = prev[activeId] || []
         return arr.some((item) => item.id === message.id) ? prev : { ...prev, [activeId]: [...arr, message] }
       })
-      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: messagePreview(message), lastMessageAt: message.createdAt } : item)))
+      setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: buildMessagePreview(message), lastMessageAt: message.createdAt } : item))))
       setText('')
       setReplyTo(null)
-      setMediaFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      clearPendingMedia()
     } catch (err: any) {
       setError(err?.message || 'Gửi tin nhắn thất bại')
     } finally {
@@ -327,16 +477,32 @@ export default function MessagesPage() {
     }
   }
 
-  const toggleMessageHeart = async (message: ChatMessage) => {
+  const setMessageReaction = async (message: ChatMessage, emoji: string) => {
     if (!activeId) return
     try {
-      const next = await api.toggleMessageHeart(activeId, message.id, !message.heartedByMe)
+      const next = message.myReaction === emoji
+        ? await api.removeMessageReaction(activeId, message.id)
+        : await api.setMessageReaction(activeId, message.id, emoji)
       setMessagesByConversation((prev) => ({
         ...prev,
         [activeId]: (prev[activeId] || []).map((item) => (item.id === message.id ? { ...item, ...next } : item)),
       }))
+      setReactionPickerMessageId('')
     } catch (err: any) {
-      setError(err?.message || 'Không thể thả tim tin nhắn')
+      setError(err?.message || 'Không thể bày tỏ cảm xúc')
+    }
+  }
+
+  const revokeMessage = async (message: ChatMessage) => {
+    if (!activeId) return
+    const ok = window.confirm('Thu hồi tin nhắn này?')
+    if (!ok) return
+    try {
+      const payload = await api.deleteMessage(activeId, message.id)
+      applyDeletedMessage(payload)
+      setActionMenuMessageId('')
+    } catch (err: any) {
+      setError(err?.message || 'Không thể thu hồi tin nhắn')
     }
   }
 
@@ -376,7 +542,7 @@ export default function MessagesPage() {
       setSavingDetail(true)
       await api.clearHistory(activeId)
       setMessagesByConversation((prev) => ({ ...prev, [activeId]: [] }))
-      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item)))
+      setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
     } catch (err: any) {
       setError(err?.message || 'Không thể xóa lịch sử đoạn chat')
     } finally {
@@ -500,9 +666,11 @@ export default function MessagesPage() {
                       {!detailLoading && !activeMessages.length ? <div className="ig-msg__empty">Chưa có tin nhắn nào.</div> : null}
                       {activeMessages.map((message, index) => {
                         const fromMe = message.senderUsername === state.username
-                        const showInlineTime = shouldShowInlineTime(activeMessages, index)
                         const showCenterTime = shouldShowCenterTime(activeMessages, index)
                         const showActions = hoveredMessageId === message.id
+                        const hasText = Boolean(message.text)
+                        const hasMedia = getMessageMediaItems(message).length > 0
+                        const reactionDisplay = getMessageReactionDisplay(message)
                         return (
                           <div key={message.id}>
                             {showCenterTime ? <div className="ig-msg__centerTime">{formatTime(message.createdAt)}</div> : null}
@@ -510,10 +678,49 @@ export default function MessagesPage() {
                               {!fromMe ? <img className="ig-msg__bubbleAvatar" src={avatarOf(activeConversation.peer)} alt="" /> : null}
                               <div className="ig-msg__bubbleWrap">
                                 <div className={`ig-msg__messageCard ${fromMe ? 'is-me' : 'is-them'}`}>
-                                  {showActions ? (
+                                  {(showActions || reactionPickerMessageId === message.id || actionMenuMessageId === message.id) ? (
                                     <div className={`ig-msg__hoverTools ${fromMe ? 'is-me' : 'is-them'}`}>
                                       <button className="ig-msg__tinyIcon" type="button" onClick={() => setReplyTo(message)} title="Trả lời">↩</button>
-                                      <button className="ig-msg__tinyIcon" type="button" onClick={() => void toggleMessageHeart(message)} title="Thả tim">☺</button>
+                                      <button
+                                        className="ig-msg__tinyIcon"
+                                        type="button"
+                                        title="Bày tỏ cảm xúc"
+                                        data-msg-flyout="true"
+                                        onClick={() => {
+                                          setActionMenuMessageId('')
+                                          setReactionPickerMessageId((prev) => (prev === message.id ? '' : message.id))
+                                        }}
+                                      >
+                                        ☺
+                                      </button>
+                                      {fromMe ? (
+                                        <button
+                                          className="ig-msg__tinyIcon"
+                                          type="button"
+                                          title="Tùy chọn"
+                                          data-msg-flyout="true"
+                                          onClick={() => {
+                                            setReactionPickerMessageId('')
+                                            setActionMenuMessageId((prev) => (prev === message.id ? '' : message.id))
+                                          }}
+                                        >
+                                          ⋯
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                  {reactionPickerMessageId === message.id ? (
+                                    <div className={`ig-msg__reactionPicker ${fromMe ? 'is-me' : 'is-them'}`} data-msg-flyout="true">
+                                      {MESSAGE_REACTIONS.map((emoji) => (
+                                        <button key={emoji} className={`ig-msg__reactionOption ${message.myReaction === emoji ? 'is-active' : ''}`} type="button" onClick={() => void setMessageReaction(message, emoji)}>
+                                          {emoji}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  {actionMenuMessageId === message.id && fromMe ? (
+                                    <div className={`ig-msg__messageMenu ${fromMe ? 'is-me' : 'is-them'}`} data-msg-flyout="true">
+                                      <button className="ig-msg__messageMenuItem is-danger" type="button" onClick={() => void revokeMessage(message)}>Thu hồi</button>
                                     </div>
                                   ) : null}
                                   {message.replyToMessageId ? (
@@ -522,13 +729,16 @@ export default function MessagesPage() {
                                       <div className="ig-msg__replyText">{message.replyToType === 'text' ? (message.replyToText || 'Tin nhắn') : message.replyToType === 'image' ? 'Ảnh' : 'Video'}</div>
                                     </div>
                                   ) : null}
-                                  <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>
-                                    {message.text ? <div className="ig-msg__bubbleText">{message.text}</div> : null}
-                                    <MessageMedia message={message} />
+                                  <div className={`ig-msg__messageStack ${fromMe ? 'is-me' : 'is-them'}`}>
+                                    {hasText ? (
+                                      <div className={`ig-msg__bubble ${fromMe ? 'is-me' : 'is-them'}`}>
+                                        <div className="ig-msg__bubbleText">{message.text}</div>
+                                      </div>
+                                    ) : null}
+                                    {hasMedia ? <RichMessageMedia message={message} /> : null}
                                   </div>
-                                  {message.heartCount ? <div className="ig-msg__messageHeart">❤️</div> : null}
+                                  {reactionDisplay ? <div className="ig-msg__messageReaction">{reactionDisplay}</div> : null}
                                 </div>
-                                {showInlineTime && !showCenterTime ? <div className="ig-msg__time">{formatTime(message.createdAt)}</div> : null}
                               </div>
                             </div>
                           </div>
@@ -547,10 +757,14 @@ export default function MessagesPage() {
                         <button className="ig-msg__tinyIcon" type="button" onClick={() => setReplyTo(null)}>×</button>
                       </div>
                     ) : null}
-                    {mediaFile && mediaPreviewUrl ? (
-                      <div className="ig-msg__pendingMediaBox">
-                        {mediaFile.type.startsWith('video/') ? <video className="ig-msg__pendingMedia" src={mediaPreviewUrl} controls playsInline /> : <img className="ig-msg__pendingMedia" src={mediaPreviewUrl} alt="pending media" />}
-                        <button className="ig-msg__tinyIcon ig-msg__pendingRemove" type="button" onClick={() => { setMediaFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>×</button>
+                    {mediaFiles.length ? (
+                      <div className="ig-msg__pendingMediaList">
+                        {mediaFiles.map((item) => (
+                          <div key={item.id} className="ig-msg__pendingMediaBox">
+                            {item.type === 'video' ? <video className="ig-msg__pendingMedia" src={item.previewUrl} muted playsInline /> : <img className="ig-msg__pendingMedia" src={item.previewUrl} alt={item.file.name || 'pending media'} />}
+                            <button className="ig-msg__tinyIcon ig-msg__pendingRemove" type="button" onClick={() => removePendingMedia(item.id)}>×</button>
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                     {isBlocked ? <div className="ig-msg__blockedHint">Bạn đã chặn người dùng này. Hãy bỏ chặn để tiếp tục nhắn tin.</div> : null}
@@ -562,6 +776,12 @@ export default function MessagesPage() {
                         value={text}
                         disabled={isBlocked}
                         onChange={(e) => setText(e.target.value)}
+                        onPaste={(e) => {
+                          const files = e.clipboardData.files
+                          if (!files?.length) return
+                          e.preventDefault()
+                          appendPendingFiles(files)
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
@@ -569,11 +789,11 @@ export default function MessagesPage() {
                           }
                         }}
                       />
-                      <input ref={fileInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
+                      <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => appendPendingFiles(e.target.files)} />
                       <div className="ig-msg__composerActions">
                         <button className="ig-msg__iconBtn" type="button">🎤</button>
                         <button className="ig-msg__iconBtn" type="button" onClick={() => fileInputRef.current?.click()}>🖼</button>
-                        <button className="ig-msg__iconBtn" type="button" onClick={() => void handleSend()} disabled={sending || (!text.trim() && !mediaFile) || isBlocked}>{sending ? '...' : '➤'}</button>
+                        <button className="ig-msg__iconBtn" type="button" onClick={() => void handleSend()} disabled={sending || (!text.trim() && !mediaFiles.length) || isBlocked}>{sending ? '...' : '➤'}</button>
                       </div>
                     </div>
                   </div>

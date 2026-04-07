@@ -9,11 +9,14 @@ const {
   getConversationMessages,
   postConversationMessage,
   toggleMessageHeart,
+  reactToMessage,
+  removeMessageReaction,
   readConversation,
   unreadSummary,
   getSettings,
   patchSettings,
   deleteHistory,
+  deleteConversationMessage,
 } = require("../controllers/message.controller");
 
 const router = express.Router();
@@ -25,9 +28,12 @@ router.post("/conversations/direct", createOrGetDirectConversation);
 router.get("/conversations", getConversationList);
 router.get("/conversations/:conversationId", getConversation);
 router.get("/conversations/:conversationId/messages", getConversationMessages);
-router.post("/conversations/:conversationId/messages", uploadMessageMedia.single("media"), postConversationMessage);
+router.post("/conversations/:conversationId/messages", uploadMessageMedia.array("media", 10), postConversationMessage);
+router.post("/conversations/:conversationId/messages/:messageId/reaction", reactToMessage);
+router.delete("/conversations/:conversationId/messages/:messageId/reaction", removeMessageReaction);
 router.post("/conversations/:conversationId/messages/:messageId/heart", toggleMessageHeart);
 router.delete("/conversations/:conversationId/messages/:messageId/heart", toggleMessageHeart);
+router.delete("/conversations/:conversationId/messages/:messageId", deleteConversationMessage);
 router.post("/conversations/:conversationId/read", readConversation);
 router.get("/conversations/:conversationId/settings", getSettings);
 router.patch("/conversations/:conversationId/settings", patchSettings);

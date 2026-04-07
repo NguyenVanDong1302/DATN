@@ -8,8 +8,11 @@ import { useToast } from '../../components/Toast'
 import { useModal } from '../../components/Modal'
 import CommentSheet from '../../components/comments/CommentSheet'
 import { useAppStore } from '../../state/store'
-import { useUsersApi, type UserProfile } from '../../features/users/users.api'
+import { useUsersApi, type UserProfile, type UserSummary } from '../../features/users/users.api'
 import { useMessagesApi } from '../../features/messages/messages.api'
+import { useStoriesApi } from '../../features/stories/stories.api'
+import type { StoryGroup, StoryItem } from '../../features/stories/stories.types'
+import StoryViewer from '../Home/components/StoriesBar/StoryViewer'
 
 type Profile = UserProfile
 
@@ -23,6 +26,9 @@ function IconReel({ size = 18 }: { size?: number }) {
 }
 function IconTagged({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M20 12.5v5A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-11A2.5 2.5 0 0 1 6.5 4h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M14.5 3.8h5.7v5.7h-5.7z" stroke="currentColor" strokeWidth="1.8" /><circle cx="17.35" cy="6.65" r="0.95" fill="currentColor" /></svg>
+}
+function IconArchive({ size = 18 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16M6.5 4h11A1.5 1.5 0 0 1 19 5.5v13A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-13A1.5 1.5 0 0 1 6.5 4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /><path d="M9 11.5h6M9 15h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
 }
 function IconGear({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 15.25a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Z" stroke="currentColor" strokeWidth="1.8" /><path d="M19.4 15.1c.03-.2.05-.41.05-.62s-.02-.42-.05-.62l2-1.55a.7.7 0 0 0 .17-.9l-1.9-3.29a.7.7 0 0 0-.85-.31l-2.35.95c-.33-.26-.7-.48-1.1-.66l-.35-2.5A.7.7 0 0 0 14.33 3h-3.8a.7.7 0 0 0-.69.59l-.35 2.5c-.4.18-.77.4-1.1.66l-2.35-.95a.7.7 0 0 0-.85.31L3.29 9.4a.7.7 0 0 0 .17.9l2 1.55c-.03.2-.05.41-.05.62s.02.42.05.62l-2 1.55a.7.7 0 0 0-.17.9l1.9 3.29c.18.3.54.42.85.31l2.35-.95c.33.26.7.48 1.1.66l.35 2.5c.05.34.34.59.69.59h3.8c.35 0 .64-.25.69-.59l.35-2.5c.4-.18.77-.4 1.1-.66l2.35.95c.31.12.67-.01.85-.31l1.9-3.29a.7.7 0 0 0-.17-.9l-2-1.55Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
@@ -84,6 +90,21 @@ function ReelTilePreview({ src }: { src: string }) {
   return <video className={styles.tileVideo} src={src} muted playsInline preload="metadata" />
 }
 
+function getArchivedStoryThumb(story: StoryItem) {
+  const thumb = resolveMediaUrl(story.thumbnailUrl || story.mediaUrl)
+  if (!thumb) return { kind: 'empty' as const, src: '' }
+  return story.mediaType === 'video'
+    ? { kind: 'video' as const, src: thumb }
+    : { kind: 'image' as const, src: thumb }
+}
+
+function formatArchiveDate(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+}
+
 function PostDetailModal({ post, onChanged }: { post: Post; onChanged: () => void }) {
   const media = useMemo(() => normalizeMedia(post), [post])
   const [active, setActive] = useState(0)
@@ -140,30 +161,166 @@ function PostDetailModal({ post, onChanged }: { post: Post; onChanged: () => voi
   )
 }
 
+type FollowListTab = 'followers' | 'following'
+
+function ConnectionsModal({
+  username,
+  usersApi,
+  initialTab,
+  onUnfollow,
+}: {
+  username: string
+  usersApi: ReturnType<typeof useUsersApi>
+  initialTab: FollowListTab
+  onUnfollow: () => void
+}) {
+  const [activeTab, setActiveTab] = useState<FollowListTab>(initialTab)
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [followers, setFollowers] = useState<UserSummary[]>([])
+  const [following, setFollowing] = useState<UserSummary[]>([])
+  const [pendingUnfollowId, setPendingUnfollowId] = useState('')
+  const [confirmUnfollowUser, setConfirmUnfollowUser] = useState<UserSummary | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        setLoading(true)
+        const [followerRows, followingRows] = await Promise.all([
+          usersApi.getFollowers(username),
+          usersApi.getFollowing(username),
+        ])
+        if (cancelled) return
+        setFollowers(followerRows || [])
+        setFollowing(followingRows || [])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [usersApi, username])
+
+  const rows = activeTab === 'followers' ? followers : following
+  const keyword = search.trim().toLowerCase()
+  const filteredRows = rows.filter((row) => {
+    if (!keyword) return true
+    const usernameMatch = String(row.username || '').toLowerCase().includes(keyword)
+    const nameMatch = String(row.fullName || '').toLowerCase().includes(keyword)
+    return usernameMatch || nameMatch
+  })
+
+  const handleUnfollow = async (target: UserSummary) => {
+    const targetId = target._id || target.id
+    if (!targetId || pendingUnfollowId) return
+    try {
+      setPendingUnfollowId(targetId)
+      await usersApi.unfollowUser({ followingId: targetId, username: target.username })
+      setFollowing((prev) => prev.filter((item) => (item._id || item.id) !== targetId))
+      onUnfollow()
+    } finally {
+      setPendingUnfollowId('')
+      setConfirmUnfollowUser(null)
+    }
+  }
+
+  return (
+    <div className={styles.connectionsModal}>
+      <div className={styles.connectionsTabs}>
+        <button type="button" className={`${styles.connectionsTab} ${activeTab === 'followers' ? styles.connectionsTabActive : ''}`} onClick={() => setActiveTab('followers')}>
+          Followers
+        </button>
+        <button type="button" className={`${styles.connectionsTab} ${activeTab === 'following' ? styles.connectionsTabActive : ''}`} onClick={() => setActiveTab('following')}>
+          Following
+        </button>
+      </div>
+
+      <div className={styles.connectionsSearchWrap}>
+        <input className={styles.connectionsSearch} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" />
+      </div>
+
+      <div className={styles.connectionsList}>
+        {loading ? <div className={styles.connectionsEmpty}>Loading...</div> : null}
+        {!loading && !filteredRows.length ? <div className={styles.connectionsEmpty}>No users found.</div> : null}
+        {!loading ? filteredRows.map((row) => {
+          const rowId = row._id || row.id
+          const isPending = pendingUnfollowId === rowId
+          return (
+            <div key={rowId} className={styles.connectionsItem}>
+              <div className={styles.connectionsUser}>
+                <img className={styles.connectionsAvatar} src={getAvatarUrl({ username: row.username, fullName: row.fullName, avatarUrl: row.avatarUrl })} alt={row.username || 'user'} />
+                <div className={styles.connectionsMeta}>
+                  <div className={styles.connectionsUsername}>{row.username || 'user'}</div>
+                  <div className={styles.connectionsName}>{row.fullName || row.bio || ''}</div>
+                </div>
+              </div>
+              {activeTab === 'following' ? (
+                <button type="button" className={styles.connectionsActionBtn} disabled={isPending} onClick={() => setConfirmUnfollowUser(row)}>
+                  {isPending ? 'Processing...' : 'Following'}
+                </button>
+              ) : (
+                <span className={styles.connectionsTag}>Follower</span>
+              )}
+            </div>
+          )
+        }) : null}
+      </div>
+
+      {confirmUnfollowUser ? (
+        <div className={styles.confirmLayer} onMouseDown={() => setConfirmUnfollowUser(null)}>
+          <div className={styles.confirmCard} onMouseDown={(event) => event.stopPropagation()}>
+            <img className={styles.confirmAvatar} src={getAvatarUrl({ username: confirmUnfollowUser.username, fullName: confirmUnfollowUser.fullName, avatarUrl: confirmUnfollowUser.avatarUrl })} alt={confirmUnfollowUser.username || 'user'} />
+            <div className={styles.confirmText}>
+              If you change your mind, you'll have to request to follow @{confirmUnfollowUser.username} again.
+            </div>
+            <button type="button" className={`${styles.confirmBtn} ${styles.confirmDanger}`} onClick={() => void handleUnfollow(confirmUnfollowUser)}>
+              Unfollow
+            </button>
+            <button type="button" className={styles.confirmBtn} onClick={() => setConfirmUnfollowUser(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function ProfilePage() {
   const { username = '' } = useParams()
   const api = useApi()
   const usersApi = useUsersApi()
   const messagesApi = useMessagesApi()
+  const storiesApi = useStoriesApi()
   const toast = useToast()
   const nav = useNavigate()
   const modal = useModal()
   const { state } = useAppStore()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
-  const [activeTab, setActiveTab] = useState<'posts' | 'reels' | 'tagged'>('posts')
+  const [archivedStories, setArchivedStories] = useState<StoryItem[]>([])
+  const [archiveLoading, setArchiveLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'posts' | 'reels' | 'tagged' | 'archive'>('posts')
   const [followPending, setFollowPending] = useState(false)
   const [messagePending, setMessagePending] = useState(false)
 
   const isOwnProfile = !!state.username && state.username === username
 
   useEffect(() => {
+    if (!isOwnProfile && activeTab === 'archive') setActiveTab('posts')
+  }, [activeTab, isOwnProfile])
+
+  useEffect(() => {
     let cancelled = false
     async function load() {
       try {
-        const [profileRes, postsRes] = await Promise.all([
+        setArchiveLoading(isOwnProfile)
+        const [profileRes, postsRes, archiveRes] = await Promise.all([
           usersApi.getProfile(username),
           api.get('/posts?page=1&limit=100'),
+          isOwnProfile ? storiesApi.listArchive() : Promise.resolve([] as StoryItem[]),
         ])
 
         if (cancelled) return
@@ -171,19 +328,38 @@ export default function ProfilePage() {
         const mine = allPosts.filter((item) => String(item.authorUsername || item.authorId || '') === username)
         setPosts(mine)
         setProfile(profileRes)
+        setArchivedStories(archiveRes || [])
       } catch (error: any) {
+        if (cancelled) return
         toast.push(error?.message || 'Không tải được trang cá nhân')
+      } finally {
+        if (!cancelled) setArchiveLoading(false)
       }
     }
     if (username) load()
     return () => { cancelled = true }
-  }, [api, toast, username, usersApi])
+  }, [api, isOwnProfile, storiesApi, toast, username, usersApi])
 
   const reelPosts = useMemo(() => posts.filter(isReelPost), [posts])
-  const shown = activeTab === 'posts' ? posts : activeTab === 'reels' ? reelPosts : []
+  const shownPosts = activeTab === 'posts' ? posts : activeTab === 'reels' ? reelPosts : []
+  const archiveGroup = useMemo<StoryGroup[]>(() => (
+    isOwnProfile && profile
+      ? [{
+          id: `archive-${profile._id}`,
+          authorId: profile._id,
+          username,
+          avatarUrl: profile.avatarUrl,
+          hasUnseen: false,
+          latestCreatedAt: archivedStories[0]?.createdAt,
+          stories: archivedStories,
+        }]
+      : []
+  ), [archivedStories, isOwnProfile, profile, username])
   const avatarSrc = getAvatarUrl({ username, fullName: profile?.fullName, avatarUrl: profile?.avatarUrl })
   const displayName = profile?.fullName?.trim() || username
   const canMessage = !isOwnProfile && !!profile?._id
+  const followersCount = profile?.counts?.followers ?? 0
+  const followingCount = profile?.counts?.following ?? 0
 
   const openDetail = (post: Post) => {
     modal.open(
@@ -191,6 +367,21 @@ export default function ProfilePage() {
         post={post}
         onChanged={() => {
           setPosts((prev) => prev.map((item) => (item._id === post._id ? { ...item, commentsCount: (item.commentsCount || 0) + 1 } : item)))
+        }}
+      />,
+    )
+  }
+
+  const openArchiveViewer = (startIndex: number) => {
+    if (!archiveGroup.length) return
+    modal.openFullscreen(
+      <StoryViewer
+        groups={archiveGroup}
+        startGroupIndex={0}
+        startItemIndex={startIndex}
+        variant="archive"
+        onChanged={(items) => {
+          setArchivedStories(items[0]?.stories || [])
         }}
       />,
     )
@@ -243,6 +434,30 @@ export default function ProfilePage() {
     }
   }
 
+  const openConnectionsModal = (tab: FollowListTab) => {
+    if (!isOwnProfile || !profile) return
+    modal.open(
+      <ConnectionsModal
+        username={username}
+        usersApi={usersApi}
+        initialTab={tab}
+        onUnfollow={() => {
+          setProfile((prev) => (
+            prev
+              ? {
+                  ...prev,
+                  counts: {
+                    ...prev.counts,
+                    following: Math.max(0, Number(prev.counts?.following || 0) - 1),
+                  },
+                }
+              : prev
+          ))
+        }}
+      />,
+    )
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.container}>
@@ -289,8 +504,20 @@ export default function ProfilePage() {
 
             <div className={styles.stats}>
               <div className={styles.stat}><b>{posts.length}</b> posts</div>
-              <div className={styles.stat}><b>{profile?.counts?.followers ?? 0}</b> followers</div>
-              <div className={styles.stat}><b>{profile?.counts?.following ?? 0}</b> following</div>
+              {isOwnProfile ? (
+                <button type="button" className={`${styles.stat} ${styles.statBtn}`} onClick={() => openConnectionsModal('followers')}>
+                  <b>{followersCount}</b> followers
+                </button>
+              ) : (
+                <div className={styles.stat}><b>{followersCount}</b> followers</div>
+              )}
+              {isOwnProfile ? (
+                <button type="button" className={`${styles.stat} ${styles.statBtn}`} onClick={() => openConnectionsModal('following')}>
+                  <b>{followingCount}</b> following
+                </button>
+              ) : (
+                <div className={styles.stat}><b>{followingCount}</b> following</div>
+              )}
             </div>
 
             <div className={styles.identityBlock}>
@@ -322,10 +549,24 @@ export default function ProfilePage() {
           <button className={`${styles.tab} ${activeTab === 'posts' ? styles.tabActive : ''}`} onClick={() => setActiveTab('posts')}><IconGrid /> <span>Posts</span></button>
           <button className={`${styles.tab} ${activeTab === 'reels' ? styles.tabActive : ''}`} onClick={() => setActiveTab('reels')}><IconReel /> <span>Reels</span></button>
           <button className={`${styles.tab} ${activeTab === 'tagged' ? styles.tabActive : ''}`} onClick={() => setActiveTab('tagged')}><IconTagged /> <span>Tagged</span></button>
+          {isOwnProfile ? <button className={`${styles.tab} ${activeTab === 'archive' ? styles.tabActive : ''}`} onClick={() => setActiveTab('archive')}><IconArchive /> <span>Archive</span></button> : null}
         </section>
 
         <section className={styles.grid}>
-          {shown.map((post) => {
+          {activeTab === 'archive' ? archivedStories.map((story, index) => {
+            const thumb = getArchivedStoryThumb(story)
+            return (
+              <button key={story.id} className={styles.tile} type="button" onClick={() => openArchiveViewer(index)}>
+                {thumb.kind === 'image' ? <img src={thumb.src} alt={story.authorUsername || 'story archive'} loading="lazy" /> : null}
+                {thumb.kind === 'video' ? <ReelTilePreview src={thumb.src} /> : null}
+                {thumb.kind === 'empty' ? <div className={styles.tileFallback}>Khong co media</div> : null}
+                <span className={styles.storyBadge}>{story.mediaType === 'video' ? 'Story video' : 'Story image'}</span>
+                <span className={styles.storyMetaBadge}>{formatArchiveDate(story.archivedAt || story.createdAt)} · {story.viewersCount || 0} views</span>
+                <span className={styles.tileOverlay}><span>Mo kho luu tru</span></span>
+              </button>
+            )
+          }) : null}
+          {(activeTab !== 'archive' ? shownPosts : []).map((post) => {
             const thumb = getTileThumb(post)
             return (
               <button key={post._id} className={styles.tile} type="button" onClick={() => openDetail(post)}>
@@ -337,7 +578,9 @@ export default function ProfilePage() {
               </button>
             )
           })}
-          {!shown.length ? <div className={styles.emptyState}>{activeTab === 'posts' ? 'Chưa có bài viết.' : activeTab === 'reels' ? 'Chưa có reel nào.' : 'Chưa có bài viết được gắn thẻ.'}</div> : null}
+          {activeTab !== 'archive' && !shownPosts.length ? <div className={styles.emptyState}>{activeTab === 'posts' ? 'Chưa có bài viết.' : activeTab === 'reels' ? 'Chưa có reel nào.' : 'Chưa có bài viết được gắn thẻ.'}</div> : null}
+          {activeTab === 'archive' && !archiveLoading && !archivedStories.length ? <div className={styles.emptyState}>Chưa có story nào trong kho lưu trữ.</div> : null}
+          {activeTab === 'archive' && archiveLoading ? <div className={styles.emptyState}>Đang tải kho lưu trữ...</div> : null}
         </section>
 
         <footer className={styles.footer}>

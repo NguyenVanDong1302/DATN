@@ -35,7 +35,7 @@ function fileFilter(_req, file, cb) {
 const uploadMessageMedia = multer({
   storage,
   fileFilter,
-  limits: { files: 1, fileSize: 80 * 1024 * 1024 },
+  limits: { files: 10, fileSize: 80 * 1024 * 1024 },
 });
 
 module.exports = { uploadMessageMedia };

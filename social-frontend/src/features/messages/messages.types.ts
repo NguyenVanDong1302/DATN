@@ -18,6 +18,26 @@ export type ConversationItem = {
   blockedAt?: string | null
 }
 
+export type ChatMessageMediaItem = {
+  type: 'image' | 'video'
+  mediaUrl: string
+  thumbnailUrl?: string
+  fileName?: string
+  mimeType?: string
+  durationSec?: number
+}
+
+export type ChatMessageReaction = {
+  userId: string
+  username?: string
+  emoji: string
+}
+
+export type ChatMessageReactionSummary = {
+  emoji: string
+  count: number
+}
+
 export type ChatMessage = {
   id: string
   conversationId: string
@@ -32,6 +52,11 @@ export type ChatMessage = {
   fileName?: string
   mimeType?: string
   durationSec?: number
+  mediaItems?: ChatMessageMediaItem[]
+  reactions?: ChatMessageReaction[]
+  reactionSummary?: ChatMessageReactionSummary[]
+  reactionCount?: number
+  myReaction?: string
   heartCount?: number
   heartedByMe?: boolean
   replyToMessageId?: string
@@ -43,6 +68,14 @@ export type ChatMessage = {
   seenAt?: string | null
   createdAt: string
   optimistic?: boolean
+}
+
+export type DeletedMessageEvent = {
+  conversationId: string
+  messageId: string
+  deletedBy?: string
+  lastMessageText?: string
+  lastMessageAt?: string | null
 }
 
 export type SearchUsersResponse = {

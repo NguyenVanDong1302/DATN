@@ -10,7 +10,7 @@ const commentSchema = new mongoose.Schema(
     },
     authorId: { type: String, required: true, index: true },
     authorUsername: { type: String, required: true },
-    content: { type: String, required: true, trim: true, maxlength: 1000 },
+    content: { type: String, trim: true, maxlength: 1000, default: "" },
     parentCommentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",

@@ -12,6 +12,10 @@ const { buildDirectKey } = require("../utils/buildDirectKey");
 const { getPresence } = require("../utils/presenceStore");
 const { getIO } = require("../realtime/socket");
 
+const MAX_MESSAGE_MEDIA_FILES = 10;
+const MAX_MESSAGE_VIDEO_BYTES = 15 * 1024 * 1024;
+const MESSAGE_REACTION_EMOJIS = ["\u2764\uFE0F", "\u{1F602}", "\u{1F62E}", "\u{1F622}", "\u{1F621}", "\u{1F44D}"];
+
 async function resolveCurrentUserFromReq(req) {
   const rawUsername = (req.user?.username || req.headers["x-username"] || "").toString().trim();
   if (!rawUsername) {
@@ -68,7 +72,71 @@ function normalizePublicMediaUrl(raw = "") {
   return `${base}${clean.startsWith('/') ? clean : `/${clean}`}`;
 }
 
+function normalizeMediaItems(row) {
+  const items = Array.isArray(row?.mediaItems)
+    ? row.mediaItems
+        .map((item) => ({
+          type: item?.type === "video" ? "video" : "image",
+          mediaUrl: normalizePublicMediaUrl(item?.mediaUrl || item?.url || ""),
+          thumbnailUrl: normalizePublicMediaUrl(item?.thumbnailUrl || ""),
+          fileName: item?.fileName || "",
+          mimeType: item?.mimeType || "",
+          durationSec: Number(item?.durationSec || 0),
+        }))
+        .filter((item) => item.mediaUrl)
+    : [];
+
+  if (items.length) return items;
+
+  const mediaUrl = normalizePublicMediaUrl(row?.mediaUrl || "");
+  if (!mediaUrl) return [];
+
+  return [
+    {
+      type: row?.type === "video" ? "video" : "image",
+      mediaUrl,
+      thumbnailUrl: normalizePublicMediaUrl(row?.thumbnailUrl || ""),
+      fileName: row?.fileName || "",
+      mimeType: row?.mimeType || "",
+      durationSec: Number(row?.durationSec || 0),
+    },
+  ];
+}
+
+function normalizeReactions(row) {
+  if (Array.isArray(row?.reactions) && row.reactions.length) {
+    return row.reactions
+      .map((item) => ({
+        userId: String(item?.userId || "").trim(),
+        username: String(item?.username || "").trim(),
+        emoji: String(item?.emoji || "").trim(),
+      }))
+      .filter((item) => item.userId && item.emoji);
+  }
+
+  return Array.isArray(row?.reactionUserIds)
+    ? row.reactionUserIds
+        .map((userId) => String(userId || "").trim())
+        .filter(Boolean)
+        .map((userId) => ({ userId, username: "", emoji: MESSAGE_REACTION_EMOJIS[0] }))
+    : [];
+}
+
+function summarizeReactions(reactions = []) {
+  const counts = new Map();
+  for (const reaction of reactions) {
+    if (!reaction?.emoji) continue;
+    counts.set(reaction.emoji, (counts.get(reaction.emoji) || 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([emoji, count]) => ({ emoji, count }));
+}
+
 function serializeMessage(row, currentUserId = "") {
+  const mediaItems = normalizeMediaItems(row);
+  const firstMedia = mediaItems[0];
+  const reactions = normalizeReactions(row);
+  const reactionSummary = summarizeReactions(reactions);
+  const myReaction = reactions.find((item) => item.userId === String(currentUserId || ""))?.emoji || "";
   return {
     id: String(row._id),
     conversationId: String(row.conversationId),
@@ -76,15 +144,20 @@ function serializeMessage(row, currentUserId = "") {
     senderUsername: row.senderUsername,
     receiverId: row.receiverId,
     receiverUsername: row.receiverUsername,
-    type: row.type,
+    type: row.type || (firstMedia ? firstMedia.type : "text"),
     text: row.text || "",
-    mediaUrl: normalizePublicMediaUrl(row.mediaUrl || ""),
-    thumbnailUrl: normalizePublicMediaUrl(row.thumbnailUrl || ""),
-    fileName: row.fileName || "",
-    mimeType: row.mimeType || "",
-    durationSec: Number(row.durationSec || 0),
-    heartCount: Array.isArray(row.reactionUserIds) ? row.reactionUserIds.length : 0,
-    heartedByMe: Array.isArray(row.reactionUserIds) ? row.reactionUserIds.includes(String(currentUserId || "")) : false,
+    mediaUrl: firstMedia?.mediaUrl || normalizePublicMediaUrl(row.mediaUrl || ""),
+    thumbnailUrl: firstMedia?.thumbnailUrl || normalizePublicMediaUrl(row.thumbnailUrl || ""),
+    fileName: firstMedia?.fileName || row.fileName || "",
+    mimeType: firstMedia?.mimeType || row.mimeType || "",
+    durationSec: firstMedia ? Number(firstMedia.durationSec || 0) : Number(row.durationSec || 0),
+    mediaItems,
+    reactions,
+    reactionSummary,
+    reactionCount: reactions.length,
+    myReaction,
+    heartCount: reactions.length,
+    heartedByMe: myReaction === MESSAGE_REACTION_EMOJIS[0],
     replyToMessageId: row.replyToMessageId || "",
     replyToText: row.replyToText || "",
     replyToSenderUsername: row.replyToSenderUsername || "",
@@ -98,8 +171,15 @@ function serializeMessage(row, currentUserId = "") {
 }
 
 function getMessagePreview(message) {
-  if (message?.type === 'image') return 'Đã gửi một ảnh';
-  if (message?.type === 'video') return 'Đã gửi một video';
+  const mediaItems = normalizeMediaItems(message);
+  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Da gui 1 video' : 'Da gui 1 anh';
+  if (mediaItems.length > 1) {
+    const videoCount = mediaItems.filter((item) => item.type === 'video').length;
+    const imageCount = mediaItems.length - videoCount;
+    if (videoCount === mediaItems.length) return `Da gui ${videoCount} video`;
+    if (imageCount === mediaItems.length) return `Da gui ${imageCount} anh`;
+    return `Da gui ${mediaItems.length} tep`;
+  }
   return String(message?.text || '').trim();
 }
 
@@ -112,6 +192,15 @@ function probeVideoDuration(filePath) {
       resolve(Number.isFinite(value) ? value : 0);
     });
   });
+}
+
+async function cleanupUploadedMessageFiles(files = []) {
+  const list = Array.isArray(files) ? files : [files];
+  await Promise.all(
+    list
+      .filter((file) => file?.path)
+      .map((file) => fs.promises.unlink(file.path).catch(() => {})),
+  );
 }
 
 function serializeConversation(row, currentUserId, currentUsername, peer, member) {
@@ -355,7 +444,7 @@ async function getMemberState(conversationId, userId) {
   return getConversationMember(conversationId, userId);
 }
 
-async function sendMessage({ currentUser, conversationId, text, file = null, replyToMessageId = "" }) {
+async function sendMessage({ currentUser, conversationId, text, files = [], replyToMessageId = "" }) {
   const trimmed = String(text || "").trim();
   const conversation = await getConversationOrThrow({ currentUser, conversationId });
   const receiverId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
@@ -373,26 +462,43 @@ async function sendMessage({ currentUser, conversationId, text, file = null, rep
     throw new AppError("Bạn không thể nhắn tin cho người dùng này.", 403, "BLOCKED_BY_PEER");
   }
 
-  let messageType = 'text';
-  let mediaUrl = '';
-  let fileName = '';
-  let mimeType = '';
-  let durationSec = 0;
-  if (file) {
-    messageType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
-    mediaUrl = normalizePublicMediaUrl(`/uploads/messages/${path.basename(file.path)}`);
-    fileName = file.originalname || '';
-    mimeType = file.mimetype || '';
-    if (messageType === 'video') {
+  const uploadedFiles = (Array.isArray(files) ? files : [files]).filter(Boolean);
+  if (uploadedFiles.length > MAX_MESSAGE_MEDIA_FILES) {
+    await cleanupUploadedMessageFiles(uploadedFiles);
+    throw new AppError(`Chỉ được gửi tối đa ${MAX_MESSAGE_MEDIA_FILES} ảnh/video mỗi lần`, 400, "TOO_MANY_MESSAGE_MEDIA");
+  }
+
+  const mediaItems = [];
+  for (const file of uploadedFiles) {
+    const itemType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
+    if (itemType === 'video' && Number(file.size || 0) > MAX_MESSAGE_VIDEO_BYTES) {
+      await cleanupUploadedMessageFiles(uploadedFiles);
+      throw new AppError('Mỗi video trong tin nhắn chỉ được tối đa 15MB', 400, 'MESSAGE_VIDEO_TOO_LARGE');
+    }
+
+    let durationSec = 0;
+    if (itemType === 'video') {
       durationSec = await probeVideoDuration(file.path);
       if (durationSec > 60.2) {
-        try { await fs.promises.unlink(file.path); } catch (_err) {}
+        await cleanupUploadedMessageFiles(uploadedFiles);
         throw new AppError('Video gửi trong tin nhắn chỉ được tối đa 1 phút', 400, 'MESSAGE_VIDEO_TOO_LONG');
       }
     }
+
+    mediaItems.push({
+      type: itemType,
+      mediaUrl: normalizePublicMediaUrl(`/uploads/messages/${path.basename(file.path)}`),
+      thumbnailUrl: '',
+      fileName: file.originalname || '',
+      mimeType: file.mimetype || '',
+      durationSec,
+    });
   }
 
-  if (!trimmed && !mediaUrl) {
+  const firstMedia = mediaItems[0] || null;
+  const messageType = firstMedia ? firstMedia.type : 'text';
+
+  if (!trimmed && !mediaItems.length) {
     throw new AppError("Tin nhắn không được để trống", 400, "EMPTY_MESSAGE");
   }
 
@@ -416,15 +522,17 @@ async function sendMessage({ currentUser, conversationId, text, file = null, rep
     receiverUsername: receiver.username,
     type: messageType,
     text: trimmed,
-    mediaUrl,
-    fileName,
-    mimeType,
-    durationSec,
+    mediaUrl: firstMedia?.mediaUrl || '',
+    thumbnailUrl: firstMedia?.thumbnailUrl || '',
+    fileName: firstMedia?.fileName || '',
+    mimeType: firstMedia?.mimeType || '',
+    durationSec: firstMedia ? Number(firstMedia.durationSec || 0) : 0,
+    mediaItems,
     replyToMessageId: replySource ? String(replySource._id) : '',
     replyToText: replySource?.text || '',
     replyToSenderUsername: replySource?.senderUsername || '',
     replyToType: replySource?.type || '',
-    replyToMediaUrl: replySource?.mediaUrl || '',
+    replyToMediaUrl: normalizeMediaItems(replySource)[0]?.mediaUrl || normalizePublicMediaUrl(replySource?.mediaUrl || ''),
     status: nextStatus,
     seenAt: nextStatus === "seen" ? new Date() : null,
   });
@@ -486,17 +594,33 @@ async function sendMessage({ currentUser, conversationId, text, file = null, rep
   return payload;
 }
 
-async function toggleMessageHeart({ currentUser, conversationId, messageId, shouldLike = true }) {
+async function setMessageReaction({ currentUser, conversationId, messageId, emoji = "" }) {
   await getConversationOrThrow({ currentUser, conversationId });
   const message = await Message.findOne({ _id: String(messageId), conversationId: String(conversationId) });
   if (!message) {
-    throw new AppError('Không tìm thấy tin nhắn', 404, 'MESSAGE_NOT_FOUND');
+    throw new AppError('KhÃ´ng tÃ¬m tháº¥y tin nháº¯n', 404, 'MESSAGE_NOT_FOUND');
   }
+
+  const normalizedEmoji = String(emoji || "").trim();
+  if (normalizedEmoji && !MESSAGE_REACTION_EMOJIS.includes(normalizedEmoji)) {
+    throw new AppError('Invalid reaction', 400, 'INVALID_MESSAGE_REACTION');
+  }
+
   const userId = String(currentUser._id);
-  const current = new Set((message.reactionUserIds || []).map((item) => String(item)));
-  if (shouldLike) current.add(userId);
-  else current.delete(userId);
-  message.reactionUserIds = Array.from(current);
+  const currentReactions = normalizeReactions(message);
+  const existingReaction = currentReactions.find((item) => item.userId === userId);
+  const nextReactions = currentReactions.filter((item) => item.userId !== userId);
+
+  if (normalizedEmoji && existingReaction?.emoji !== normalizedEmoji) {
+    nextReactions.push({
+      userId,
+      username: currentUser.username,
+      emoji: normalizedEmoji,
+    });
+  }
+
+  message.reactions = nextReactions;
+  message.reactionUserIds = nextReactions.map((item) => item.userId);
   await message.save();
 
   const payload = serializeMessage(message.toObject ? message.toObject() : message, currentUser._id);
@@ -511,6 +635,94 @@ async function toggleMessageHeart({ currentUser, conversationId, messageId, shou
     }
     io.to(`conversation:${conversationId}`).emit('conversation:updated', { conversationId });
   }
+  return payload;
+}
+
+async function toggleMessageHeart({ currentUser, conversationId, messageId, shouldLike = true }) {
+  return setMessageReaction({
+    currentUser,
+    conversationId,
+    messageId,
+    emoji: shouldLike ? MESSAGE_REACTION_EMOJIS[0] : '',
+  });
+}
+
+async function deleteMessage({ currentUser, conversationId, messageId }) {
+  const conversation = await getConversationOrThrow({ currentUser, conversationId });
+  const message = await Message.findOne({ _id: String(messageId), conversationId: String(conversation._id) });
+  if (!message) {
+    throw new AppError('KhÃ´ng tÃ¬m tháº¥y tin nháº¯n', 404, 'MESSAGE_NOT_FOUND');
+  }
+  if (String(message.senderId) !== String(currentUser._id)) {
+    throw new AppError('You can only revoke your own message', 403, 'FORBIDDEN_MESSAGE_DELETE');
+  }
+
+  const files = new Set();
+  collectPossibleMediaPaths(message.toObject ? message.toObject() : message).forEach((rawPath) => {
+    const resolved = resolveLocalPath(rawPath);
+    if (resolved) files.add(resolved);
+  });
+
+  await Message.deleteOne({ _id: message._id });
+  await Promise.all(Array.from(files).map((filePath) => safeUnlink(filePath)));
+  await Notification.deleteMany({ type: 'message', targetType: 'conversation', targetId: String(message._id) }).catch(() => {});
+
+  if (message.status !== 'seen') {
+    const receiverMember = await ConversationMember.findOne({
+      conversationId: String(conversation._id),
+      userId: String(message.receiverId),
+    });
+    if (receiverMember?.unreadCount > 0) {
+      await ConversationMember.updateOne(
+        { conversationId: String(conversation._id), userId: String(message.receiverId) },
+        { $inc: { unreadCount: -1 } },
+      );
+    }
+  }
+
+  const latestMessage = await Message.findOne({ conversationId: String(conversation._id) }).sort({ createdAt: -1 });
+  const nextLastMessageText = latestMessage ? getMessagePreview(latestMessage) : '';
+  const nextLastMessageAt = latestMessage?.createdAt || null;
+  const nextLastMessageSenderId = latestMessage?.senderId || '';
+
+  await Conversation.updateOne(
+    { _id: conversation._id },
+    {
+      $set: {
+        lastMessageText: nextLastMessageText,
+        lastMessageAt: nextLastMessageAt,
+        lastMessageSenderId: nextLastMessageSenderId,
+      },
+    },
+  );
+
+  await ConversationMember.updateMany(
+    { conversationId: String(conversation._id), lastReadMessageId: String(message._id) },
+    {
+      $set: {
+        lastReadMessageId: latestMessage ? String(latestMessage._id) : '',
+      },
+    },
+  );
+
+  const payload = {
+    conversationId: String(conversation._id),
+    messageId: String(message._id),
+    deletedBy: String(currentUser._id),
+    lastMessageText: nextLastMessageText,
+    lastMessageAt: nextLastMessageAt,
+  };
+
+  const io = getSocketIOOrNull();
+  if (io) {
+    io.to(`conversation:${conversation._id}`).emit('message:deleted', payload);
+    const peerId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
+    const peer = peerId ? await User.findById(peerId).select('_id username').lean() : null;
+    if (peer) emitToUser(io, String(peer._id), peer.username, 'message:deleted', payload);
+    emitToUser(io, String(currentUser._id), currentUser.username, 'message:deleted', payload);
+    await emitConversationSnapshot(io, String(conversation._id), conversation.memberUsernames || []);
+  }
+
   return payload;
 }
 
@@ -625,6 +837,9 @@ function collectPossibleMediaPaths(messageDoc) {
     messageDoc?.videoUrl,
     messageDoc?.storyReply?.mediaUrl,
     messageDoc?.storyReply?.thumbnailUrl,
+    ...(Array.isArray(messageDoc?.mediaItems)
+      ? messageDoc.mediaItems.flatMap((item) => [item?.mediaUrl, item?.thumbnailUrl])
+      : []),
   ].filter(Boolean);
   return values.map((v) => String(v));
 }
@@ -633,11 +848,22 @@ function resolveLocalPath(raw) {
   if (!raw) return null;
   const clean = String(raw).replace(/\\/g, "/").trim();
   if (!clean) return null;
-  if (/^https?:\/\//i.test(clean) || /^data:/i.test(clean) || /^blob:/i.test(clean)) return null;
-  const uploadsIndex = clean.toLowerCase().indexOf("/uploads/");
-  const relative = uploadsIndex >= 0 ? clean.slice(uploadsIndex + 1) : clean.replace(/^\/+/, "");
-  const candidate = path.join(process.cwd(), "public", relative.replace(/^uploads\//, "uploads/"));
-  if (!candidate.includes(path.join(process.cwd(), "public"))) return null;
+  if (/^data:/i.test(clean) || /^blob:/i.test(clean)) return null;
+
+  let normalized = clean;
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      normalized = new URL(normalized).pathname || "";
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  const uploadsIndex = normalized.toLowerCase().indexOf("/uploads/");
+  const relative = uploadsIndex >= 0 ? normalized.slice(uploadsIndex + 1) : normalized.replace(/^\/+/, "");
+  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+  const candidate = path.resolve(uploadsRoot, relative.replace(/^uploads\//, ""));
+  if (!candidate.toLowerCase().startsWith(uploadsRoot.toLowerCase())) return null;
   return candidate;
 }
 
@@ -702,10 +928,12 @@ module.exports = {
   getConversationDetail,
   listMessages,
   sendMessage,
+  setMessageReaction,
   toggleMessageHeart,
   markConversationRead,
   getUnreadSummary,
   getConversationSettings,
   updateConversationSettings,
   clearConversationHistory,
+  deleteMessage,
 };

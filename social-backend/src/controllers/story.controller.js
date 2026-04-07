@@ -9,6 +9,7 @@ const { AppError } = require('../utils/errors');
 
 const execFileAsync = promisify(execFile);
 const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+const STORY_LIFETIME_MS = 10 * 60 * 1000;
 const thumbnailDir = path.join(postMediaDir, 'thumbnails');
 fs.mkdirSync(thumbnailDir, { recursive: true });
 
@@ -16,6 +17,7 @@ function normalizePublicMediaUrl(url = '') {
   const raw = String(url || '').trim().replace(/\\/g, '/');
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^(data:|blob:)/i.test(raw)) return raw;
   const uploadsIndex = raw.toLowerCase().indexOf('/uploads/');
   if (uploadsIndex >= 0) return `${MEDIA_PUBLIC_BASE_URL}${raw.slice(uploadsIndex)}`;
   if (raw.toLowerCase().startsWith('uploads/')) return `${MEDIA_PUBLIC_BASE_URL}/${raw}`;
@@ -70,7 +72,57 @@ async function buildVideoThumbnail(filePath, fileBaseName) {
   return '';
 }
 
+function getArchiveCutoff(now = new Date()) {
+  return new Date(now.getTime() - STORY_LIFETIME_MS);
+}
+
+async function archiveExpiredStories(now = new Date()) {
+  const cutoff = getArchiveCutoff(now);
+  await Story.updateMany(
+    {
+      archivedAt: null,
+      $or: [
+        { expiresAt: { $lte: now } },
+        { createdAt: { $lte: cutoff } },
+      ],
+    },
+    {
+      $set: {
+        archivedAt: now,
+        expiresAt: now,
+      },
+    },
+  );
+}
+
+function normalizeStoryViews(story) {
+  const rows = Array.isArray(story?.views) ? story.views : [];
+  const byUserId = new Map();
+  for (const row of rows) {
+    const userId = String(row?.userId || '').trim();
+    if (!userId) continue;
+    const next = {
+      userId,
+      username: String(row?.username || '').trim(),
+      viewedAt: row?.viewedAt ? new Date(row.viewedAt) : null,
+    };
+    const current = byUserId.get(userId);
+    const nextTs = next.viewedAt?.getTime() || 0;
+    const currentTs = current?.viewedAt?.getTime?.() || 0;
+    if (!current || nextTs >= currentTs) byUserId.set(userId, next);
+  }
+  return Array.from(byUserId.values()).sort((a, b) => (b.viewedAt?.getTime() || 0) - (a.viewedAt?.getTime() || 0));
+}
+
+function hasViewedStory(story, viewerId = '') {
+  const normalizedViewerId = String(viewerId || '').trim();
+  if (!normalizedViewerId) return false;
+  if (String(story?.authorId || '') === normalizedViewerId) return true;
+  return normalizeStoryViews(story).some((row) => row.userId === normalizedViewerId);
+}
+
 function serializeStory(story, viewerId = '') {
+  const views = normalizeStoryViews(story);
   return {
     _id: String(story._id),
     id: String(story._id),
@@ -82,8 +134,21 @@ function serializeStory(story, viewerId = '') {
     caption: story.caption || '',
     createdAt: story.createdAt,
     expiresAt: story.expiresAt,
+    archivedAt: story.archivedAt || null,
+    isArchived: Boolean(story.archivedAt),
     likesCount: Array.isArray(story.likes) ? story.likes.length : 0,
     likedByMe: Boolean(viewerId) && Array.isArray(story.likes) ? story.likes.includes(String(viewerId)) : false,
+    viewersCount: views.length,
+    viewedByMe: hasViewedStory(story, viewerId),
+  };
+}
+
+function serializeStoryViewer(view, user) {
+  return {
+    userId: String(view.userId),
+    username: user?.username || view.username || 'user',
+    avatarUrl: normalizePublicMediaUrl(user?.avatarUrl || ''),
+    viewedAt: view.viewedAt || null,
   };
 }
 
@@ -95,12 +160,20 @@ async function resolveViewer(req) {
   return viewer;
 }
 
+function isActiveStory(story, now = new Date()) {
+  if (!story) return false;
+  if (story.archivedAt) return false;
+  if (!story.expiresAt) return false;
+  return new Date(story.expiresAt).getTime() > now.getTime();
+}
+
 async function listStories(req, res, next) {
   try {
+    const now = new Date();
     const viewer = await resolveViewer(req);
-    await Story.deleteMany({ expiresAt: { $lte: new Date() } });
+    await archiveExpiredStories(now);
     const hiddenAuthorIds = new Set((viewer.hiddenStoryAuthorIds || []).map(String));
-    const rows = await Story.find({ expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 }).lean();
+    const rows = await Story.find({ archivedAt: null, expiresAt: { $gt: now } }).sort({ createdAt: -1 }).lean();
     const grouped = new Map();
     for (const row of rows) {
       const key = String(row.authorId);
@@ -111,32 +184,52 @@ async function listStories(req, res, next) {
 
     const ids = Array.from(grouped.keys());
     const users = await User.find({ _id: { $in: ids } }).select('_id username avatarUrl').lean();
-    const userMap = new Map(users.map((u) => [String(u._id), u]));
+    const userMap = new Map(users.map((user) => [String(user._id), user]));
+    const viewerId = String(viewer._id);
 
     const items = ids
       .map((authorId) => {
-        const stories = grouped.get(authorId) || [];
+        const stories = (grouped.get(authorId) || []).map((story) => serializeStory(story, viewerId));
         const author = userMap.get(authorId);
         const latest = stories[0];
         return {
           id: authorId,
           authorId,
           username: author?.username || latest?.authorUsername || 'user',
-          avatarUrl: author?.avatarUrl || '',
-          hasUnseen: true,
+          avatarUrl: normalizePublicMediaUrl(author?.avatarUrl || ''),
+          hasUnseen: authorId === viewerId ? false : stories.some((story) => !story.viewedByMe),
           latestCreatedAt: latest?.createdAt,
-          stories: stories.map((story) => serializeStory(story, String(viewer._id))),
+          stories,
         };
       })
       .sort((a, b) => new Date(b.latestCreatedAt || 0).getTime() - new Date(a.latestCreatedAt || 0).getTime());
 
-    const myIndex = items.findIndex((entry) => entry.authorId === String(viewer._id));
+    const myIndex = items.findIndex((entry) => entry.authorId === viewerId);
     if (myIndex > 0) {
       const [mine] = items.splice(myIndex, 1);
       items.unshift(mine);
     }
 
     res.json({ ok: true, data: { items } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listArchivedStories(req, res, next) {
+  try {
+    const now = new Date();
+    const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
+    const rows = await Story.find({ authorId: String(viewer._id), archivedAt: { $ne: null } })
+      .sort({ archivedAt: -1, createdAt: -1 })
+      .lean();
+    res.json({
+      ok: true,
+      data: {
+        items: rows.map((story) => serializeStory(story, String(viewer._id))),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -158,7 +251,8 @@ async function createStory(req, res, next) {
       mediaUrl,
       thumbnailUrl,
       caption: String(req.body?.caption || '').trim(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + STORY_LIFETIME_MS),
+      archivedAt: null,
     });
 
     res.status(201).json({ ok: true, data: { item: serializeStory(story, String(viewer._id)) } });
@@ -167,11 +261,72 @@ async function createStory(req, res, next) {
   }
 }
 
+async function markStoryViewed(req, res, next) {
+  try {
+    const now = new Date();
+    const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
+    const story = await Story.findById(String(req.params.storyId));
+    if (!story || !isActiveStory(story, now)) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
+
+    const viewerId = String(viewer._id);
+    if (String(story.authorId) !== viewerId) {
+      const nextViews = normalizeStoryViews(story).filter((row) => row.userId !== viewerId);
+      nextViews.unshift({
+        userId: viewerId,
+        username: viewer.username,
+        viewedAt: now,
+      });
+      story.views = nextViews;
+      await story.save();
+    }
+
+    res.json({
+      ok: true,
+      data: {
+        storyId: String(story._id),
+        viewedByMe: true,
+        viewersCount: normalizeStoryViews(story).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listStoryViewers(req, res, next) {
+  try {
+    const now = new Date();
+    const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
+    const story = await Story.findById(String(req.params.storyId)).lean();
+    if (!story) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
+    if (String(story.authorId) !== String(viewer._id)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
+
+    const views = normalizeStoryViews(story);
+    const users = await User.find({ _id: { $in: views.map((row) => row.userId) } }).select('_id username avatarUrl').lean();
+    const userMap = new Map(users.map((user) => [String(user._id), user]));
+    const items = views.map((row) => serializeStoryViewer(row, userMap.get(row.userId)));
+
+    res.json({
+      ok: true,
+      data: {
+        count: items.length,
+        items,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function toggleStoryLike(req, res, next) {
   try {
+    const now = new Date();
     const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
     const story = await Story.findById(String(req.params.storyId));
-    if (!story || story.expiresAt <= new Date()) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
+    if (!story || !isActiveStory(story, now)) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
     const me = String(viewer._id);
     const idx = (story.likes || []).indexOf(me);
     let liked = false;
@@ -189,9 +344,11 @@ async function toggleStoryLike(req, res, next) {
 
 async function hideStory(req, res, next) {
   try {
+    const now = new Date();
     const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
     const story = await Story.findById(String(req.params.storyId)).lean();
-    if (!story || story.expiresAt <= new Date()) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
+    if (!story || !isActiveStory(story, now)) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
     const authorId = String(story.authorId);
     const viewerId = String(viewer._id);
     if (authorId === viewerId) throw new AppError('Cannot hide your own story', 400, 'CANNOT_HIDE_OWN_STORY');
@@ -209,9 +366,11 @@ async function hideStory(req, res, next) {
 
 async function deleteStory(req, res, next) {
   try {
+    const now = new Date();
     const viewer = await resolveViewer(req);
+    await archiveExpiredStories(now);
     const story = await Story.findById(String(req.params.storyId));
-    if (!story || story.expiresAt <= new Date()) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
+    if (!story) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');
     if (String(story.authorId) !== String(viewer._id)) throw new AppError('Forbidden', 403, 'FORBIDDEN');
 
     safeUnlink(toLocalMediaPath(story.mediaUrl));
@@ -226,7 +385,10 @@ async function deleteStory(req, res, next) {
 
 module.exports = {
   listStories,
+  listArchivedStories,
   createStory,
+  markStoryViewed,
+  listStoryViewers,
   toggleStoryLike,
   hideStory,
   deleteStory,
