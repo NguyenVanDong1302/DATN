@@ -6,6 +6,7 @@ const notificationRoutes = require("./notification.routes");
 const authRoutes = require("./auth.routes");
 const messageRoutes = require("./message.routes");
 const storyRoutes = require("./story.routes");
+const adminRoutes = require("./admin.routes");
 
 const router = express.Router();
 
@@ -19,6 +20,7 @@ router.use("/users", userRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/messages", messageRoutes);
 router.use("/stories", storyRoutes);
+router.use("/admin", adminRoutes);
 
 router.get("/whoami", sessionUser, (req, res) => {
   res.json({

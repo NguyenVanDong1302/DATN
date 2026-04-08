@@ -4,13 +4,16 @@ const { z } = require("zod");
 const Post = require("../models/Post");
 const { AppError } = require("../utils/errors");
 const Comment = require("../models/Comment");
+const PostReport = require("../models/PostReport");
 const User = require("../models/User");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
 const notificationService = require("../services/notification.service");
 
 const visibilityEnum = ["public", "friends", "private"];
-const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\\/,/$/ ,"");
+const MEDIA_PUBLIC_BASE_URL = (
+  process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000"
+).replace(/\/$/, "");
 
 const createPostSchema = z
   .object({
@@ -66,6 +69,10 @@ const updatePostSchema = z
       : {}),
     ...(data.tags !== undefined ? { tags: normalizeStringList(data.tags) } : {}),
   }));
+
+const reportPostSchema = z.object({
+  reason: z.string().trim().min(2).max(500).optional().default("Nội dung không phù hợp"),
+});
 
 function normalizeBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -512,6 +519,66 @@ async function removeLike(req, res, next) {
   }
 }
 
+async function reportPost(req, res, next) {
+  try {
+    const body = reportPostSchema.parse(req.body || {});
+    const post = await Post.findById(req.params.id);
+    if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+
+    const reporterId = String(req.user?.sub || "");
+    const reporterUsername = String(req.user?.username || "");
+    if (!reporterId || !reporterUsername) {
+      throw new AppError("Username required", 401, "UNAUTHORIZED");
+    }
+
+    const existed = await PostReport.findOne({
+      postId: post._id,
+      reporterId,
+      status: "pending",
+    }).select("_id");
+    if (existed) {
+      throw new AppError("You already reported this post", 409, "ALREADY_REPORTED");
+    }
+
+    await PostReport.create({
+      postId: post._id,
+      reporterId,
+      reporterUsername,
+      reason: body.reason || "Nội dung không phù hợp",
+      status: "pending",
+    });
+
+    post.reportCount = (Number(post.reportCount) || 0) + 1;
+    post.lastReportedAt = new Date();
+    if (post.moderationStatus === "normal") {
+      post.moderationStatus = "reported";
+    }
+    await post.save();
+
+    res.status(201).json({
+      ok: true,
+      message: "Reported successfully",
+      data: {
+        postId: String(post._id),
+        reportCount: post.reportCount,
+        moderationStatus: post.moderationStatus,
+        lastReportedAt: post.lastReportedAt,
+      },
+    });
+  } catch (err) {
+    if (err?.name === "ZodError") {
+      return next(
+        new AppError(
+          err.issues?.[0]?.message || err.errors?.[0]?.message || "Invalid input",
+          400,
+          "VALIDATION_ERROR",
+        ),
+      );
+    }
+    next(err);
+  }
+}
+
 async function addComment(req, res, next) {
   try {
     const body = addCommentSchema.parse(req.body);
@@ -686,6 +753,7 @@ module.exports = {
   deletePost,
   toggleLike,
   removeLike,
+  reportPost,
   addComment,
   listComments,
   deleteComment,

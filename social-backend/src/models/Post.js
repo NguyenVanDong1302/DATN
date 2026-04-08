@@ -55,6 +55,15 @@ const postSchema = new mongoose.Schema(
     viewsCount: { type: Number, default: 0, min: 0 },
     lastViewedAt: { type: Date, default: null },
     likes: { type: [String], default: [] },
+    reportCount: { type: Number, default: 0, min: 0 },
+    lastReportedAt: { type: Date, default: null },
+    moderationStatus: {
+      type: String,
+      enum: ["normal", "reported", "violating"],
+      default: "normal",
+      index: true,
+    },
+    moderationReason: { type: String, default: "" },
   },
   { timestamps: true },
 );

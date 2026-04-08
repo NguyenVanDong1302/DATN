@@ -70,7 +70,8 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', formState)
       const token = res?.data?.token || ''
       const username = res?.data?.user?.username || ''
-      setState({ username, token })
+      const role = res?.data?.user?.role === 'admin' ? 'admin' : 'user'
+      setState({ username, token, role })
       navigate(redirectTo, { replace: true })
     } catch (err: any) {
       setError(err?.message || 'Đăng nhập thất bại')

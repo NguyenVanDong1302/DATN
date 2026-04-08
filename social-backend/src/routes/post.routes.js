@@ -11,6 +11,7 @@ const {
   deletePost,
   toggleLike,
   removeLike,
+  reportPost,
   addComment,
   listComments,
   deleteComment,
@@ -25,6 +26,7 @@ router.post("/", uploadPostMedia.array("media", 10), createPost);
 router.get("/", listPosts);
 router.get("/:id", getPost);
 router.post("/:id/view", recordView);
+router.post("/:id/report", reportPost);
 router.patch("/:id", updatePost);
 router.delete("/:id", deletePost);
 

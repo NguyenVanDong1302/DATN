@@ -29,8 +29,9 @@ export default function RegisterPage() {
       const res = await api.post('/auth/register', form)
       const token = res?.data?.token || res?.data?.user?.token || res?.data?.token || ''
       const username = res?.data?.user?.username || form.username
+      const role = res?.data?.user?.role === 'admin' ? 'admin' : 'user'
       if (token && username) {
-        setState({ token, username })
+        setState({ token, username, role })
       }
       navigate('/', { replace: true })
     } catch (err: any) {

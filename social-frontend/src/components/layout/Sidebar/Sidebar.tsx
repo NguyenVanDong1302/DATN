@@ -37,6 +37,9 @@ export default function Sidebar({ onToggleNotifications, onToggleSearch, notific
     { to: '/explore', label: 'Khám phá', icon: <Icon><svg aria-label="Explore" className="x1lliihq x1n2onr6 x5n08af" fill="currentColor" height="24" role="img" viewBox="0 0 24 24" width="24"><title>Explore</title><polygon fill="none" points="13.941 13.953 7.581 16.424 10.06 10.056 16.42 7.585 13.941 13.953" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></polygon><polygon fill-rule="evenodd" points="10.06 10.056 13.949 13.945 7.581 16.424 10.06 10.056"></polygon><circle cx="12.001" cy="12.005" fill="none" r="10.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></circle></svg></Icon> },
     { label: 'Thông báo', icon: <Icon>{notificationsOpen ? '❤️' : '🤍'}</Icon>, action: onToggleNotifications },
     { to: '/create', label: 'Tạo', icon: <Icon><svg aria-label="New post" className="x1lliihq x1n2onr6 x5n08af" fill="currentColor" height="24" role="img" viewBox="0 0 24 24" width="24"><title>New post</title><path d="M21 11h-8V3a1 1 0 1 0-2 0v8H3a1 1 0 1 0 0 2h8v8a1 1 0 1 0 2 0v-8h8a1 1 0 1 0 0-2Z"></path></svg></Icon> },
+    ...(state.role === 'admin'
+      ? [{ to: '/admin', label: 'Quản trị', icon: <Icon>ADM</Icon> } as NavItem]
+      : []),
     { to: `/profile/${profileSlug}`, label: 'Trang cá nhân', icon: <Icon>👤</Icon> },
   ]
 
@@ -46,7 +49,7 @@ export default function Sidebar({ onToggleNotifications, onToggleSearch, notific
     } catch {
       // ignore firebase logout error when using backend auth only
     }
-    setState({ username: '', token: '' })
+    setState({ username: '', token: '', role: 'user' })
     navigate('/login', { replace: true })
   }
 

@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       const username = firebaseUser?.email?.split('@')[0]?.trim() || firebaseUser?.displayName?.trim().replace(/\s+/g, '_').toLowerCase() || ''
-      setState({ username, token: firebaseUser?.uid || '' })
+      setState({ username, token: firebaseUser?.uid || '', role: 'user' })
       setLoading(false)
     })
 
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await signOut(auth)
         }
         setUser(null)
-        setState({ username: '', token: '' })
+        setState({ username: '', token: '', role: 'user' })
       },
     }),
     [user, loading, setState],

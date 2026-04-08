@@ -7,7 +7,8 @@ function auth(req, res, next) {
   if (!token) return next(new AppError("Missing token", 401, "UNAUTHORIZED"));
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const secret = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+    const payload = jwt.verify(token, secret);
     req.user = payload; // { sub: userId }
     next();
   } catch (e) {

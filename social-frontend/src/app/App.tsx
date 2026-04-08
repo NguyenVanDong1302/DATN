@@ -14,6 +14,7 @@ import MessagesPage from '../pages/Messages/MessagesPage'
 import SearchPage from '../pages/SearchPage'
 import CreatePostPage from '../pages/CreatePostPage'
 import PostPage from '../pages/PostPage'
+import AdminPage from '../pages/Admin/AdminPage'
 import LoginPage from '../pages/Auth/LoginPage'
 import RegisterPage from '../pages/Auth/RegisterPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
@@ -54,6 +55,7 @@ export default function App() {
                       <Route path="/search" element={<SearchPage />} />
                       <Route path="/create" element={<CreatePostPage />} />
                       <Route path="/post/:id" element={<PostPage />} />
+                      <Route path="/admin" element={<AdminPage />} />
                     </Route>
                   </Route>
                 </Routes>
