@@ -16,9 +16,9 @@
   .ig-msg__detail {
     position: absolute;
     right: 0;
-    top: 72px;
+    top: 0;
     bottom: 0;
-    width: min(320px, 92vw);
+    width: min(360px, 92vw);
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.08);
     z-index: 5;
   }
@@ -132,8 +132,17 @@
   }
 
   .ig-msg.is-compact .ig-msg__detail {
-    top: 56px;
-    width: min(360px, 100vw);
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    width: 100%;
+    border-left: 0;
+    box-shadow: none;
+    z-index: 7;
+  }
+
+  .ig-msg.is-compact .ig-msg__detailInlineActions {
+    flex-wrap: wrap;
   }
 }
 
@@ -177,6 +186,11 @@
   .ig-msg.is-compact .ig-msg__detail {
     width: 100vw;
   }
+
+  .ig-msg.is-compact .ig-msg__detailSection,
+  .ig-msg.is-compact .ig-msg__detailFooter {
+    padding-inline: 14px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -199,5 +213,13 @@
 
   .ig-msg.is-compact .ig-msg__composerWrap {
     padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .ig-msg.is-compact .ig-msg__detailHeader {
+    padding-inline: 12px;
+  }
+
+  .ig-msg.is-compact .ig-msg__detailFooter {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }

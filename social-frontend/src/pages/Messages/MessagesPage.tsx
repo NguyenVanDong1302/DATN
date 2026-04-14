@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
@@ -19,6 +19,74 @@ type PendingMediaItem = {
   file: File
   previewUrl: string
   type: 'image' | 'video'
+}
+
+type MessagesRouteState = {
+  conversationId?: string
+  directUser?: MessageUser
+}
+
+const MESSAGES_CACHE_TTL_MS = 30 * 1000
+
+const messagesPageCache: {
+  viewerUsername: string
+  hasConversationList: boolean
+  conversationListFetchedAt: number
+  conversations: ConversationItem[]
+  activeId: string
+  messagesByConversation: Record<string, ChatMessage[]>
+  settingsByConversation: Record<string, ConversationSettings>
+  loadedMessagesByConversation: Record<string, boolean>
+  messageFetchedAtByConversation: Record<string, number>
+  mutedConversationIds: Record<string, boolean>
+} = {
+  viewerUsername: '',
+  hasConversationList: false,
+  conversationListFetchedAt: 0,
+  conversations: [],
+  activeId: '',
+  messagesByConversation: {},
+  settingsByConversation: {},
+  loadedMessagesByConversation: {},
+  messageFetchedAtByConversation: {},
+  mutedConversationIds: {},
+}
+
+function resetMessagesPageCache() {
+  messagesPageCache.hasConversationList = false
+  messagesPageCache.conversationListFetchedAt = 0
+  messagesPageCache.conversations = []
+  messagesPageCache.activeId = ''
+  messagesPageCache.messagesByConversation = {}
+  messagesPageCache.settingsByConversation = {}
+  messagesPageCache.loadedMessagesByConversation = {}
+  messagesPageCache.messageFetchedAtByConversation = {}
+  messagesPageCache.mutedConversationIds = {}
+}
+
+function touchConversationListCache() {
+  messagesPageCache.hasConversationList = true
+  messagesPageCache.conversationListFetchedAt = Date.now()
+}
+
+function touchMessageCache(conversationId: string) {
+  if (!conversationId) return
+  messagesPageCache.messageFetchedAtByConversation[conversationId] = Date.now()
+}
+
+function isFreshMessageCache(conversationId: string) {
+  const fetchedAt = messagesPageCache.messageFetchedAtByConversation[conversationId] || 0
+  return fetchedAt > 0 && Date.now() - fetchedAt < MESSAGES_CACHE_TTL_MS
+}
+
+function buildConversationSettings(item: ConversationItem): ConversationSettings {
+  return {
+    conversationId: item.id,
+    nickname: item.nickname || '',
+    isBlocked: Boolean(item.isBlocked),
+    blockedAt: item.blockedAt || null,
+    peer: item.peer,
+  }
 }
 
 function formatTime(value?: string | null) {
@@ -125,25 +193,35 @@ function RichMessageMedia({ message }: { message: ChatMessage }) {
 
 export default function MessagesPage() {
   const api = useMessagesApi()
+  const location = useLocation()
   const navigate = useNavigate()
   const { state } = useAppStore()
   const { socket } = useSocket()
+  const currentViewer = String(state.username || '')
+  if (messagesPageCache.viewerUsername && currentViewer && messagesPageCache.viewerUsername !== currentViewer) {
+    resetMessagesPageCache()
+  }
+  messagesPageCache.viewerUsername = currentViewer
+  const routeState = location.state as MessagesRouteState | null
+  const routeConversationId = String(routeState?.conversationId || '')
+  const initialActiveId = routeConversationId || messagesPageCache.activeId
   const [isCompactLayout, setIsCompactLayout] = useState(getCompactMessagesMatches)
   const [compactView, setCompactView] = useState<'inbox' | 'thread'>(() => (getCompactMessagesMatches() ? 'inbox' : 'thread'))
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !messagesPageCache.hasConversationList)
   const [sending, setSending] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [savingDetail, setSavingDetail] = useState(false)
-  const [conversations, setConversations] = useState<ConversationItem[]>([])
-  const [activeId, setActiveId] = useState('')
-  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>({})
+  const [conversations, setConversations] = useState<ConversationItem[]>(() => messagesPageCache.conversations)
+  const [activeId, setActiveId] = useState(initialActiveId)
+  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>(() => messagesPageCache.messagesByConversation)
+  const [settingsByConversation, setSettingsByConversation] = useState<Record<string, ConversationSettings>>(() => messagesPageCache.settingsByConversation)
+  const [mutedConversationIds, setMutedConversationIds] = useState<Record<string, boolean>>(() => messagesPageCache.mutedConversationIds)
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchUsersResponse>({ following: [], suggested: [] })
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [settings, setSettings] = useState<ConversationSettings | null>(null)
-  const [nicknameDraft, setNicknameDraft] = useState('')
+  const [nicknameDraft, setNicknameDraft] = useState(() => messagesPageCache.settingsByConversation[initialActiveId]?.nickname || '')
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [hoveredMessageId, setHoveredMessageId] = useState('')
@@ -151,15 +229,22 @@ export default function MessagesPage() {
   const [actionMenuMessageId, setActionMenuMessageId] = useState('')
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [mediaFiles, setMediaFiles] = useState<PendingMediaItem[]>([])
+  const [isNicknameEditorOpen, setIsNicknameEditorOpen] = useState(false)
   const contentScrollRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const pendingMediaRef = useRef<PendingMediaItem[]>([])
+  const conversationsRef = useRef(conversations)
+  const messagesByConversationRef = useRef(messagesByConversation)
+  const settingsByConversationRef = useRef(settingsByConversation)
+  const loadedMessagesRef = useRef<Record<string, boolean>>(messagesPageCache.loadedMessagesByConversation)
 
   const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId) || null, [conversations, activeId])
   const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
+  const settings = useMemo(() => settingsByConversation[activeId] || null, [settingsByConversation, activeId])
   const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
-  const isBlocked = Boolean(settings?.isBlocked || activeConversation?.isBlocked)
+  const isBlocked = Boolean(settings?.isBlocked ?? activeConversation?.isBlocked)
+  const isMuted = Boolean(mutedConversationIds[activeId])
   const shouldShowInbox = !isCompactLayout || compactView === 'inbox'
   const shouldShowThread = !isCompactLayout || compactView === 'thread'
   const shouldLoadActiveConversation = Boolean(activeId) && shouldShowThread
@@ -210,19 +295,107 @@ export default function MessagesPage() {
     pendingMediaRef.current = mediaFiles
   }, [mediaFiles])
 
+  useEffect(() => {
+    conversationsRef.current = conversations
+    messagesPageCache.conversations = conversations
+  }, [conversations])
+
+  useEffect(() => {
+    messagesByConversationRef.current = messagesByConversation
+    messagesPageCache.messagesByConversation = messagesByConversation
+  }, [messagesByConversation])
+
+  useEffect(() => {
+    settingsByConversationRef.current = settingsByConversation
+    messagesPageCache.settingsByConversation = settingsByConversation
+  }, [settingsByConversation])
+
+  useEffect(() => {
+    messagesPageCache.activeId = activeId
+  }, [activeId])
+
+  useEffect(() => {
+    messagesPageCache.mutedConversationIds = mutedConversationIds
+  }, [mutedConversationIds])
+
   useEffect(() => () => {
     for (const item of pendingMediaRef.current) URL.revokeObjectURL(item.previewUrl)
   }, [])
 
   useEffect(() => {
+    if (!conversations.length) return
+    setSettingsByConversation((prev) => {
+      let changed = false
+      const next = { ...prev }
+
+      for (const item of conversations) {
+        const candidate = buildConversationSettings(item)
+        const current = next[item.id]
+        if (
+          !current
+          || current.nickname !== candidate.nickname
+          || current.isBlocked !== candidate.isBlocked
+          || current.blockedAt !== candidate.blockedAt
+          || current.peer?.id !== candidate.peer?.id
+          || current.peer?.username !== candidate.peer?.username
+          || current.peer?.avatarUrl !== candidate.peer?.avatarUrl
+          || current.peer?.bio !== candidate.peer?.bio
+        ) {
+          next[item.id] = current ? { ...current, ...candidate, peer: candidate.peer } : candidate
+          changed = true
+        }
+      }
+
+      return changed ? next : prev
+    })
+  }, [conversations])
+
+  useEffect(() => {
+    if (!routeConversationId) return
+    setActiveId(routeConversationId)
+    if (routeState?.directUser) {
+      setConversations((prev) => (
+        prev.some((item) => item.id === routeConversationId)
+          ? prev
+          : [{
+              id: routeConversationId,
+              type: 'direct',
+              peer: routeState.directUser,
+              lastMessageText: '',
+              lastMessageAt: null,
+              unreadCount: 0,
+              nickname: '',
+              isBlocked: false,
+              blockedAt: null,
+            }, ...prev]
+      ))
+    }
+    if (isCompactLayout) {
+      setCompactView('thread')
+      setIsDetailOpen(false)
+    }
+  }, [routeConversationId, routeState?.directUser, isCompactLayout])
+
+  useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        setLoading(true)
+        const hasFreshConversationList = messagesPageCache.hasConversationList
+          && Date.now() - messagesPageCache.conversationListFetchedAt < MESSAGES_CACHE_TTL_MS
+        if (!messagesPageCache.hasConversationList) setLoading(true)
+        if (hasFreshConversationList) {
+          setLoading(false)
+          return
+        }
         const items = await api.getConversations()
         if (!mounted) return
+        touchConversationListCache()
         setConversations(items)
-        if (items[0]?.id) setActiveId((prev) => prev || items[0].id)
+        setActiveId((prev) => {
+          if (routeConversationId && items.some((item) => item.id === routeConversationId)) return routeConversationId
+          if (prev && items.some((item) => item.id === prev)) return prev
+          return items[0]?.id || ''
+        })
       } catch (err: any) {
         if (!mounted) return
         setError(err?.message || 'Không tải được danh sách chat')
@@ -233,7 +406,7 @@ export default function MessagesPage() {
     return () => {
       mounted = false
     }
-  }, [api])
+  }, [api, routeConversationId])
 
   useEffect(() => {
     if (!isSearchOpen) return
@@ -272,21 +445,35 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!shouldLoadActiveConversation || !activeId) return
     let mounted = true
+    const currentConversation = conversationsRef.current.find((item) => item.id === activeId)
+    const shouldMarkRead = Number(currentConversation?.unreadCount || 0) > 0
+
+    if (currentConversation) {
+      setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, unreadCount: 0 } : item)))
+    }
+
+    if (shouldMarkRead) {
+      void api.markRead(activeId)
+        .then(() => markConversationReadRealtime(socket, activeId))
+        .catch(() => {})
+    }
+
     ;(async () => {
       try {
-        setDetailLoading(true)
-        const [items, detail, detailSettings] = await Promise.all([
-          api.getMessages(activeId),
-          api.getConversation(activeId),
-          api.getSettings(activeId),
-        ])
+        const hasLoadedMessages = Boolean(loadedMessagesRef.current[activeId])
+        const hasFreshMessages = hasLoadedMessages && isFreshMessageCache(activeId)
+        if (hasFreshMessages) {
+          setDetailLoading(false)
+          return
+        }
+
+        setDetailLoading(!hasLoadedMessages)
+        const items = await api.getMessages(activeId)
         if (!mounted) return
         setMessagesByConversation((prev) => ({ ...prev, [activeId]: items }))
-        setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, ...detail, unreadCount: 0, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item)))
-        setSettings(detailSettings)
-        setNicknameDraft(detailSettings.nickname || '')
-        await api.markRead(activeId)
-        markConversationReadRealtime(socket, activeId)
+        loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
+        messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+        touchMessageCache(activeId)
       } catch (err: any) {
         if (mounted) setError(err?.message || 'Không tải được tin nhắn')
       } finally {
@@ -308,7 +495,13 @@ export default function MessagesPage() {
   useEffect(() => {
     setReactionPickerMessageId('')
     setActionMenuMessageId('')
+    setIsNicknameEditorOpen(false)
   }, [activeId])
+
+  useEffect(() => {
+    if (isNicknameEditorOpen) return
+    setNicknameDraft(settings?.nickname || '')
+  }, [activeId, settings?.nickname, isNicknameEditorOpen])
 
   useEffect(() => {
     if (!shouldShowThread || !contentScrollRef.current) return
@@ -326,6 +519,8 @@ export default function MessagesPage() {
         else arr.push(message)
         return { ...prev, [message.conversationId]: arr }
       })
+      touchMessageCache(message.conversationId)
+      touchConversationListCache()
 
       setConversations((prev) => {
         const found = prev.find((item) => item.id === message.conversationId)
@@ -345,6 +540,7 @@ export default function MessagesPage() {
     }
 
     const onMessageReaction = (message: ChatMessage) => {
+      touchMessageCache(message.conversationId)
       setMessagesByConversation((prev) => ({
         ...prev,
         [message.conversationId]: (prev[message.conversationId] || []).map((item) => (item.id === message.id ? { ...item, ...message } : item)),
@@ -358,18 +554,16 @@ export default function MessagesPage() {
     const onConversationUpdated = async ({ conversationId }: { conversationId?: string } = {}) => {
       if (!conversationId) return
       try {
-        const [detail, detailSettings] = await Promise.all([api.getConversation(conversationId), api.getSettings(conversationId)])
-        setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, ...detail, nickname: detailSettings.nickname, isBlocked: detailSettings.isBlocked } : item))))
-        if (conversationId === activeId) {
-          setSettings(detailSettings)
-          setNicknameDraft(detailSettings.nickname || '')
-        }
+        const detail = await api.getConversation(conversationId)
+        touchConversationListCache()
+        setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, ...detail } : item))))
       } catch {}
     }
 
     const onInboxRefresh = async () => {
       try {
         const items = await api.getConversations()
+        touchConversationListCache()
         setConversations(items)
         if (!activeId && items[0]?.id) setActiveId(items[0].id)
       } catch {}
@@ -377,6 +571,10 @@ export default function MessagesPage() {
 
     const onHistoryCleared = ({ conversationId }: { conversationId?: string } = {}) => {
       if (!conversationId) return
+      loadedMessagesRef.current = { ...loadedMessagesRef.current, [conversationId]: true }
+      messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+      touchMessageCache(conversationId)
+      touchConversationListCache()
       setMessagesByConversation((prev) => ({ ...prev, [conversationId]: [] }))
       setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
     }
@@ -409,6 +607,7 @@ export default function MessagesPage() {
   const handleOpenConversation = (conversationId: string) => {
     setActiveId(conversationId)
     setIsSearchOpen(false)
+    setIsNicknameEditorOpen(false)
     if (isCompactLayout) {
       setIsDetailOpen(false)
       setCompactView('thread')
@@ -423,6 +622,7 @@ export default function MessagesPage() {
   const handlePickUser = async (user: MessageUser) => {
     try {
       const conversation = await api.createDirectConversation({ targetUserId: user.id, username: user.username })
+      touchConversationListCache()
       setConversations((prev) => {
         const existed = prev.some((item) => item.id === conversation.id)
         return sortConversationsByLastMessage(existed ? prev.map((item) => (item.id === conversation.id ? { ...item, ...conversation } : item)) : [conversation, ...prev])
@@ -498,6 +698,8 @@ export default function MessagesPage() {
 
   const applyDeletedMessage = (payload: DeletedMessageEvent) => {
     if (!payload?.conversationId || !payload?.messageId) return
+    touchMessageCache(payload.conversationId)
+    touchConversationListCache()
     setMessagesByConversation((prev) => ({
       ...prev,
       [payload.conversationId]: (prev[payload.conversationId] || []).filter((item) => item.id !== payload.messageId),
@@ -524,6 +726,10 @@ export default function MessagesPage() {
     setError('')
     try {
       const message = await api.sendMessageHttp(activeId, { text: value, media: mediaFiles.map((item) => item.file), replyToMessageId: replyTo?.id || null })
+      loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
+      messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+      touchMessageCache(activeId)
+      touchConversationListCache()
       setMessagesByConversation((prev) => {
         const arr = prev[activeId] || []
         return arr.some((item) => item.id === message.id) ? prev : { ...prev, [activeId]: [...arr, message] }
@@ -545,6 +751,7 @@ export default function MessagesPage() {
       const next = message.myReaction === emoji
         ? await api.removeMessageReaction(activeId, message.id)
         : await api.setMessageReaction(activeId, message.id, emoji)
+      touchMessageCache(activeId)
       setMessagesByConversation((prev) => ({
         ...prev,
         [activeId]: (prev[activeId] || []).map((item) => (item.id === message.id ? { ...item, ...next } : item)),
@@ -573,8 +780,10 @@ export default function MessagesPage() {
     try {
       setSavingDetail(true)
       const next = await api.updateSettings(activeId, { nickname: nicknameDraft })
-      setSettings(next)
+      setSettingsByConversation((prev) => ({ ...prev, [activeId]: next }))
+      touchConversationListCache()
       setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, nickname: next.nickname } : item)))
+      setIsNicknameEditorOpen(false)
     } catch (err: any) {
       setError(err?.message || 'Không thể cập nhật biệt danh')
     } finally {
@@ -587,7 +796,8 @@ export default function MessagesPage() {
     try {
       setSavingDetail(true)
       const next = await api.updateSettings(activeId, { isBlocked: !isBlocked })
-      setSettings(next)
+      setSettingsByConversation((prev) => ({ ...prev, [activeId]: next }))
+      touchConversationListCache()
       setConversations((prev) => prev.map((item) => (item.id === activeId ? { ...item, isBlocked: next.isBlocked } : item)))
     } catch (err: any) {
       setError(err?.message || 'Không thể cập nhật trạng thái chặn')
@@ -603,6 +813,10 @@ export default function MessagesPage() {
     try {
       setSavingDetail(true)
       await api.clearHistory(activeId)
+      loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
+      messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+      touchMessageCache(activeId)
+      touchConversationListCache()
       setMessagesByConversation((prev) => ({ ...prev, [activeId]: [] }))
       setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
     } catch (err: any) {
@@ -610,6 +824,10 @@ export default function MessagesPage() {
     } finally {
       setSavingDetail(false)
     }
+  }
+
+  const handleReportUser = () => {
+    setError('Tính năng báo cáo người dùng trong chat chưa được hỗ trợ.')
   }
 
   const renderSearchGroup = (label: string, items: MessageUser[]) => {
@@ -868,25 +1086,79 @@ export default function MessagesPage() {
 
                 {isDetailOpen ? (
                   <aside className="ig-msg__detail">
-                    <div className="ig-msg__detailTitle">Chi tiết</div>
-                    <div className="ig-msg__detailCard">
-                      <img className="ig-msg__detailAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
-                      <div>
-                        <div className="ig-msg__detailName">{activeConversation.peer.username}</div>
-                        <div className="ig-msg__detailSub">{activeConversation.peer.bio || 'Instagram User'}</div>
-                      </div>
+                    <div className="ig-msg__detailHeader">
+                      <button type="button" className="ig-msg__detailHeaderBack" onClick={() => setIsDetailOpen(false)} aria-label="Đóng chi tiết đoạn chat">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                        </svg>
+                      </button>
+                      <div className="ig-msg__detailHeaderTitle">Chi tiết</div>
                     </div>
 
-                    <label className="ig-msg__field">
-                      <span className="ig-msg__fieldLabel">Biệt danh</span>
-                      <div className="ig-msg__fieldRow">
-                        <input className="ig-msg__fieldInput" value={nicknameDraft} onChange={(e) => setNicknameDraft(e.target.value)} placeholder="Nhập biệt danh" />
-                        <button type="button" className="ig-msg__fieldBtn" onClick={() => void saveNickname()} disabled={savingDetail}>Lưu</button>
+                    <div className="ig-msg__detailBody">
+                      <div className="ig-msg__detailSection">
+                        <div className="ig-msg__detailRow">
+                          <div className="ig-msg__detailRowMain">
+                            <span className="ig-msg__detailRowIcon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24">
+                                <path d="M12 4a5 5 0 0 0-5 5v2.6c0 .7-.24 1.37-.69 1.88L5 15h14l-1.31-1.52a2.9 2.9 0 0 1-.69-1.88V9a5 5 0 0 0-5-5Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                                <path d="M10 18a2 2 0 0 0 4 0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                              </svg>
+                            </span>
+                            <span className="ig-msg__detailRowLabel">Tắt thông báo về tin nhắn</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`ig-msg__switch ${isMuted ? 'is-active' : ''}`}
+                            aria-pressed={isMuted}
+                            onClick={() => setMutedConversationIds((prev) => ({ ...prev, [activeId]: !prev[activeId] }))}
+                          >
+                            <span className="ig-msg__switchThumb" />
+                          </button>
+                        </div>
                       </div>
-                    </label>
 
-                    <button type="button" className="ig-msg__detailAction" onClick={() => void toggleBlock()} disabled={savingDetail}>{isBlocked ? 'Bỏ chặn người dùng' : 'Chặn người dùng'}</button>
-                    <button type="button" className="ig-msg__detailDanger" onClick={() => void clearHistory()} disabled={savingDetail}>Xóa lịch sử đoạn chat</button>
+                      <div className="ig-msg__detailSection">
+                        <div className="ig-msg__detailSectionTitle">Thành viên</div>
+                        <button type="button" className="ig-msg__detailMember" onClick={() => navigate(`/profile/${activeConversation.peer.username}`)}>
+                          <img className="ig-msg__detailAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
+                          <div className="ig-msg__detailMemberMeta">
+                            <div className="ig-msg__detailName">{displayPeerName || activeConversation.peer.username}</div>
+                            <div className="ig-msg__detailSub">{activeConversation.peer.username}</div>
+                          </div>
+                        </button>
+                      </div>
+
+                      <div className="ig-msg__detailFooter">
+                        <button type="button" className="ig-msg__detailMenuItem" onClick={() => setIsNicknameEditorOpen((prev) => !prev)}>
+                          <span className="ig-msg__detailMenuMain">Biệt danh</span>
+                          <span className="ig-msg__detailMenuValue">{settings?.nickname?.trim() || 'Chưa đặt'}</span>
+                        </button>
+                        {isNicknameEditorOpen ? (
+                          <div className="ig-msg__detailInlineEditor">
+                            <input
+                              className="ig-msg__detailInlineInput"
+                              value={nicknameDraft}
+                              onChange={(e) => setNicknameDraft(e.target.value)}
+                              placeholder="Nhập biệt danh"
+                            />
+                            <div className="ig-msg__detailInlineActions">
+                              <button type="button" className="ig-msg__detailInlineBtn" onClick={() => setIsNicknameEditorOpen(false)} disabled={savingDetail}>Hủy</button>
+                              <button type="button" className="ig-msg__detailInlineBtn is-primary" onClick={() => void saveNickname()} disabled={savingDetail}>Lưu</button>
+                            </div>
+                          </div>
+                        ) : null}
+                        <button type="button" className="ig-msg__detailMenuItem" onClick={() => void toggleBlock()} disabled={savingDetail}>
+                          <span className="ig-msg__detailMenuMain">{isBlocked ? 'Bỏ chặn' : 'Chặn'}</span>
+                        </button>
+                        <button type="button" className="ig-msg__detailMenuItem is-danger" onClick={handleReportUser}>
+                          <span className="ig-msg__detailMenuMain">Báo cáo</span>
+                        </button>
+                        <button type="button" className="ig-msg__detailMenuItem is-danger" onClick={() => void clearHistory()} disabled={savingDetail}>
+                          <span className="ig-msg__detailMenuMain">Xóa đoạn chat</span>
+                        </button>
+                      </div>
+                    </div>
                   </aside>
                 ) : null}
               </div>
