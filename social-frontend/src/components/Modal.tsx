@@ -64,8 +64,8 @@ function ModalHost({
     >
       {mode === 'normal' ? (
         <div className={styles.modal}>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Đóng popup">
-            ×
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Dong popup">
+            {'\u00D7'}
           </button>
           <div className={styles.body}>{node}</div>
         </div>

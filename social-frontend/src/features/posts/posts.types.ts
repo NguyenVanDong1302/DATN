@@ -16,5 +16,21 @@ export type CreatePostPayload = {
 export type CreatePostResponse = {
   ok: boolean
   message?: string
-  data: any
+  data: {
+    postId?: string
+    pendingModeration?: boolean
+    moderationStatus?: 'normal' | 'reported' | 'pending_review' | 'violating' | string
+    moderationDeadlineAt?: string | null
+    maxModerationProcessingMs?: number
+    autoRemoved?: boolean
+    reason?: string
+    reportId?: string
+    requestSentToAdmin?: boolean
+    warningSentToUser?: boolean
+    detectionSignals?: string[]
+    detectionSource?: string
+    detectionScore?: number
+    detectionThreshold?: number
+    [key: string]: unknown
+  }
 }

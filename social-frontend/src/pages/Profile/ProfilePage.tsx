@@ -472,6 +472,7 @@ export default function ProfilePage() {
             <div className={styles.topRow}>
               <div className={styles.usernameRow}>
                 <div className={styles.username}>{username}</div>
+                {profile?.isVerified ? <span className={styles.verifiedBadge} title="Tai khoan da xac thuc">✓</span> : null}
                 {!isOwnProfile && profile?.relationship?.isFollowedBy ? <span className={styles.mutualBadge}>Theo dõi bạn</span> : null}
               </div>
 

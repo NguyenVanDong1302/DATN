@@ -5,15 +5,15 @@ import styles from "./HomePage.module.css";
 
 export default function HomePage() {
     return (
-        <div className={styles.wrapper}>
-            <div className={styles.center}>
+        <div className={`${styles.wrapper} home-page__wrapper`}>
+            <div className={`${styles.center} home-page__center`}>
                 <StoriesBar />
                 <Feed />
             </div>
 
-            <aside className={styles.right}>
+            {/* <aside className={styles.right}>
                 <RightPanel />
-            </aside>
+            </aside> */}
         </div>
     );
 }

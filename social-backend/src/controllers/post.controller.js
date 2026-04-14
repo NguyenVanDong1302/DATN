@@ -9,8 +9,21 @@ const User = require("../models/User");
 const { getIO } = require("../realtime/socket");
 const { postMediaDir } = require("../config/media");
 const notificationService = require("../services/notification.service");
+const {
+  buildModerationWindow,
+  getAutoModerationMaxProcessingMs,
+  queuePostForAutoModeration,
+} = require("../services/postModeration.service");
+const {
+  ensureAccountNotLocked,
+  ensureCanComment,
+  ensureCanLike,
+  ensureCanCreatePost,
+} = require("../utils/accountModeration");
 
 const visibilityEnum = ["public", "friends", "private"];
+const PUBLIC_VISIBLE_POST_STATUSES = new Set(["normal", "reported"]);
+const POST_INTERACTION_BLOCKED_STATUSES = new Set(["pending_review", "violating"]);
 const MEDIA_PUBLIC_BASE_URL = (
   process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000"
 ).replace(/\/$/, "");
@@ -71,8 +84,41 @@ const updatePostSchema = z
   }));
 
 const reportPostSchema = z.object({
-  reason: z.string().trim().min(2).max(500).optional().default("Nội dung không phù hợp"),
+  reason: z.string().trim().min(2).max(500).optional().default("Noi dung khong phu hop"),
 });
+
+function truncateText(value = "", maxLength = 500) {
+  const normalized = String(value || "").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(maxLength - 3, 0))}...`;
+}
+
+function buildPostReportSnapshot(post = {}, { moderationReason = "", deletedAt = null } = {}) {
+  const media = Array.isArray(post.media)
+    ? post.media.map((item, index) => ({
+        type: item?.type === "video" ? "video" : "image",
+        url: String(item?.url || ""),
+        thumbnailUrl: String(item?.thumbnailUrl || ""),
+        filename: String(item?.filename || ""),
+        mimeType: String(item?.mimeType || ""),
+        size: Math.max(Number(item?.size) || 0, 0),
+        order: Number.isFinite(item?.order) ? item.order : index,
+      }))
+    : [];
+
+  return {
+    authorId: String(post.authorId || ""),
+    authorUsername: String(post.authorUsername || ""),
+    content: String(post.content || ""),
+    media,
+    imageUrl: String(post.imageUrl || media.find((item) => item.type === "image")?.url || ""),
+    mediaType: detectMediaType(media),
+    allowComments: post.allowComments !== false,
+    createdAt: post.createdAt || null,
+    deletedAt: deletedAt || null,
+    moderationReason: truncateText(moderationReason, 500),
+  };
+}
 
 function normalizeBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -177,13 +223,14 @@ function serializeComment(comment, currentUserId, postAuthorId, authorAvatarUrl 
   };
 }
 
-function serializePost(post, userId, commentsCount = 0, authorAvatarUrl = "") {
+function serializePost(post, userId, commentsCount = 0, authorAvatarUrl = "", authorVerified = false) {
   const obj = post.toObject ? post.toObject() : post;
   const likesArr = obj.likes || [];
   const media = (Array.isArray(obj.media) ? obj.media : []).map((item, index) => ({
     ...item,
     type: item.type === "video" || item.mimeType?.startsWith("video/") ? "video" : "image",
     url: normalizePublicMediaUrl(item.url),
+    thumbnailUrl: item.thumbnailUrl ? normalizePublicMediaUrl(item.thumbnailUrl) : "",
     order: Number.isFinite(item.order) ? item.order : index,
   }));
   const imageUrls = media.filter((item) => item.type === "image").map((item) => item.url);
@@ -194,6 +241,7 @@ function serializePost(post, userId, commentsCount = 0, authorAvatarUrl = "") {
     imageUrl: firstImageUrl,
     authorUsername: obj.isAnonymous ? "anonymous" : obj.authorUsername,
     authorAvatarUrl: obj.isAnonymous ? "" : authorAvatarUrl,
+    authorVerified: obj.isAnonymous ? false : Boolean(authorVerified),
     media,
     images: imageUrls,
     imageUrl: firstImageUrl,
@@ -206,12 +254,30 @@ function serializePost(post, userId, commentsCount = 0, authorAvatarUrl = "") {
   };
 }
 
+async function buildAuthorMetaMapByUsername(usernames = []) {
+  const unique = [...new Set((usernames || []).map((x) => String(x || "").trim()).filter(Boolean))];
+  if (!unique.length) return new Map();
+  const users = await User.find({ username: { $in: unique } }).select("username avatarUrl isVerified");
+  return new Map(
+    users.map((user) => [
+      String(user.username),
+      {
+        avatarUrl: String(user.avatarUrl || ""),
+        isVerified: Boolean(user.isVerified),
+      },
+    ]),
+  );
+}
 
-async function buildAvatarMapByUsername(usernames = []) {
-  const unique = [...new Set((usernames || []).map((x) => String(x || '').trim()).filter(Boolean))]
-  if (!unique.length) return new Map()
-  const users = await User.find({ username: { $in: unique } }).select('username avatarUrl')
-  return new Map(users.map((u) => [String(u.username), String(u.avatarUrl || '')]))
+function getAuthorMetaByUsername(metaMap, username) {
+  const key = String(username || "").trim();
+  if (!key) return { avatarUrl: "", isVerified: false };
+  const item = metaMap.get(key);
+  if (!item) return { avatarUrl: "", isVerified: false };
+  return {
+    avatarUrl: String(item.avatarUrl || ""),
+    isVerified: Boolean(item.isVerified),
+  };
 }
 
 async function getCommentsCountMap(postIds = []) {
@@ -223,10 +289,76 @@ async function getCommentsCountMap(postIds = []) {
   return new Map(counts.map((x) => [String(x._id), x.count]));
 }
 
+function getStartOfToday() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function canManagePost(post, reqUser = {}, currentUser = null) {
+  const requestUserId = String(reqUser?.sub || "").trim();
+  const requestUsername = String(reqUser?.username || "").trim().toLowerCase();
+  const currentUserId = String(currentUser?._id || "").trim();
+  const currentUserRole = String(currentUser?.role || "").trim().toLowerCase();
+
+  const postAuthorId = String(post?.authorId || "").trim();
+  const postAuthorUsername = String(post?.authorUsername || "").trim().toLowerCase();
+
+  const isOwnerByAuthorId = Boolean(postAuthorId) && Boolean(requestUserId) && postAuthorId === requestUserId;
+  const isOwnerByCurrentUserId = Boolean(postAuthorId) && Boolean(currentUserId) && postAuthorId === currentUserId;
+  const isOwnerByUsername = Boolean(postAuthorUsername) && Boolean(requestUsername) && postAuthorUsername === requestUsername;
+  const isAdmin = currentUserRole === "admin";
+
+  return isOwnerByAuthorId || isOwnerByCurrentUserId || isOwnerByUsername || isAdmin;
+}
+
+function getPostModerationStatus(post = {}) {
+  const raw = String(post?.moderationStatus || "normal").trim().toLowerCase();
+  if (!raw) return "normal";
+  return raw;
+}
+
+function canViewPostByModeration(post, reqUser = {}, currentUser = null) {
+  const status = getPostModerationStatus(post);
+  if (PUBLIC_VISIBLE_POST_STATUSES.has(status)) return true;
+  return canManagePost(post, reqUser, currentUser);
+}
+
+function ensurePostVisibleForViewer(post, reqUser = {}, currentUser = null) {
+  if (canViewPostByModeration(post, reqUser, currentUser)) return;
+  throw new AppError("Post not found", 404, "NOT_FOUND");
+}
+
+function ensurePostInteractable(post) {
+  const status = getPostModerationStatus(post);
+  if (POST_INTERACTION_BLOCKED_STATUSES.has(status)) {
+    if (status === "pending_review") {
+      throw new AppError(
+        "Post is being reviewed for sensitive content. Please wait for moderation result.",
+        423,
+        "POST_PENDING_MODERATION",
+      );
+    }
+    throw new AppError(
+      "Post is unavailable due to moderation policy.",
+      403,
+      "POST_UNAVAILABLE",
+    );
+  }
+}
+
 async function createPost(req, res, next) {
   const uploadedFiles = req.files || [];
+  let createdPost = null;
   try {
     const body = createPostSchema.parse(req.body || {});
+    if (req.currentUser) {
+      const todayPosts = await Post.countDocuments({
+        authorUsername: req.user.username,
+        createdAt: { $gte: getStartOfToday() },
+      });
+      ensureCanCreatePost(req.currentUser, todayPosts);
+    }
     const media = buildMediaFromFiles(uploadedFiles, body.altText);
 
     if (!body.content && media.length === 0) {
@@ -238,7 +370,10 @@ async function createPost(req, res, next) {
       );
     }
 
-    const post = await Post.create({
+    const hasMedia = media.length > 0;
+    const moderationWindow = hasMedia ? buildModerationWindow(new Date()) : null;
+
+    createdPost = await Post.create({
       authorId: req.user.sub,
       authorUsername: req.user.username,
       content: body.content,
@@ -254,15 +389,59 @@ async function createPost(req, res, next) {
       mediaType: detectMediaType(media),
       images: media.filter((item) => item.type === "image").map((item) => item.url),
       imageUrl: media.find((item) => item.type === "image")?.url || "",
+      moderationStatus: hasMedia ? "pending_review" : "normal",
+      moderationReason: hasMedia
+        ? "Bai viet dang duoc he thong kiem duyet noi dung nhay cam (toi da 5 phut)."
+        : "",
+      moderationQueuedAt: moderationWindow?.queuedAt || null,
+      moderationDeadlineAt: moderationWindow?.deadlineAt || null,
+      moderationProcessedAt: hasMedia ? null : new Date(),
     });
+
+    if (hasMedia) {
+      queuePostForAutoModeration(String(createdPost._id));
+
+      const serializedPendingPost = serializePost(
+        createdPost,
+        req.user.sub,
+        0,
+        req.currentUser?.avatarUrl || req.user.avatarUrl || "",
+        Boolean(req.currentUser?.isVerified),
+      );
+
+      return res.status(201).json({
+        ok: true,
+        message:
+          "Post created. He thong dang kiem duyet anh/video va se hoan tat trong toi da 5 phut.",
+        data: {
+          postId: String(createdPost._id),
+          ...serializedPendingPost,
+          pendingModeration: true,
+          moderationStatus: "pending_review",
+          moderationDeadlineAt: moderationWindow?.deadlineAt || null,
+          maxModerationProcessingMs: getAutoModerationMaxProcessingMs(),
+          requestSentToAdmin: false,
+          warningSentToUser: false,
+          autoRemoved: false,
+        },
+      });
+    }
 
     res.status(201).json({
       ok: true,
       message: "Post created successfully",
-      data: serializePost(post, req.user.sub, 0, req.user.avatarUrl || ""),
+      data: serializePost(
+        createdPost,
+        req.user.sub,
+        0,
+        req.currentUser?.avatarUrl || req.user.avatarUrl || "",
+        Boolean(req.currentUser?.isVerified),
+      ),
     });
   } catch (err) {
-    cleanupUploadedFiles(uploadedFiles);
+    if (!createdPost) {
+      cleanupUploadedFiles(uploadedFiles);
+    }
     if (err?.name === "ZodError") {
       return next(
         new AppError(
@@ -284,13 +463,25 @@ async function listPosts(req, res, next) {
       50,
     );
     const skip = (page - 1) * limit;
+    const sortRaw = String(req.query.sort || "created_desc").trim().toLowerCase();
+    const sort =
+      sortRaw === "created_asc" ||
+      sortRaw === "engagement_desc" ||
+      sortRaw === "engagement_asc"
+        ? sortRaw
+        : "created_desc";
+    const mediaOnly = normalizeBoolean(req.query.mediaOnly, false);
 
     const filters = {};
     const viewerId = req.user?.sub;
+    const isAdminViewer = String(req.currentUser?.role || "").trim().toLowerCase() === "admin";
     const requestedVisibility = req.query.visibility;
 
     if (requestedVisibility && visibilityEnum.includes(requestedVisibility)) {
       filters.visibility = requestedVisibility;
+      if (requestedVisibility === "private" && !isAdminViewer) {
+        filters.authorId = viewerId || "__no_viewer__";
+      }
     } else {
       filters.$or = [{ visibility: "public" }];
       if (viewerId) {
@@ -298,18 +489,114 @@ async function listPosts(req, res, next) {
       }
     }
 
-    const [items, total] = await Promise.all([
-      Post.find(filters).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Post.countDocuments(filters),
-    ]);
+    if (!isAdminViewer) {
+      filters.$and = filters.$and || [];
+      if (viewerId) {
+        filters.$and.push({
+          $or: [
+            { moderationStatus: { $in: ["normal", "reported"] } },
+            { authorId: viewerId },
+          ],
+        });
+      } else {
+        filters.$and.push({
+          moderationStatus: { $in: ["normal", "reported"] },
+        });
+      }
+    }
 
-    const postIds = items.map((p) => p._id);
-    const countMap = await getCommentsCountMap(postIds);
-    const avatarMap = await buildAvatarMapByUsername(items.map((p) => p.authorUsername));
+    if (mediaOnly) {
+      filters.$and = filters.$and || [];
+      filters.$and.push({
+        $or: [
+          { mediaCount: { $gt: 0 } },
+          { "media.0": { $exists: true } },
+          { imageUrl: { $nin: ["", null] } },
+        ],
+      });
+    }
 
-    const mapped = items.map((p) =>
-      serializePost(p, viewerId, countMap.get(String(p._id)) || 0, avatarMap.get(String(p.authorUsername || '')) || ''),
-    );
+    let items = [];
+    let total = 0;
+    let commentsCountByPostId = new Map();
+
+    if (sort === "engagement_desc" || sort === "engagement_asc") {
+      const sortDirection = sort === "engagement_asc" ? 1 : -1;
+      const [rows, count] = await Promise.all([
+        Post.aggregate([
+          { $match: filters },
+          {
+            $addFields: {
+              likesCount: { $size: { $ifNull: ["$likes", []] } },
+            },
+          },
+          {
+            $lookup: {
+              from: "comments",
+              let: { postId: "$_id" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$postId", "$$postId"] },
+                  },
+                },
+                { $count: "count" },
+              ],
+              as: "commentStats",
+            },
+          },
+          {
+            $addFields: {
+              commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentStats.count", 0] }, 0] },
+            },
+          },
+          {
+            $addFields: {
+              engagementCount: { $add: ["$likesCount", "$commentsCount"] },
+            },
+          },
+          {
+            $sort: {
+              engagementCount: sortDirection,
+              createdAt: -1,
+              _id: -1,
+            },
+          },
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $project: {
+              commentStats: 0,
+            },
+          },
+        ]),
+        Post.countDocuments(filters),
+      ]);
+      items = rows;
+      total = count;
+      commentsCountByPostId = new Map(
+        rows.map((row) => [String(row._id), Number(row.commentsCount) || 0]),
+      );
+    } else {
+      const sortDirection = sort === "created_asc" ? 1 : -1;
+      const [rows, count] = await Promise.all([
+        Post.find(filters).sort({ createdAt: sortDirection, _id: sortDirection }).skip(skip).limit(limit),
+        Post.countDocuments(filters),
+      ]);
+      items = rows;
+      total = count;
+
+      const postIds = rows.map((post) => post._id);
+      commentsCountByPostId = await getCommentsCountMap(postIds);
+    }
+
+    const authorMetaMap = await buildAuthorMetaMapByUsername(items.map((p) => p.authorUsername));
+
+    const mapped = items.map((p) => {
+      const authorMeta = getAuthorMetaByUsername(authorMetaMap, p.authorUsername);
+      const commentsCount = commentsCountByPostId.get(String(p._id)) || 0;
+      return serializePost(p, viewerId, commentsCount, authorMeta.avatarUrl, authorMeta.isVerified);
+    });
 
     res.json({
       ok: true,
@@ -331,18 +618,27 @@ async function getPost(req, res, next) {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
-    if (post.visibility === 'private' && post.authorId !== req.user?.sub) {
+    if (post.visibility === "private" && !canManagePost(post, req.user, req.currentUser)) {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
 
     const comments = await Comment.find({ postId: post._id }).sort({ createdAt: -1 }).limit(30);
-    const avatarMap = await buildAvatarMapByUsername([post.authorUsername, ...comments.map((item) => item.authorUsername)]);
+    const authorMetaMap = await buildAuthorMetaMapByUsername([post.authorUsername, ...comments.map((item) => item.authorUsername)]);
+    const postAuthorMeta = getAuthorMetaByUsername(authorMetaMap, post.authorUsername);
 
     res.json({
       ok: true,
       data: {
-        post: serializePost(post, req.user?.sub, comments.length, avatarMap.get(String(post.authorUsername || '')) || ''),
-        comments: comments.map((item) => serializeComment(item, req.user?.sub, post.authorId, avatarMap.get(String(item.authorUsername || '')) || '')),
+        post: serializePost(post, req.user?.sub, comments.length, postAuthorMeta.avatarUrl, postAuthorMeta.isVerified),
+        comments: comments.map((item) =>
+          serializeComment(
+            item,
+            req.user?.sub,
+            post.authorId,
+            getAuthorMetaByUsername(authorMetaMap, item.authorUsername).avatarUrl,
+          ),
+        ),
       },
     });
   } catch (err) {
@@ -354,19 +650,23 @@ async function recordView(req, res, next) {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
 
     post.viewsCount = (post.viewsCount || 0) + 1;
     post.lastViewedAt = new Date();
     await post.save();
 
     const commentsCount = await Comment.countDocuments({ postId: post._id });
+    const authorMetaMap = await buildAuthorMetaMapByUsername([post.authorUsername]);
+    const postAuthorMeta = getAuthorMetaByUsername(authorMetaMap, post.authorUsername);
     res.json({
       ok: true,
       data: {
         postId: post._id,
         viewsCount: post.viewsCount,
         lastViewedAt: post.lastViewedAt,
-        post: serializePost(post, req.user?.sub, commentsCount, req.user?.username === post.authorUsername ? (req.user?.avatarUrl || "") : ""),
+        post: serializePost(post, req.user?.sub, commentsCount, postAuthorMeta.avatarUrl, postAuthorMeta.isVerified),
       },
     });
   } catch (err) {
@@ -380,7 +680,7 @@ async function updatePost(req, res, next) {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
-    if (post.authorId !== req.user.sub) {
+    if (!canManagePost(post, req.user, req.currentUser)) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
@@ -403,7 +703,12 @@ async function updatePost(req, res, next) {
 
     await post.save();
     const commentsCount = await Comment.countDocuments({ postId: post._id });
-    res.json({ ok: true, data: serializePost(post, req.user.sub, commentsCount, req.user?.avatarUrl || "") });
+    const authorMetaMap = await buildAuthorMetaMapByUsername([post.authorUsername]);
+    const postAuthorMeta = getAuthorMetaByUsername(authorMetaMap, post.authorUsername);
+    res.json({
+      ok: true,
+      data: serializePost(post, req.user.sub, commentsCount, postAuthorMeta.avatarUrl, postAuthorMeta.isVerified),
+    });
   } catch (err) {
     if (err?.name === "ZodError") {
       return next(
@@ -423,7 +728,7 @@ async function deletePost(req, res, next) {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
 
-    if (post.authorId !== req.user.sub) {
+    if (!canManagePost(post, req.user, req.currentUser)) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
@@ -438,8 +743,11 @@ async function deletePost(req, res, next) {
 
 async function toggleLike(req, res, next) {
   try {
+    if (req.currentUser) ensureCanLike(req.currentUser);
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
 
     const userId = req.user.sub;
     const idx = post.likes.indexOf(userId);
@@ -482,8 +790,11 @@ async function toggleLike(req, res, next) {
 
 async function removeLike(req, res, next) {
   try {
+    if (req.currentUser) ensureCanLike(req.currentUser);
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
 
     const userId = req.user.sub;
     post.likes = (post.likes || []).filter((item) => item !== userId);
@@ -521,9 +832,12 @@ async function removeLike(req, res, next) {
 
 async function reportPost(req, res, next) {
   try {
+    if (req.currentUser) ensureAccountNotLocked(req.currentUser);
     const body = reportPostSchema.parse(req.body || {});
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
 
     const reporterId = String(req.user?.sub || "");
     const reporterUsername = String(req.user?.username || "");
@@ -544,8 +858,10 @@ async function reportPost(req, res, next) {
       postId: post._id,
       reporterId,
       reporterUsername,
-      reason: body.reason || "Nội dung không phù hợp",
+      reason: body.reason || "Noi dung khong phu hop",
       status: "pending",
+      source: "user_report",
+      postSnapshot: buildPostReportSnapshot(post),
     });
 
     post.reportCount = (Number(post.reportCount) || 0) + 1;
@@ -581,10 +897,13 @@ async function reportPost(req, res, next) {
 
 async function addComment(req, res, next) {
   try {
+    if (req.currentUser) ensureCanComment(req.currentUser);
     const body = addCommentSchema.parse(req.body);
 
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
     if (!post.allowComments) {
       throw new AppError("Comments are disabled for this post", 400, "COMMENTS_DISABLED");
     }
@@ -679,10 +998,22 @@ async function listComments(req, res, next) {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) throw new AppError("Post not found", 404, "NOT_FOUND");
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
 
     const items = await Comment.find({ postId: post._id }).sort({ createdAt: 1, _id: 1 });
-    const avatarMap = await buildAvatarMapByUsername(items.map((item) => item.authorUsername));
-    res.json({ ok: true, data: items.map((item) => serializeComment(item, req.user?.sub, post.authorId, avatarMap.get(String(item.authorUsername || '')) || '')) });
+    const authorMetaMap = await buildAuthorMetaMapByUsername(items.map((item) => item.authorUsername));
+    res.json({
+      ok: true,
+      data: items.map((item) =>
+        serializeComment(
+          item,
+          req.user?.sub,
+          post.authorId,
+          getAuthorMetaByUsername(authorMetaMap, item.authorUsername).avatarUrl,
+        ),
+      ),
+    });
   } catch (err) {
     next(err);
   }
@@ -714,15 +1045,26 @@ async function deleteComment(req, res, next) {
 
 async function addCommentLike(req, res, next) {
   try {
-    const post = await Post.findById(req.params.id).select('_id authorId');
+    if (req.currentUser) ensureCanLike(req.currentUser);
+    const post = await Post.findById(req.params.id).select('_id authorId authorUsername moderationStatus');
     if (!post) throw new AppError('Post not found', 404, 'NOT_FOUND');
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
     const comment = await Comment.findById(req.params.commentId);
     if (!comment || String(comment.postId) !== String(post._id)) throw new AppError('Comment not found', 404, 'NOT_FOUND');
     const userId = req.user.sub;
     comment.likes = Array.from(new Set([...(comment.likes || []), userId]));
     await comment.save();
-    const avatarMap = await buildAvatarMapByUsername([comment.authorUsername]);
-    res.json({ ok: true, data: serializeComment(comment, userId, post.authorId, avatarMap.get(String(comment.authorUsername || "")) || "") });
+    const authorMetaMap = await buildAuthorMetaMapByUsername([comment.authorUsername]);
+    res.json({
+      ok: true,
+      data: serializeComment(
+        comment,
+        userId,
+        post.authorId,
+        getAuthorMetaByUsername(authorMetaMap, comment.authorUsername).avatarUrl,
+      ),
+    });
   } catch (err) {
     next(err);
   }
@@ -730,15 +1072,26 @@ async function addCommentLike(req, res, next) {
 
 async function removeCommentLike(req, res, next) {
   try {
-    const post = await Post.findById(req.params.id).select('_id authorId');
+    if (req.currentUser) ensureCanLike(req.currentUser);
+    const post = await Post.findById(req.params.id).select('_id authorId authorUsername moderationStatus');
     if (!post) throw new AppError('Post not found', 404, 'NOT_FOUND');
+    ensurePostVisibleForViewer(post, req.user, req.currentUser);
+    ensurePostInteractable(post);
     const comment = await Comment.findById(req.params.commentId);
     if (!comment || String(comment.postId) !== String(post._id)) throw new AppError('Comment not found', 404, 'NOT_FOUND');
     const userId = req.user.sub;
     comment.likes = (comment.likes || []).filter((item) => item !== userId);
     await comment.save();
-    const avatarMap = await buildAvatarMapByUsername([comment.authorUsername]);
-    res.json({ ok: true, data: serializeComment(comment, userId, post.authorId, avatarMap.get(String(comment.authorUsername || "")) || "") });
+    const authorMetaMap = await buildAuthorMetaMapByUsername([comment.authorUsername]);
+    res.json({
+      ok: true,
+      data: serializeComment(
+        comment,
+        userId,
+        post.authorId,
+        getAuthorMetaByUsername(authorMetaMap, comment.authorUsername).avatarUrl,
+      ),
+    });
   } catch (err) {
     next(err);
   }

@@ -1,12 +1,27 @@
-.page {
+﻿.page {
   min-height: 100vh;
   background: #fafafa;
   padding: 28px 18px 56px;
 }
 
-.container {
+.container,
+.panel {
   width: min(100%, 760px);
   margin: 0 auto;
+}
+
+.panel {
+  margin-top: 18px;
+  border: 1px solid #e4e7ec;
+  border-radius: 20px;
+  background: #fff;
+  padding: 20px;
+}
+
+.panelTitle {
+  margin-bottom: 14px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .profileCard {
@@ -45,6 +60,7 @@
 
 .changePhotoBtn,
 .submitBtn,
+.secondaryBtn,
 .switch {
   border: none;
   cursor: pointer;
@@ -58,7 +74,10 @@
   font-weight: 700;
 }
 
-.fieldBlock { margin-bottom: 26px; }
+.fieldBlock {
+  margin-bottom: 26px;
+}
+
 .label {
   display: block;
   margin-bottom: 12px;
@@ -74,9 +93,9 @@
   border-radius: 16px;
   background: #fff;
   padding: 16px 18px;
-  font-size: 18px;
+  font-size: 16px;
   outline: none;
-  transition: box-shadow .2s ease, border-color .2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .input:focus,
@@ -86,19 +105,16 @@
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
-.help,
-.footerNote {
-  margin-top: 10px;
-  color: #667085;
-  line-height: 1.45;
+.textareaWrap {
+  position: relative;
 }
 
-.textareaWrap { position: relative; }
 .textarea {
   min-height: 120px;
   resize: vertical;
   padding-bottom: 40px;
 }
+
 .counter {
   position: absolute;
   right: 18px;
@@ -119,8 +135,8 @@
 }
 
 .switchTitle {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .switchDesc {
@@ -133,25 +149,37 @@
   width: 58px;
   height: 32px;
   border-radius: 999px;
-  background: #111827;
+  background: #9ca3af;
   padding: 4px;
   position: relative;
-  transition: background .18s ease;
+  transition: background 0.18s ease;
   flex: 0 0 auto;
 }
-.switchOn { background: #111827; }
+
+.switchOn {
+  background: #111827;
+}
+
 .switchThumb {
   display: block;
   width: 24px;
   height: 24px;
   border-radius: 50%;
   background: #fff;
-  transition: transform .18s ease;
+  transition: transform 0.18s ease;
 }
-.switchOn .switchThumb { transform: translateX(26px); }
 
-.selectWrap { position: relative; }
-.select { appearance: none; }
+.switchOn .switchThumb {
+  transform: translateX(26px);
+}
+
+.selectWrap {
+  position: relative;
+}
+
+.select {
+  appearance: none;
+}
 
 .actions {
   display: flex;
@@ -159,26 +187,91 @@
   margin-top: 34px;
 }
 
-.submitBtn {
-  width: 220px;
-  padding: 16px 20px;
-  border-radius: 16px;
-  background: #c7d2fe;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  transition: transform .18s ease, background .18s ease;
+.actionsLeft {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 16px;
 }
-.submitBtn:hover { transform: translateY(-1px); background: #a5b4fc; }
-.submitBtn:disabled { opacity: .7; cursor: wait; }
 
-.state { padding: 48px; color: #666; }
+.submitBtn,
+.secondaryBtn {
+  border-radius: 14px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.submitBtn {
+  width: 240px;
+  padding: 16px 20px;
+  background: #4f46e5;
+}
+
+.secondaryBtn {
+  min-width: 180px;
+  padding: 14px 18px;
+  background: #111827;
+}
+
+.submitBtn:hover,
+.secondaryBtn:hover {
+  transform: translateY(-1px);
+}
+
+.submitBtn:disabled,
+.secondaryBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.inlineField {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.state {
+  padding: 48px;
+  color: #666;
+}
 
 @media (max-width: 768px) {
-  .page { padding: 20px 12px 44px; }
+  .page {
+    padding: 20px 12px 44px;
+  }
+
   .profileCard,
-  .switchCard { align-items: flex-start; }
-  .profileCard { flex-direction: column; }
-  .username { font-size: 24px; }
-  .fullName { font-size: 18px; }
+  .switchCard {
+    align-items: flex-start;
+  }
+
+  .profileCard {
+    flex-direction: column;
+  }
+
+  .username {
+    font-size: 24px;
+  }
+
+  .fullName {
+    font-size: 18px;
+  }
+
+  .inlineField {
+    grid-template-columns: 1fr;
+  }
+
+  .secondaryBtn,
+  .submitBtn {
+    width: 100%;
+  }
 }
+

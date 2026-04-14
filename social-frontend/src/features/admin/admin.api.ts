@@ -7,6 +7,15 @@ export type AccountMonthlyStat = {
   loginCount: number
 }
 
+export type UserRestrictions = {
+  commentBlocked: boolean
+  messagingBlocked: boolean
+  likeBlocked: boolean
+  dailyPostLimit: number
+}
+
+export type ReportResolutionAction = 'no_violation' | 'delete_post' | 'strike_account' | 'lock_account'
+
 export type AccountStatsResponse = {
   summary: {
     totalAccounts: number
@@ -23,6 +32,39 @@ export type AccountStatsResponse = {
   }>
 }
 
+export type AdminAccountRow = {
+  id: string
+  username: string
+  email: string
+  role: string
+  moderationStatus: string
+  moderationReason: string
+  isVerified: boolean
+  verifiedAt?: string | null
+  verifiedBy?: string
+  strikesCount: number
+  accountLocked: boolean
+  accountLockedAt?: string | null
+  accountLockedReason?: string
+  restrictions: UserRestrictions
+  loginCount: number
+  lastLoginAt?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type PaginatedAdminAccounts = {
+  items: AdminAccountRow[]
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  filters?: {
+    keyword?: string
+    status?: 'all' | 'active' | 'locked' | string
+  }
+}
+
 export type AdminPostRow = {
   id: string
   title: string
@@ -35,12 +77,63 @@ export type AdminPostRow = {
   commentsCount: number
   engagementCount: number
   reportCount?: number
+  allowComments?: boolean
   pendingCount?: number
   latestReason?: string
   lastReportedAt?: string | null
   statuses?: string[]
   moderationStatus?: string
   moderationReason?: string
+  postExists?: boolean
+  reportSource?: 'user_report' | 'auto_nsfw' | string
+  autoModeratedAt?: string | null
+}
+
+export type AdminPostDetail = {
+  post: {
+    id: string
+    title: string
+    fullTitle?: string
+    content?: string
+    thumbnailUrl?: string
+    mediaType?: 'image' | 'video' | 'text' | string
+    media?: Array<{
+      type?: 'image' | 'video' | string
+      url?: string
+      thumbnailUrl?: string
+    }>
+    imageUrl?: string
+    authorId?: string
+    authorUsername: string
+    createdAt?: string | null
+    updatedAt?: string | null
+    likesCount: number
+    commentsCount: number
+    engagementCount: number
+    reportCount: number
+    lastReportedAt?: string | null
+    allowComments: boolean
+    moderationStatus?: string
+    moderationReason?: string
+    postPath?: string
+    postExists?: boolean
+    reportSource?: 'user_report' | 'auto_nsfw' | string
+    autoModeratedAt?: string | null
+  }
+  reports: Array<{
+    id: string
+    reporterId?: string
+    reporterUsername: string
+    reason: string
+    status: 'pending' | 'reviewed' | 'accepted' | 'rejected' | string
+    reviewedBy?: string
+    reviewedAt?: string | null
+    createdAt?: string | null
+    source?: 'user_report' | 'auto_nsfw' | string
+    detectionSignals?: string[]
+    autoModeratedAt?: string | null
+    hasSnapshot?: boolean
+  }>
 }
 
 export type PaginatedAdminPosts = {
@@ -54,6 +147,7 @@ export type PaginatedAdminPosts = {
     endDate?: string
     sort?: 'engagement_desc' | 'engagement_asc' | string
     status?: string
+    source?: 'all' | 'user_report' | 'auto_nsfw' | string
   }
 }
 
@@ -62,18 +156,7 @@ export type AdminViolationsResponse = {
     violatingAccounts: number
     violatingPosts: number
   }
-  accounts: Array<{
-    id: string
-    username: string
-    email: string
-    role: string
-    moderationStatus: string
-    moderationReason: string
-    loginCount: number
-    lastLoginAt?: string | null
-    createdAt?: string | null
-    updatedAt?: string | null
-  }>
+  accounts: AdminAccountRow[]
   posts: Array<{
     id: string
     title: string
@@ -110,6 +193,15 @@ export function useAdminApi() {
         const res = await api.get(`/admin/accounts/stats${buildQuery({ months })}`)
         return res?.data as AccountStatsResponse
       },
+      getAccounts: async (params?: {
+        page?: number
+        limit?: number
+        keyword?: string
+        status?: 'all' | 'active' | 'locked'
+      }) => {
+        const res = await api.get(`/admin/accounts${buildQuery(params || {})}`)
+        return res?.data as PaginatedAdminAccounts
+      },
       getPosts: async (params: {
         page?: number
         limit?: number
@@ -126,6 +218,7 @@ export function useAdminApi() {
         startDate?: string
         endDate?: string
         status?: 'all' | 'pending' | 'reviewed' | 'accepted' | 'rejected'
+        source?: 'all' | 'user_report' | 'auto_nsfw'
       }) => {
         const res = await api.get(`/admin/reports/posts${buildQuery(params || {})}`)
         return res?.data as PaginatedAdminPosts
@@ -134,13 +227,54 @@ export function useAdminApi() {
         const res = await api.get(`/admin/violations${buildQuery({ includeWarning })}`)
         return res?.data as AdminViolationsResponse
       },
-      updatePostModeration: async (postId: string, payload: { status: 'normal' | 'reported' | 'violating'; reason?: string }) => {
+      getPostDetail: async (postId: string) => {
+        const res = await api.get(`/admin/posts/${encodeURIComponent(postId)}`)
+        return res?.data as AdminPostDetail
+      },
+      applyPostAction: async (
+        postId: string,
+        payload: {
+          action: 'delete_post' | 'lock_comments' | 'unlock_comments'
+          reason?: string
+          notification?: string
+        },
+      ) => {
+        const res = await api.patch(`/admin/posts/${encodeURIComponent(postId)}/actions`, payload)
+        return res?.data
+      },
+      resolveReportedPost: async (
+        postId: string,
+        payload: {
+          actions: ReportResolutionAction[]
+          reason?: string
+          decision?: ReportResolutionAction
+        },
+      ) => {
+        const res = await api.post(`/admin/reports/posts/${encodeURIComponent(postId)}/resolve`, payload)
+        return res?.data
+      },
+      updatePostModeration: async (postId: string, payload: { status: 'normal' | 'reported' | 'pending_review' | 'violating'; reason?: string }) => {
         const res = await api.patch(`/admin/posts/${encodeURIComponent(postId)}/moderation`, payload)
         return res?.data
       },
       updateUserModeration: async (userId: string, payload: { status: 'normal' | 'warning' | 'violating'; reason?: string }) => {
         const res = await api.patch(`/admin/users/${encodeURIComponent(userId)}/moderation`, payload)
         return res?.data
+      },
+      updateUserRestrictions: async (
+        userId: string,
+        payload: {
+          commentBlocked?: boolean
+          messagingBlocked?: boolean
+          likeBlocked?: boolean
+          verified?: boolean
+          dailyPostLimit?: number | null
+          accountLocked?: boolean
+          lockReason?: string
+        },
+      ) => {
+        const res = await api.patch(`/admin/users/${encodeURIComponent(userId)}/restrictions`, payload)
+        return res?.data as AdminAccountRow
       },
     }),
     [api],

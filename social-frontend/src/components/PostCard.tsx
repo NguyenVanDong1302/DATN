@@ -3,10 +3,22 @@ import { resolveMediaUrl } from '../lib/api'
 import { getAvatarUrl } from '../lib/avatar'
 import { Post } from '../types'
 
+const ICON_MUTE = '\uD83D\uDD07'
+const ICON_UNMUTE = '\uD83D\uDD0A'
+const ICON_COMMENT = '\uD83D\uDCAC'
+const ICON_HEART_FILLED = '\u2665'
+const ICON_HEART_OUTLINE = '\u2661'
+const ICON_ELLIPSIS = '\u2022\u2022\u2022'
+const ICON_PLAY = '\u25B6'
+const ICON_PREV = '\u2039'
+const ICON_NEXT = '\u203A'
+
 type NormalizedMedia = {
   type: 'image' | 'video'
   url: string
 }
+
+type PostCardLayoutMode = 'default' | 'screen-fit'
 
 function detectMediaType(item: any): 'image' | 'video' | null {
   const type = String(item?.type || '').toLowerCase()
@@ -43,7 +55,17 @@ function getPostMedia(post: Post): NormalizedMedia[] {
   return list
 }
 
-function MediaVideo({ src, active }: { src: string; active: boolean }) {
+function MediaVideo({
+  src,
+  active,
+  frameStyle,
+  mediaStyle,
+}: {
+  src: string
+  active: boolean
+  frameStyle?: React.CSSProperties
+  mediaStyle?: React.CSSProperties
+}) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [muted, setMuted] = useState(true)
@@ -115,7 +137,7 @@ function MediaVideo({ src, active }: { src: string; active: boolean }) {
   }
 
   return (
-    <div ref={wrapRef} style={styles.mediaFrame}>
+    <div ref={wrapRef} style={{ ...styles.mediaFrame, ...(frameStyle || {}) }}>
       <video
         ref={videoRef}
         src={src}
@@ -125,22 +147,30 @@ function MediaVideo({ src, active }: { src: string; active: boolean }) {
         onClick={togglePlay}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        style={styles.videoMedia}
+        style={{ ...styles.videoMedia, ...(mediaStyle || {}) }}
       />
       <button type="button" onClick={toggleMute} style={styles.muteBtn}>
-        {muted ? '🔇' : '🔊'}
+        {muted ? ICON_MUTE : ICON_UNMUTE}
       </button>
 
       {!playing && (
         <div style={styles.playOverlay} onClick={togglePlay}>
-          ▶
+          {ICON_PLAY}
         </div>
       )}
     </div>
   )
 }
 
-function MediaSlider({ media }: { media: NormalizedMedia[] }) {
+function MediaSlider({
+  media,
+  frameStyle,
+  mediaStyle,
+}: {
+  media: NormalizedMedia[]
+  frameStyle?: React.CSSProperties
+  mediaStyle?: React.CSSProperties
+}) {
   const [index, setIndex] = useState(0)
   const total = media.length
 
@@ -167,10 +197,10 @@ function MediaSlider({ media }: { media: NormalizedMedia[] }) {
           {media.map((item, i) => (
             <div key={`${item.url}-${i}`} style={{ ...styles.slide, width: `${100 / total}%` }}>
               {item.type === 'video' ? (
-                <MediaVideo src={item.url} active={i === index} />
+                <MediaVideo src={item.url} active={i === index} frameStyle={frameStyle} mediaStyle={mediaStyle} />
               ) : (
-                <div style={styles.mediaFrame}>
-                  <img src={item.url} alt="post" style={styles.imageMedia} />
+                <div style={{ ...styles.mediaFrame, ...(frameStyle || {}) }}>
+                  <img src={item.url} alt="post" style={{ ...styles.imageMedia, ...(mediaStyle || {}) }} />
                 </div>
               )}
             </div>
@@ -180,10 +210,10 @@ function MediaSlider({ media }: { media: NormalizedMedia[] }) {
         {canSlide && (
           <>
             <button type="button" onClick={prev} style={{ ...styles.navBtn, left: 12 }}>
-              ‹
+              {ICON_PREV}
             </button>
             <button type="button" onClick={next} style={{ ...styles.navBtn, right: 12 }}>
-              ›
+              {ICON_NEXT}
             </button>
           </>
         )}
@@ -211,26 +241,47 @@ function MediaSlider({ media }: { media: NormalizedMedia[] }) {
 
 export default function PostCard({
   post,
+  layout = 'default',
   likePending,
   commentPending,
+  followPending,
+  reportPending,
+  showFollowButton,
+  following,
   onLike,
   onOpenComment,
   onOpenDetail,
   onOpenAuthor,
+  onToggleFollow,
+  onEdit,
+  onDelete,
+  onReport,
 }: {
   post: Post
+  layout?: PostCardLayoutMode
   likePending?: boolean
   commentPending?: boolean
+  followPending?: boolean
+  reportPending?: boolean
+  showFollowButton?: boolean
+  following?: boolean
   onLike: () => void
   onOpenComment: () => void
   onOpenDetail: () => void
   onOpenAuthor: () => void
+  onToggleFollow?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
+  onReport?: (reason: string) => void
 }) {
   const likesCount = post.likesCount ?? (Array.isArray(post.likes) ? post.likes.length : 0)
   const likedByMe = !!post.likedByMe
   const commentsCount = post.commentsCount ?? 0
   const media = useMemo(() => getPostMedia(post), [post])
+  const isScreenFit = layout === 'screen-fit'
   const [heartBurst, setHeartBurst] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!likedByMe) return
@@ -239,27 +290,98 @@ export default function PostCard({
     return () => window.clearTimeout(timer)
   }, [likedByMe])
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (menuRef.current && target && !menuRef.current.contains(target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [menuOpen])
+
+  const handleReport = () => {
+    if (!onReport || reportPending) return
+    const reason = window.prompt('Nhap ly do bao cao bai viet', 'Noi dung khong phu hop')
+    if (!reason || !reason.trim()) return
+    onReport(reason.trim())
+    setMenuOpen(false)
+  }
+
   return (
     <div style={styles.post}>
       <div style={styles.header}>
         <div style={styles.userBlock}>
           <img style={styles.avatarImg} src={getAvatarUrl({ username: post.authorUsername, authorAvatarUrl: (post as any).authorAvatarUrl })} alt={post.authorUsername || 'user'} />
           <div>
-            <div style={styles.username} onClick={onOpenAuthor}>
-              {post.authorUsername || post.authorId || 'user'}
+            <div style={styles.usernameRow}>
+              <div style={styles.username} onClick={onOpenAuthor}>
+                {post.authorUsername || post.authorId || 'user'}
+              </div>
+              {post.authorVerified ? (
+                <span style={styles.verifiedBadge} title="Tai khoan da xac thuc">
+                  ✓
+                </span>
+              ) : null}
             </div>
             <div style={styles.metaText}>
-              {post.createdAt ? new Date(post.createdAt).toLocaleString() : 'Vừa xong'}
+              {post.createdAt ? new Date(post.createdAt).toLocaleString('vi-VN') : 'V\u1EEBa xong'}
             </div>
           </div>
         </div>
 
-        <div style={styles.moreBtn}>•••</div>
+        <div style={styles.moreWrap} ref={menuRef}>
+          <button type="button" style={styles.moreBtn} onClick={() => setMenuOpen((prev) => !prev)}>
+            {ICON_ELLIPSIS}
+          </button>
+          {menuOpen ? (
+            <div style={styles.menu}>
+              {showFollowButton && onToggleFollow ? (
+                <button type="button" style={styles.menuBtn} disabled={!!followPending} onClick={() => { onToggleFollow(); setMenuOpen(false) }}>
+                  {followPending ? 'Dang xu ly...' : following ? 'Unfollow' : 'Follow'}
+                </button>
+              ) : null}
+              {onReport ? (
+                <button type="button" style={styles.menuBtn} disabled={!!reportPending} onClick={handleReport}>
+                  {reportPending ? 'Dang gui...' : 'Bao cao bai viet'}
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  style={{ ...styles.menuBtn, ...styles.menuDanger }}
+                  onClick={() => {
+                    onDelete()
+                    setMenuOpen(false)
+                  }}
+                >
+                  Xoa bai viet
+                </button>
+              ) : null}
+              {onEdit ? (
+                <button
+                  type="button"
+                  style={styles.menuBtn}
+                  onClick={() => {
+                    onEdit()
+                    setMenuOpen(false)
+                  }}
+                >
+                  Chinh sua bai viet
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {post.content && <div style={styles.content}>{post.content}</div>}
 
-      <MediaSlider media={media} />
+      <MediaSlider
+        media={media}
+        frameStyle={isScreenFit ? styles.mediaFrameScreenFit : undefined}
+        mediaStyle={isScreenFit ? styles.mediaContentScreenFit : undefined}
+      />
 
       <div style={styles.actions}>
         <button
@@ -272,7 +394,9 @@ export default function PostCard({
           onClick={onLike}
           disabled={!!likePending}
         >
-          <span style={{ ...styles.iconPulse, transform: heartBurst ? 'scale(1.3)' : 'scale(1)' }}>{likedByMe ? '♥' : '♡'}</span>
+          <span style={{ ...styles.iconPulse, transform: heartBurst ? 'scale(1.3)' : 'scale(1)' }}>
+            {likedByMe ? ICON_HEART_FILLED : ICON_HEART_OUTLINE}
+          </span>
           <span>{likesCount}</span>
         </button>
         <button
@@ -283,12 +407,24 @@ export default function PostCard({
           onClick={onOpenComment}
           disabled={!!commentPending}
         >
-          <span>💬</span>
+          <span>{ICON_COMMENT}</span>
           <span>{commentsCount}</span>
         </button>
-        <button style={{ ...styles.actionBtn, marginLeft: 'auto' }} onClick={onOpenDetail}>
-          Xem chi tiết
-        </button>
+        {showFollowButton && onToggleFollow ? (
+          <button
+            style={{
+              ...styles.actionBtn,
+              ...(followPending ? styles.buttonPending : null),
+            }}
+            onClick={onToggleFollow}
+            disabled={!!followPending}
+          >
+            {following ? 'Following' : 'Follow'}
+          </button>
+        ) : null}
+        {/* <button style={{ ...styles.actionBtn, marginLeft: 'auto' }} onClick={onOpenDetail}>
+          Xem chi ti\u1EBFt
+        </button> */}
       </div>
     </div>
   )
@@ -340,16 +476,70 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     lineHeight: 1.2,
   },
+  usernameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  verifiedBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: '50%',
+    background: '#1d9bf0',
+    color: '#fff',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 11,
+    fontWeight: 900,
+    lineHeight: 1,
+    userSelect: 'none',
+  },
   metaText: {
     fontSize: 12,
     color: '#777',
     marginTop: 2,
   },
+  moreWrap: {
+    position: 'relative',
+  },
   moreBtn: {
+    border: 'none',
+    background: 'transparent',
     fontSize: 18,
     color: '#444',
     padding: '4px 8px',
+    borderRadius: 8,
     userSelect: 'none',
+    cursor: 'pointer',
+  },
+  menu: {
+    position: 'absolute',
+    right: 0,
+    top: 'calc(100% + 6px)',
+    minWidth: 180,
+    display: 'grid',
+    gap: 4,
+    padding: 6,
+    borderRadius: 12,
+    border: '1px solid #e5e7eb',
+    background: '#fff',
+    boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+    zIndex: 10,
+  },
+  menuBtn: {
+    border: 'none',
+    background: '#f8fafc',
+    color: '#111827',
+    borderRadius: 10,
+    padding: '8px 10px',
+    fontSize: 13,
+    textAlign: 'left',
+    cursor: 'pointer',
+  },
+  menuDanger: {
+    background: '#fef2f2',
+    color: '#b91c1c',
   },
   content: {
     marginTop: 10,
@@ -382,12 +572,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  mediaFrameScreenFit: {
+    aspectRatio: '16 / 10',
+    maxHeight: 'min(62vh, 560px)',
+  },
   imageMedia: {
     width: '100%',
     height: '100%',
     objectFit: 'contain',
     display: 'block',
     background: '#0b1220',
+  },
+  mediaContentScreenFit: {
+    objectFit: 'contain',
   },
   videoMedia: {
     width: '100%',

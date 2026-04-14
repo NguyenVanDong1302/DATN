@@ -11,6 +11,7 @@ const { AppError } = require("../utils/errors");
 const { buildDirectKey } = require("../utils/buildDirectKey");
 const { getPresence } = require("../utils/presenceStore");
 const { getIO } = require("../realtime/socket");
+const { ensureCanMessage } = require("../utils/accountModeration");
 
 const MAX_MESSAGE_MEDIA_FILES = 10;
 const MAX_MESSAGE_VIDEO_BYTES = 15 * 1024 * 1024;
@@ -21,7 +22,8 @@ async function resolveCurrentUserFromReq(req) {
   if (!rawUsername) {
     throw new AppError("Username required", 401, "USERNAME_REQUIRED");
   }
-  const user = await User.findOne({ username: rawUsername }).select("_id username email avatarUrl bio");
+  const user = await User.findOne({ username: rawUsername })
+    .select("_id username email avatarUrl bio accountLocked accountLockedAt accountLockedReason restrictions");
   if (!user) {
     throw new AppError("Không tìm thấy người dùng hiện tại", 404, "CURRENT_USER_NOT_FOUND");
   }
@@ -263,6 +265,7 @@ async function searchUsers({ currentUser, q = "", limit = 8 }) {
 }
 
 async function getOrCreateDirectConversation({ currentUser, targetUserId, targetUsername }) {
+  ensureCanMessage(currentUser);
   const safeTargetUserId = String(targetUserId || "").trim();
   const safeTargetUsername = String(targetUsername || "").trim();
 
@@ -445,6 +448,7 @@ async function getMemberState(conversationId, userId) {
 }
 
 async function sendMessage({ currentUser, conversationId, text, files = [], replyToMessageId = "" }) {
+  ensureCanMessage(currentUser);
   const trimmed = String(text || "").trim();
   const conversation = await getConversationOrThrow({ currentUser, conversationId });
   const receiverId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
@@ -598,7 +602,7 @@ async function setMessageReaction({ currentUser, conversationId, messageId, emoj
   await getConversationOrThrow({ currentUser, conversationId });
   const message = await Message.findOne({ _id: String(messageId), conversationId: String(conversationId) });
   if (!message) {
-    throw new AppError('KhÃ´ng tÃ¬m tháº¥y tin nháº¯n', 404, 'MESSAGE_NOT_FOUND');
+    throw new AppError('Khong tim thay tin nhan', 404, 'MESSAGE_NOT_FOUND');
   }
 
   const normalizedEmoji = String(emoji || "").trim();
@@ -651,7 +655,7 @@ async function deleteMessage({ currentUser, conversationId, messageId }) {
   const conversation = await getConversationOrThrow({ currentUser, conversationId });
   const message = await Message.findOne({ _id: String(messageId), conversationId: String(conversation._id) });
   if (!message) {
-    throw new AppError('KhÃ´ng tÃ¬m tháº¥y tin nháº¯n', 404, 'MESSAGE_NOT_FOUND');
+    throw new AppError('Khong tim thay tin nhan', 404, 'MESSAGE_NOT_FOUND');
   }
   if (String(message.senderId) !== String(currentUser._id)) {
     throw new AppError('You can only revoke your own message', 403, 'FORBIDDEN_MESSAGE_DELETE');

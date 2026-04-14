@@ -168,6 +168,15 @@
   border: 1px solid #e5e7eb;
 }
 
+.thumbnailVideo {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+  background: #111827;
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -199,6 +208,16 @@
   font-size: 14px;
 }
 
+.success {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 14px;
+}
+
 .loading {
   margin-bottom: 10px;
   color: #4b5563;
@@ -215,6 +234,256 @@
 
 .muted {
   color: #9ca3af;
+}
+
+.rowControl {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.reportActionChecks {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: grid;
+  gap: 5px;
+  background: #fff;
+}
+
+.reportActionOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #374151;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.reportActionOption input {
+  margin: 0;
+}
+
+.inlineActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.smallInput {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.rowActionBtn {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+}
+
+.rowActionBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dangerBtn {
+  background: #b91c1c;
+}
+
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  color: #111827;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.modalCard {
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.penaltyModalCard {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 16px;
+  color: #111827;
+}
+
+.modalSubtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.closeModalBtn {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.modalContent {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.modalMain {
+  padding: 14px;
+  border-right: 1px solid #e5e7eb;
+  overflow: auto;
+}
+
+.modalPostHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.modalPreview {
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #111827;
+}
+
+.modalCaption {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: #111827;
+}
+
+.modalStats {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.modalSide {
+  padding: 14px;
+  overflow: auto;
+}
+
+.modalInfoGrid {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  padding: 10px;
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.penaltyBody {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.penaltyReasonInput {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.reportList {
+  margin-top: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.reportListTitle {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5563;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.reportItem {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+
+.reportItem:last-child {
+  border-bottom: 0;
+}
+
+.toggleCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .unauthorized {
@@ -242,5 +511,14 @@
 @media (max-width: 640px) {
   .statGrid {
     grid-template-columns: 1fr;
+  }
+
+  .modalContent {
+    grid-template-columns: 1fr;
+  }
+
+  .modalMain {
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
   }
 }

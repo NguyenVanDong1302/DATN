@@ -15,7 +15,7 @@ export default function RightPanel() {
                 <div className={styles.switch}>Chuyển</div>
             </div>
 
-            <Suggestions />
+            {/* <Suggestions /> */}
 
             <div className={styles.footer}>
                 Giới thiệu · Trợ giúp · Báo chí · API · Việc làm ·<br />

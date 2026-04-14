@@ -6,11 +6,13 @@ import { useMessagesApi } from '../../features/messages/messages.api'
 import { joinConversation, leaveConversation, markConversationReadRealtime } from '../../features/messages/messages.socket'
 import type { ChatMessage, ChatMessageMediaItem, ConversationItem, ConversationSettings, DeletedMessageEvent, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
 import './Messages.scss'
+import '../../styles/messages-responsive.css'
 
 const TIME_SEPARATOR_MS = 10 * 60 * 1000
 const MAX_MESSAGE_MEDIA_FILES = 10
 const MAX_MESSAGE_VIDEO_BYTES = 15 * 1024 * 1024
 const MESSAGE_REACTIONS = ['\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F621}', '\u{1F44D}'] as const
+const COMPACT_MESSAGES_QUERY = '(max-width: 1024px)'
 
 type PendingMediaItem = {
   id: string
@@ -41,6 +43,11 @@ function avatarOf(user?: Pick<MessageUser, 'avatarUrl' | 'username'> | null) {
   if (user?.avatarUrl) return user.avatarUrl
   const seed = encodeURIComponent(user?.username || 'instagram_user')
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`
+}
+
+function getCompactMessagesMatches() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia(COMPACT_MESSAGES_QUERY).matches
 }
 
 function shouldShowCenterTime(messages: ChatMessage[], index: number) {
@@ -121,6 +128,8 @@ export default function MessagesPage() {
   const navigate = useNavigate()
   const { state } = useAppStore()
   const { socket } = useSocket()
+  const [isCompactLayout, setIsCompactLayout] = useState(getCompactMessagesMatches)
+  const [compactView, setCompactView] = useState<'inbox' | 'thread'>(() => (getCompactMessagesMatches() ? 'inbox' : 'thread'))
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -151,6 +160,9 @@ export default function MessagesPage() {
   const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
   const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
   const isBlocked = Boolean(settings?.isBlocked || activeConversation?.isBlocked)
+  const shouldShowInbox = !isCompactLayout || compactView === 'inbox'
+  const shouldShowThread = !isCompactLayout || compactView === 'thread'
+  const shouldLoadActiveConversation = Boolean(activeId) && shouldShowThread
 
   useEffect(() => {
     const root = document.documentElement
@@ -167,6 +179,32 @@ export default function MessagesPage() {
       body.style.height = prevBodyHeight
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const mediaQuery = window.matchMedia(COMPACT_MESSAGES_QUERY)
+    const handleChange = (event?: MediaQueryListEvent) => {
+      const nextMatches = event?.matches ?? mediaQuery.matches
+      setIsCompactLayout(nextMatches)
+      setCompactView(nextMatches ? 'inbox' : 'thread')
+    }
+
+    handleChange()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    mediaQuery.addListener(handleChange)
+    return () => mediaQuery.removeListener(handleChange)
+  }, [])
+
+  useEffect(() => {
+    if (!isCompactLayout) return
+    setIsDetailOpen(false)
+  }, [isCompactLayout])
 
   useEffect(() => {
     pendingMediaRef.current = mediaFiles
@@ -232,7 +270,7 @@ export default function MessagesPage() {
   }, [])
 
   useEffect(() => {
-    if (!activeId) return
+    if (!shouldLoadActiveConversation || !activeId) return
     let mounted = true
     ;(async () => {
       try {
@@ -258,14 +296,14 @@ export default function MessagesPage() {
     return () => {
       mounted = false
     }
-  }, [activeId, api, socket])
+  }, [activeId, api, shouldLoadActiveConversation, socket])
 
   useEffect(() => {
-    socket?.emit('presence:update', { screen: 'messages', activeConversationId: activeId || '' })
-    if (!socket || !activeId) return
+    socket?.emit('presence:update', { screen: 'messages', activeConversationId: shouldLoadActiveConversation ? activeId : '' })
+    if (!socket || !activeId || !shouldLoadActiveConversation) return
     joinConversation(socket, activeId)
     return () => leaveConversation(socket, activeId)
-  }, [socket, activeId])
+  }, [socket, activeId, shouldLoadActiveConversation])
 
   useEffect(() => {
     setReactionPickerMessageId('')
@@ -273,9 +311,9 @@ export default function MessagesPage() {
   }, [activeId])
 
   useEffect(() => {
-    if (!contentScrollRef.current) return
+    if (!shouldShowThread || !contentScrollRef.current) return
     contentScrollRef.current.scrollTop = contentScrollRef.current.scrollHeight
-  }, [activeMessages.length, activeId])
+  }, [activeMessages.length, activeId, shouldShowThread])
 
   useEffect(() => {
     if (!socket) return
@@ -294,7 +332,7 @@ export default function MessagesPage() {
         if (!found) return prev
         const next = prev.map((item) => {
           if (item.id !== message.conversationId) return item
-          const shouldIncrease = message.conversationId !== activeId && message.senderUsername !== state.username
+          const shouldIncrease = (!shouldLoadActiveConversation || message.conversationId !== activeId) && message.senderUsername !== state.username
           return {
             ...item,
             lastMessageText: buildMessagePreview(message),
@@ -358,7 +396,29 @@ export default function MessagesPage() {
       socket.off('conversation:updated', onConversationUpdated)
       socket.off('conversation:history-cleared', onHistoryCleared)
     }
-  }, [socket, activeId, state.username, api])
+  }, [socket, activeId, state.username, api, shouldLoadActiveConversation])
+
+  const handleInboxBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate('/')
+  }
+
+  const handleOpenConversation = (conversationId: string) => {
+    setActiveId(conversationId)
+    setIsSearchOpen(false)
+    if (isCompactLayout) {
+      setIsDetailOpen(false)
+      setCompactView('thread')
+    }
+  }
+
+  const handleBackToInbox = () => {
+    setIsDetailOpen(false)
+    setCompactView('inbox')
+  }
 
   const handlePickUser = async (user: MessageUser) => {
     try {
@@ -369,7 +429,9 @@ export default function MessagesPage() {
       })
       setActiveId(conversation.id)
       setIsSearchOpen(false)
+      setIsDetailOpen(false)
       setQuery('')
+      if (isCompactLayout) setCompactView('thread')
     } catch (err: any) {
       setError(err?.message || 'Không thể mở đoạn chat')
     }
@@ -569,16 +631,18 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="ig-msg">
+    <div className={`ig-msg ${isCompactLayout ? 'is-compact' : ''} ${isCompactLayout && compactView === 'inbox' ? 'is-list-view' : ''} ${isCompactLayout && compactView === 'thread' ? 'is-thread-view' : ''}`}>
       <div className={`ig-msg__wrap ${isDetailOpen ? 'is-detail-open' : ''}`}>
-        <aside className="ig-msg__left">
-          <div className="ig-msg__leftTop">
-            <button className="ig-msg__userBtn" type="button">
-              <span className="ig-msg__userName">{state.username || 'instagram_user'}</span>
-              <span className="ig-msg__chev">▾</span>
-            </button>
-            <button className="ig-msg__compose" type="button">✎</button>
-          </div>
+        {shouldShowInbox ? (
+          <aside className="ig-msg__left">
+            <div className={`ig-msg__leftTop ${isCompactLayout ? 'is-compact' : ''}`}>
+              <button className="ig-msg__iconBtn ig-msg__headerBack" type="button" onClick={handleInboxBack} aria-label="Quay lại trang trước">←</button>
+              <button className="ig-msg__userBtn" type="button">
+                <span className="ig-msg__userName">{state.username || 'instagram_user'}</span>
+                <span className="ig-msg__chev">▾</span>
+              </button>
+              <button className="ig-msg__compose" type="button">✎</button>
+            </div>
 
           <div className="ig-msg__searchWrap" ref={searchRef}>
             <div className="ig-msg__search">
@@ -618,7 +682,7 @@ export default function MessagesPage() {
             {loading ? <div className="ig-msg__empty">Đang tải cuộc trò chuyện...</div> : null}
             {!loading && !conversations.length ? <div className="ig-msg__empty">Chưa có đoạn chat nào. Hãy tìm người dùng để bắt đầu.</div> : null}
             {conversations.map((item) => (
-              <button key={item.id} type="button" className={`ig-msg__item ${item.id === activeId ? 'is-selected' : ''}`} onClick={() => setActiveId(item.id)}>
+              <button key={item.id} type="button" className={`ig-msg__item ${item.id === activeId ? 'is-selected' : ''}`} onClick={() => handleOpenConversation(item.id)}>
                 <img className="ig-msg__avatar" src={avatarOf(item.peer)} alt={item.peer.username} />
                 <div className="ig-msg__itemMid">
                   <div className="ig-msg__itemTitle"><span className="ig-msg__itemName">{item.nickname?.trim() || item.peer.username}</span></div>
@@ -631,12 +695,15 @@ export default function MessagesPage() {
               </button>
             ))}
           </div>
-        </aside>
+          </aside>
+        ) : null}
 
-        <section className="ig-msg__right">
-          {activeConversation ? (
+        {shouldShowThread ? (
+          <section className="ig-msg__right">
+            {activeConversation ? (
             <>
-              <div className="ig-msg__rightTop">
+              <div className={`ig-msg__rightTop ${isCompactLayout ? 'is-compact' : ''}`}>
+                <button className="ig-msg__iconBtn ig-msg__headerBack" type="button" onClick={handleBackToInbox} aria-label="Quay lại danh sách tin nhắn">←</button>
                 <div className="ig-msg__peer">
                   <img className="ig-msg__peerAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                   <div className="ig-msg__peerMeta">
@@ -824,9 +891,10 @@ export default function MessagesPage() {
                 ) : null}
               </div>
             </>
-          ) : <div className="ig-msg__blank">Chọn một cuộc trò chuyện để bắt đầu nhắn tin.</div>}
-          {error ? <div className="ig-msg__error">{error}</div> : null}
-        </section>
+            ) : <div className="ig-msg__blank">Chọn một cuộc trò chuyện để bắt đầu nhắn tin.</div>}
+          </section>
+        ) : null}
+        {error ? <div className="ig-msg__error">{error}</div> : null}
       </div>
     </div>
   )

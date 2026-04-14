@@ -2,13 +2,15 @@
   display: flex;
   justify-content: center;
   gap: 64px;
-  padding-top: 28px;
+  padding: 28px 0 40px;
 }
 
 .center {
-  width: 630px;
+  width: min(100%, 630px);
+  min-width: 0;
 }
 
 .right {
   width: 320px;
+  flex: 0 0 320px;
 }

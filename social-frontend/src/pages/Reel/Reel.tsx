@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import "./Reel.scss";
+import "../../styles/reel-responsive.css";
 import ReelComments, { type ReelComment } from "./comments/ReelComments";
 import { resolveMediaUrl, useApi } from "../../lib/api";
 import { getAvatarUrl } from "../../lib/avatar";
@@ -160,6 +161,9 @@ export default function Reel() {
   const videosRef = useRef<(HTMLVideoElement | null)[]>([]);
   const prevIndexRef = useRef<number>(0);
   const lockRef = useRef(false);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchDeltaYRef = useRef(0);
+  const suppressTapRef = useRef(false);
 
   const loadReels = useCallback(async () => {
     setLoading(true);
@@ -269,6 +273,11 @@ export default function Reel() {
   }, [index, reels]);
 
   const togglePlayPause = () => {
+    if (suppressTapRef.current) {
+      suppressTapRef.current = false;
+      return;
+    }
+
     const cur = videosRef.current[index];
     if (!cur) return;
     if (cur.paused) {
@@ -301,6 +310,39 @@ export default function Reel() {
     }
   };
 
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (commentsOpen || event.touches.length !== 1) return;
+    touchStartYRef.current = event.touches[0].clientY;
+    touchDeltaYRef.current = 0;
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    if (commentsOpen || touchStartYRef.current == null || event.touches.length !== 1) return;
+    touchDeltaYRef.current = event.touches[0].clientY - touchStartYRef.current;
+  };
+
+  const handleTouchEnd = () => {
+    if (commentsOpen || touchStartYRef.current == null) {
+      touchStartYRef.current = null;
+      touchDeltaYRef.current = 0;
+      return;
+    }
+
+    const deltaY = touchDeltaYRef.current;
+    touchStartYRef.current = null;
+    touchDeltaYRef.current = 0;
+
+    if (Math.abs(deltaY) < 56) return;
+
+    suppressTapRef.current = true;
+    if (deltaY < 0) next();
+    else prev();
+
+    window.setTimeout(() => {
+      suppressTapRef.current = false;
+    }, 220);
+  };
+
   const openComments = async () => {
     const active = reels[index];
     if (!active) return;
@@ -323,7 +365,14 @@ export default function Reel() {
       <div className={`ig-reels__shell ${commentsOpen ? "is-comments-open" : ""}`}>
         <div className={`ig-reels__center ${commentsOpen ? "is-comments-open" : ""}`}>
           <div className="ig-reels__card">
-            <div className="ig-reels__viewport" onClick={togglePlayPause}>
+            <div
+              className="ig-reels__viewport"
+              onClick={togglePlayPause}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+            >
               <div className="ig-reels__slider" style={{ transform: `translateY(${-index * 100}%)` }}>
                 {reels.map((r, i) => (
                   <article className="ig-reels__slide" key={r.id}>

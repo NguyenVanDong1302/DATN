@@ -308,7 +308,15 @@ export default function CreatePostPage() {
 
       console.log('create-post-payload', payloadPreview)
       console.log('create-post-response', res)
-      setStatus('Đăng bài thành công.')
+      if (res?.data?.pendingModeration) {
+        setStatus(res?.message || 'Bài viết đang được kiểm duyệt media. Hệ thống sẽ xử lý tối đa 5 phút.')
+        return
+      }
+      if (res?.data?.autoRemoved) {
+        setStatus(res?.message || 'Bài viết đã bị gỡ tự động do nội dung nhạy cảm và đã gửi admin xử lý.')
+        return
+      }
+      setStatus(res?.message || 'Đăng bài thành công.')
       navigate('/')
     } catch (error: any) {
       setStatus(error?.message || 'Đăng bài thất bại.')

@@ -55,6 +55,19 @@ export function usePostsApi() {
   const api = useApi()
 
   return {
+    updatePost: async (
+      postId: string,
+      payload: {
+        content?: string
+        visibility?: 'public' | 'friends' | 'private'
+        allowComments?: boolean
+        hideLikeCount?: boolean
+        location?: string
+      },
+    ) => {
+      const response = await api.patch(`/posts/${postId}`, payload || {})
+      return response?.data || response
+    },
     deletePost: async (postId: string) => {
       const response = await api.del(`/posts/${postId}`)
       return response?.data || response

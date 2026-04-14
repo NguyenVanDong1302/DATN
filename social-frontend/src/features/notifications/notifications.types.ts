@@ -1,8 +1,8 @@
 export type NotificationItem = {
   _id: string
   recipientId: string
-  type: 'like' | 'comment' | 'follow' | string
-  targetType: 'post' | 'user' | string
+  type: 'like' | 'comment' | 'follow' | 'message' | 'moderation' | string
+  targetType: 'post' | 'user' | 'conversation' | 'story' | 'moderation' | string
   targetId: string
   postId: string
   actors?: string[]

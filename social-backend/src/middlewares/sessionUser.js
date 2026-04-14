@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 const { AppError } = require("../utils/errors");
+const User = require("../models/User");
+const { buildLockDetails } = require("../utils/accountModeration");
 
 function toUserId(username) {
   return crypto
@@ -9,7 +11,7 @@ function toUserId(username) {
     .slice(0, 16);
 }
 
-function sessionUser(req, res, next) {
+async function sessionUser(req, res, next) {
   const username = (req.headers["x-username"] || "").toString().trim();
 
   if (!username) {
@@ -20,7 +22,26 @@ function sessionUser(req, res, next) {
     sub: toUserId(username),
     username,
   };
-  next();
+
+  try {
+    const currentUser = await User.findOne({ username })
+      .select(
+        "_id username role avatarUrl isVerified moderationStatus accountLocked accountLockedAt accountLockedReason strikesCount restrictions",
+      )
+      .lean();
+
+    req.currentUser = currentUser || null;
+
+    if (currentUser?.accountLocked) {
+      return next(
+        new AppError("Tai khoan da bi khoa", 423, "ACCOUNT_LOCKED", buildLockDetails(currentUser)),
+      );
+    }
+
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 module.exports = { sessionUser };

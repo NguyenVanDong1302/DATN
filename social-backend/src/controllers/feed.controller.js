@@ -21,6 +21,7 @@ async function listFollowingFeed(req, res, next) {
     const query = {
       authorId: { $in: ids },
       visibility: { $in: ["public", "friends"] },
+      moderationStatus: { $in: ["normal", "reported"] },
     };
 
     const [items, total] = await Promise.all([

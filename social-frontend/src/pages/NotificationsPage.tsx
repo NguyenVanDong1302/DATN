@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../features/notifications/NotificationProvider'
 import type { NotificationItem } from '../features/notifications/notifications.types'
@@ -9,6 +9,7 @@ const FILTERS = [
   { key: 'comment', label: 'Comments' },
   { key: 'like', label: 'Likes' },
   { key: 'follow', label: 'Followers' },
+  { key: 'moderation', label: 'Moderation' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
@@ -44,22 +45,26 @@ function splitSections(items: NotificationItem[]) {
 
 function buildLabel(item: NotificationItem) {
   const names = Array.isArray(item.actorUsernames) ? item.actorUsernames.filter(Boolean) : []
-  const first = names[0] || 'Ai đó'
+  const first = names[0] || 'Ai do'
   const total = Number(item.totalEvents) || names.length || 1
   const others = Math.max(total - 1, 0)
 
   if (item.type === 'follow') {
-    return others > 0 ? `${first} và ${others} người khác đã theo dõi bạn` : `${first} started following you`
+    return others > 0 ? `${first} va ${others} nguoi khac da theo doi ban` : `${first} started following you`
   }
   if (item.type === 'like') {
-    return others > 0 ? `${first} và ${others} người khác đã thích bài viết của bạn` : `${first} liked your post`
+    return others > 0 ? `${first} va ${others} nguoi khac da thich bai viet cua ban` : `${first} liked your post`
   }
-  return others > 0 ? `${first} và ${others} người khác đã bình luận bài viết của bạn` : `${first} commented: ${item.previewText || ''}`
+  if (item.type === 'moderation') {
+    return item.previewText || 'Tai khoan cua ban co cap nhat moderation'
+  }
+  return others > 0 ? `${first} va ${others} nguoi khac da binh luan bai viet cua ban` : `${first} commented: ${item.previewText || ''}`
 }
 
 function getAccentClass(type: string) {
   if (type === 'follow') return styles.avatarFollow
   if (type === 'like') return styles.avatarLike
+  if (type === 'moderation') return styles.avatarLike
   return styles.avatarComment
 }
 
@@ -74,7 +79,7 @@ function getInitials(name = '') {
 
 function NotificationRow({ item, onOpen, onToggleRead }: { item: NotificationItem; onOpen: () => void; onToggleRead: () => void }) {
   const names = Array.isArray(item.actorUsernames) ? item.actorUsernames.filter(Boolean) : []
-  const first = names[0] || 'Ai đó'
+  const first = names[0] || 'Ai do'
 
   return (
     <div className={`${styles.row} ${!item.isRead ? styles.rowUnread : ''}`}>
@@ -135,6 +140,11 @@ export default function NotificationsPage() {
       return
     }
 
+    if (item.type === 'moderation') {
+      if (item.postId) navigate(`/post/${encodeURIComponent(item.postId)}`)
+      return
+    }
+
     if (item.postId || item.targetId) {
       navigate(`/post/${encodeURIComponent(item.postId || item.targetId)}`)
     }
@@ -164,7 +174,7 @@ export default function NotificationsPage() {
         </div>
 
         <div className={styles.summaryRow}>
-          <span>{loading ? 'Đang tải...' : `${unreadCount} chưa đọc`}</span>
+          <span>{loading ? 'Dang tai...' : `${unreadCount} chua doc`}</span>
           <button type="button" className={styles.markAllBtn} onClick={() => markAllRead()} disabled={!unreadCount}>
             Mark all as read
           </button>
@@ -187,7 +197,7 @@ export default function NotificationsPage() {
             </section>
           ))}
 
-          {!loading && !visibleItems.length ? <div className={styles.empty}>Chưa có thông báo phù hợp.</div> : null}
+          {!loading && !visibleItems.length ? <div className={styles.empty}>Chua co thong bao phu hop.</div> : null}
         </div>
       </aside>
     </div>

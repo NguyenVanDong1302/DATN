@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+﻿const crypto = require('crypto');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { getIO } = require('../realtime/socket');
@@ -29,33 +29,37 @@ function buildNotifyMessage(notification) {
     ? notification.actorUsernames.filter(Boolean)
     : [];
 
-  const first = names[0] || 'Ai đó';
+  const first = names[0] || 'Ai do';
   const others = Math.max((notification.totalEvents || names.length || 1) - 1, 0);
 
   if (notification.type === 'follow') {
     return others > 0
-      ? `${first} và ${others} người khác đã theo dõi bạn.`
-      : `${first} đã theo dõi bạn.`;
+      ? `${first} va ${others} nguoi khac da theo doi ban.`
+      : `${first} da theo doi ban.`;
   }
 
   if (notification.type === 'like') {
     if (notification.targetType === 'story') {
       return others > 0
-        ? `${first} và ${others} người khác đã thích tin của bạn.`
-        : `${first} đã thích tin của bạn.`;
+        ? `${first} va ${others} nguoi khac da thich tin cua ban.`
+        : `${first} da thich tin cua ban.`;
     }
     return others > 0
-      ? `${first} và ${others} người khác đã thích bài viết của bạn.`
-      : `${first} đã thích bài viết của bạn.`;
+      ? `${first} va ${others} nguoi khac da thich bai viet cua ban.`
+      : `${first} da thich bai viet cua ban.`;
   }
 
   if (notification.type === 'comment') {
     return others > 0
-      ? `${first} và ${others} người khác đã bình luận về bài viết của bạn.`
-      : `${first} đã bình luận về bài viết của bạn.`;
+      ? `${first} va ${others} nguoi khac da binh luan ve bai viet cua ban.`
+      : `${first} da binh luan ve bai viet cua ban.`;
   }
 
-  return `${first} đã gửi cho bạn một tin nhắn mới.`;
+  if (notification.type === 'moderation') {
+    return String(notification.previewText || 'Tai khoan cua ban co cap nhat tu he thong quan tri.');
+  }
+
+  return `${first} da gui cho ban mot tin nhan moi.`;
 }
 
 function isSameActor({ recipientId, actorId, recipientUsername = '', actorUsername = '' }) {
@@ -269,6 +273,38 @@ async function notifyFollow({ recipientId, actorId, actorUsername, recipientUser
   });
 }
 
+async function notifyModerationAction({
+  recipientId,
+  actorId = 'admin_system',
+  actorUsername = 'admin',
+  postId = '',
+  previewText = '',
+}) {
+  if (!recipientId || !previewText) return null;
+
+  await ensureIndexes();
+  const now = new Date();
+
+  const doc = await Notification.create({
+    recipientId: String(recipientId),
+    type: 'moderation',
+    targetType: 'moderation',
+    targetId: `moderation:${Date.now()}:${Math.random().toString(36).slice(2, 9)}`,
+    postId: postId ? String(postId) : '',
+    actors: [String(actorId || 'admin_system')],
+    actorUsernames: [String(actorUsername || 'admin')],
+    totalEvents: 1,
+    previewText: String(previewText || ''),
+    isRead: false,
+    readAt: null,
+    lastEventAt: now,
+  });
+
+  const payload = doc.toObject ? doc.toObject() : doc;
+  await emitNotification(String(recipientId), payload);
+  return payload;
+}
+
 async function removeFollowNotification({ recipientId, actorId, actorUsername }) {
   if (!recipientId || !actorId) return null;
   return removeNotificationActor({
@@ -349,6 +385,7 @@ module.exports = {
   removePostLikeActor: ({ postId, recipientId, actorId, actorUsername }) =>
     removeNotificationActor({ type: 'like', targetType: 'post', targetId: postId, recipientId, actorId, actorUsername }),
   notifyFollow,
+  notifyModerationAction,
   removeFollowNotification,
   listNotifications,
   markRead,

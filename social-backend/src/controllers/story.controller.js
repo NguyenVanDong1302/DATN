@@ -6,6 +6,7 @@ const Story = require('../models/Story');
 const User = require('../models/User');
 const { postMediaDir } = require('../config/media');
 const { AppError } = require('../utils/errors');
+const { ensureCanLike } = require('../utils/accountModeration');
 
 const execFileAsync = promisify(execFile);
 const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
@@ -155,7 +156,8 @@ function serializeStoryViewer(view, user) {
 async function resolveViewer(req) {
   const rawUsername = String(req.user?.username || req.headers['x-username'] || '').trim();
   if (!rawUsername) throw new AppError('Username required', 401, 'USERNAME_REQUIRED');
-  const viewer = await User.findOne({ username: rawUsername }).select('_id username avatarUrl hiddenStoryAuthorIds');
+  const viewer = await User.findOne({ username: rawUsername })
+    .select('_id username avatarUrl hiddenStoryAuthorIds restrictions accountLocked accountLockedAt accountLockedReason');
   if (!viewer) throw new AppError('Viewer not found', 404, 'VIEWER_NOT_FOUND');
   return viewer;
 }
@@ -324,6 +326,7 @@ async function toggleStoryLike(req, res, next) {
   try {
     const now = new Date();
     const viewer = await resolveViewer(req);
+    ensureCanLike(viewer);
     await archiveExpiredStories(now);
     const story = await Story.findById(String(req.params.storyId));
     if (!story || !isActiveStory(story, now)) throw new AppError('Story not found', 404, 'STORY_NOT_FOUND');

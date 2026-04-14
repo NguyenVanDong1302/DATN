@@ -16,11 +16,13 @@ import CreatePostPage from '../pages/CreatePostPage'
 import PostPage from '../pages/PostPage'
 import AdminPage from '../pages/Admin/AdminPage'
 import LoginPage from '../pages/Auth/LoginPage'
+import AccountLockedPage from '../pages/Auth/AccountLockedPage'
 import RegisterPage from '../pages/Auth/RegisterPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import { MessageIndicatorProvider } from '../features/messages/MessageIndicatorProvider'
 import ProtectedRoute from '../features/auth/ProtectedRoute'
+import '../styles/responsive.css'
 
 function ProtectedShell() {
   return (
@@ -42,6 +44,7 @@ export default function App() {
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/account-locked" element={<AccountLockedPage />} />
 
                   <Route element={<ProtectedRoute />}>
                     <Route element={<ProtectedShell />}>

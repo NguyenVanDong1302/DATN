@@ -14,6 +14,7 @@ function errorHandler(err, req, res, next) {
     ok: false,
     code,
     message,
+    ...(err?.details ? { data: err.details } : {}),
   });
 }
 

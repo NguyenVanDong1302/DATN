@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const { createApp } = require("./app");
 const { connectDB } = require("./config/db");
 const { initSocket } = require("./realtime/socket");
+const { initPostModerationWorker } = require("./services/postModeration.service");
 
 const listEndpoints = require("express-list-endpoints");
 
@@ -31,6 +32,7 @@ async function main() {
 
   try {
     await connectDB(mongoUri);
+    initPostModerationWorker();
 
       console.log("=== API ROUTES ===");
       console.table(listEndpoints(app));

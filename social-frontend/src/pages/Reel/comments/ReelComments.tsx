@@ -203,6 +203,7 @@ export default function ReelComments({ isOpen, postId, reelUsername, comments, o
     <>
       <div className={`ig-reel-comments__backdrop ${isVisible ? 'is-open' : ''}`} onClick={onClose} aria-hidden={!isVisible} />
       <aside className={`ig-reel-comments__panel ${isVisible ? 'is-open' : ''}`} aria-hidden={!isVisible} aria-label={title}>
+        <div className="ig-reel-comments__grabber" aria-hidden="true" />
         <div className="ig-reel-comments__header"><button className="ig-reel-comments__close" type="button" onClick={onClose} aria-label="Đóng bình luận">✕</button><div className="ig-reel-comments__title">Comments</div><div className="ig-reel-comments__spacer" /></div>
         <div className="ig-reel-comments__body">{roots.map((comment) => <div key={comment.id}>{renderComment(comment, false)}{(repliesMap.get(comment.id) || []).map((reply) => renderComment(reply, true))}</div>)}</div>
         <div className="ig-reel-comments__composer">

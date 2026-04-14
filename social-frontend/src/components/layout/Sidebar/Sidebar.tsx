@@ -11,13 +11,27 @@ type NavItem = {
   label: string
   icon: ReactNode
   action?: () => void
+  badgeCount?: number
+  isActive?: boolean
 }
 
 function Icon({ children }: { children: ReactNode }) {
   return <span className={styles.icon}>{children}</span>
 }
 
-export default function Sidebar({ onToggleNotifications, onToggleSearch, notificationsOpen = false, searchOpen = false }: { onToggleNotifications?: () => void; onToggleSearch?: () => void; notificationsOpen?: boolean; searchOpen?: boolean }) {
+export default function Sidebar({
+  compactMode = false,
+  onToggleNotifications,
+  onToggleSearch,
+  notificationsOpen = false,
+  searchOpen = false,
+}: {
+  compactMode?: boolean
+  onToggleNotifications?: () => void
+  onToggleSearch?: () => void
+  notificationsOpen?: boolean
+  searchOpen?: boolean
+}) {
   const { user, logout } = useAuth()
   const { unreadCount } = useNotifications()
   const { unreadConversations } = useMessageIndicator()
@@ -43,37 +57,46 @@ export default function Sidebar({ onToggleNotifications, onToggleSearch, notific
     { to: `/profile/${profileSlug}`, label: 'Trang cá nhân', icon: <Icon>👤</Icon> },
   ]
 
+  items[2] = { ...items[2], badgeCount: unreadConversations }
+  items[3] = compactMode
+    ? { ...items[3], to: '/search', action: undefined, isActive: false }
+    : { ...items[3], to: undefined, isActive: searchOpen }
+  items[5] = compactMode
+    ? { ...items[5], to: '/notifications', action: undefined, badgeCount: unreadCount, isActive: false }
+    : { ...items[5], to: undefined, badgeCount: unreadCount, isActive: notificationsOpen }
+
   const handleLogout = async () => {
     try {
       if (user) await logout()
     } catch {
       // ignore firebase logout error when using backend auth only
     }
+    localStorage.removeItem('account_lock_info')
     setState({ username: '', token: '', role: 'user' })
     navigate('/login', { replace: true })
   }
 
   return (
-    <aside className={styles.sidebar} aria-label="Sidebar">
-      <div className={styles.logoRow}>
+    <aside className={`${styles.sidebar} app-sidebar`} aria-label="Sidebar" data-compact={compactMode ? 'true' : 'false'}>
+      <div className={`${styles.logoRow} app-sidebar__logoRow`}>
         <div className={styles.logoIcon}>T</div>
       </div>
 
-      <nav className={styles.nav}>
+      <nav className={`${styles.nav} app-sidebar__nav`}>
         
 {items.map((it) => (
   it.to ? (
     <NavLink
       key={it.label}
       to={it.to}
-      className={({ isActive }) => `${styles.item} ${isActive ? styles.active : ''}`}
+      className={({ isActive }) => `${styles.item} app-sidebar__item ${isActive ? styles.active : ''}`}
       title={it.label}
     >
       <span className={styles.iconWrap}>
         {it.icon}
-        {it.to === '/messages' && unreadConversations > 0 ? <span className={styles.badge}>{unreadConversations > 99 ? '99+' : unreadConversations}</span> : null}
+        {it.badgeCount && it.badgeCount > 0 ? <span className={styles.badge}>{it.badgeCount > 99 ? '99+' : it.badgeCount}</span> : null}
       </span>
-      <span className={styles.label}>{it.label}</span>
+      <span className={`${styles.label} app-sidebar__label`}>{it.label}</span>
     </NavLink>
   ) : (
     <button key={it.label} type="button" className={`${styles.itemBtn} ${((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) ? styles.active : ''}`} title={it.label} onClick={it.action}>
@@ -88,7 +111,7 @@ export default function Sidebar({ onToggleNotifications, onToggleSearch, notific
 
       </nav>
 
-      <div className={styles.bottom}>
+      <div className={`${styles.bottom} app-sidebar__bottom`}>
         <button className={styles.itemBtn} type="button" title="Xem thêm">
           <span className={styles.icon}>≡</span>
           <span className={styles.label}>Xem thêm</span>

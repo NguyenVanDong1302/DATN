@@ -71,6 +71,7 @@ export function useApi() {
       put: (p: string, body?: any) => request(p, { method: 'PUT', body: JSON.stringify(body || {}) }),
       patch: (p: string, body?: any) => request(p, { method: 'PATCH', body: JSON.stringify(body || {}) }),
       postForm: (p: string, body: FormData) => request(p, { method: 'POST', body }),
+      patchForm: (p: string, body: FormData) => request(p, { method: 'PATCH', body }),
     }),
     [request],
   )
