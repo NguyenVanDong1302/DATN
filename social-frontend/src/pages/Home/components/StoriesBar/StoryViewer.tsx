@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react'
 import { useModal } from '../../../../components/Modal'
 import styles from './StoryViewer.module.css'
+import desktopStyles from './StoryViewer.desktop.module.css'
+import tabletStyles from './StoryViewer.tablet.module.css'
+import mobileStyles from './StoryViewer.mobile.module.css'
 import type { StoryGroup, StoryItem, StoryViewerUser } from '../../../../features/stories/stories.types'
 import { useStoriesApi } from '../../../../features/stories/stories.api'
 import { useMessagesApi } from '../../../../features/messages/messages.api'
 import { useAppStore } from '../../../../state/store'
+import { combineResponsiveStyles } from '../../../../lib/combineResponsiveStyles'
 
 const DEFAULT_MS = 7000
 const SLIDE_MS = 380
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n))
@@ -459,7 +464,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
         ) : (
           <img className={styles.media} src={item.mediaUrl} alt="story" draggable={false} />
         )}
-        {item.caption ? <div className={styles.caption}>{item.caption}</div> : null}
+        {item.caption ? <div className={`${styles.caption} ${responsiveStyles.caption}`}>{item.caption}</div> : null}
       </div>
     )
   }
@@ -469,12 +474,12 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
 
   return (
     <div className={styles.stage}>
-      <button className={styles.closeBtn} onClick={modal.close} aria-label="Đóng">✕</button>
-      <div className={styles.viewerRow}>
-        <button className={styles.navBtn} onClick={() => startSlide(computePrev(), 'prev')} aria-label="Trước">‹</button>
+      <button className={`${styles.closeBtn} ${responsiveStyles.closeBtn}`} onClick={modal.close} aria-label="Đóng">✕</button>
+      <div className={`${styles.viewerRow} ${responsiveStyles.viewerRow}`}>
+        <button className={`${styles.navBtn} ${responsiveStyles.navBtn}`} onClick={() => startSlide(computePrev(), 'prev')} aria-label="Trước">‹</button>
 
         <div className={styles.storyShell}>
-          <div className={styles.storyCard}>
+          <div className={`${styles.storyCard} ${responsiveStyles.storyCard}`}>
             {!isArchiveMode ? (
               <div className={styles.progressRow}>
                 {bars.map((v, idx) => (
@@ -485,7 +490,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
               </div>
             ) : null}
 
-            <div className={styles.header}>
+            <div className={`${styles.header} ${responsiveStyles.header}`}>
               <div className={styles.headerLeft}>
                 <img className={styles.headerAvatar} src={avatarOf(currentGroup.username, currentGroup.avatarUrl)} alt="" onError={(event) => handleAvatarError(event, currentGroup.username)} />
                 <div className={styles.headerMeta}>
@@ -524,7 +529,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
             </div>
 
             <div
-              className={styles.content}
+              className={`${styles.content} ${responsiveStyles.content}`}
               onClick={(e) => {
                 const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
                 const x = e.clientX - rect.left
@@ -564,7 +569,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
               </div>
             ) : null}
 
-            <div className={styles.footer}>
+            <div className={`${styles.footer} ${responsiveStyles.footer}`}>
               {isOwner ? (
                 <div className={styles.ownerFooter}>
                   <button className={styles.viewerToggle} type="button" onClick={() => setViewerPanelOpen((value) => !value)}>
@@ -575,7 +580,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
               ) : (
                 <>
                   <input
-                    className={styles.replyBox}
+                    className={`${styles.replyBox} ${responsiveStyles.replyBox}`}
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     placeholder={`Trả lời ${currentGroup.username}...`}
@@ -590,14 +595,14 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
           </div>
 
           {sideGroups.length && !isArchiveMode ? (
-            <div className={styles.sideRail}>
+            <div className={`${styles.sideRail} ${responsiveStyles.sideRail}`}>
               {sideGroups.map(({ group, index }) => (
-                <button key={group.id} className={styles.sideCard} onClick={() => startSlide({ groupIndex: index, itemIndex: getStartStoryIndex(group) }, 'next')}>
+                <button key={group.id} className={`${styles.sideCard} ${responsiveStyles.sideCard}`} onClick={() => startSlide({ groupIndex: index, itemIndex: getStartStoryIndex(group) }, 'next')}>
                   <div className={styles.sideOverlay} />
                   <img className={styles.sideMedia} src={group.stories[0]?.thumbnailUrl || group.stories[0]?.mediaUrl} alt={group.username} />
                   <div className={styles.sideMeta}>
                     <img className={styles.sideAvatar} src={avatarOf(group.username, group.avatarUrl)} alt="" onError={(event) => handleAvatarError(event, group.username)} />
-                    <div className={styles.sideUser}>{group.username}</div>
+                    <div className={`${styles.sideUser} ${responsiveStyles.sideUser}`}>{group.username}</div>
                     <div className={styles.sideTime}>{timeLabel(group.stories[0]?.createdAt)}</div>
                   </div>
                 </button>
@@ -606,7 +611,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
           ) : null}
         </div>
 
-        <button className={styles.navBtn} onClick={() => startSlide(computeNext(), 'next')} aria-label="Sau">›</button>
+        <button className={`${styles.navBtn} ${responsiveStyles.navBtn}`} onClick={() => startSlide(computeNext(), 'next')} aria-label="Sau">›</button>
       </div>
     </div>
   )

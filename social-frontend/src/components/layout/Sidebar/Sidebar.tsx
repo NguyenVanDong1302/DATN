@@ -1,10 +1,14 @@
 import { type ReactNode, useMemo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import styles from './Sidebar.module.css'
+import desktopStyles from './Sidebar.desktop.module.css'
+import tabletStyles from './Sidebar.tablet.module.css'
+import mobileStyles from './Sidebar.mobile.module.css'
 import { useAuth } from '../../../features/auth/AuthProvider'
 import { useNotifications } from '../../../features/notifications/NotificationProvider'
 import { useMessageIndicator } from '../../../features/messages/MessageIndicatorProvider'
 import { useAppStore } from '../../../state/store'
+import { combineResponsiveStyles } from '../../../lib/combineResponsiveStyles'
 
 type NavItem = {
   to?: string
@@ -16,8 +20,14 @@ type NavItem = {
 }
 
 function Icon({ children }: { children: ReactNode }) {
-  return <span className={styles.icon}>{children}</span>
+  return <span className={`${styles.icon} ${responsiveStyles.icon}`}>{children}</span>
 }
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 export default function Sidebar({
   compactMode = false,
@@ -77,26 +87,26 @@ export default function Sidebar({
   }
 
   return (
-    <aside className={`${styles.sidebar} app-sidebar`} aria-label="Sidebar" data-compact={compactMode ? 'true' : 'false'}>
-      <div className={`${styles.logoRow} app-sidebar__logoRow`}>
+    <aside className={cx(styles.sidebar, responsiveStyles.sidebar, 'app-sidebar')} aria-label="Sidebar" data-compact={compactMode ? 'true' : 'false'}>
+      <div className={cx(styles.logoRow, responsiveStyles.logoRow, 'app-sidebar__logoRow')}>
         <div className={styles.logoIcon}>T</div>
       </div>
 
-      <nav className={`${styles.nav} app-sidebar__nav`}>
+      <nav className={cx(styles.nav, responsiveStyles.nav, 'app-sidebar__nav')}>
         
 {items.map((it) => (
   it.to ? (
     <NavLink
       key={it.label}
       to={it.to}
-      className={({ isActive }) => `${styles.item} app-sidebar__item ${isActive ? styles.active : ''}`}
+      className={({ isActive }) => cx(styles.item, responsiveStyles.item, 'app-sidebar__item', isActive && styles.active, isActive && responsiveStyles.itemActive)}
       title={it.label}
     >
-      <span className={styles.iconWrap}>
+      <span className={cx(styles.iconWrap, responsiveStyles.iconWrap)}>
         {it.icon}
         {it.badgeCount && it.badgeCount > 0 ? <span className={styles.badge}>{it.badgeCount > 99 ? '99+' : it.badgeCount}</span> : null}
       </span>
-      <span className={`${styles.label} app-sidebar__label`}>{it.label}</span>
+      <span className={cx(styles.label, responsiveStyles.label, 'app-sidebar__label')}>{it.label}</span>
     </NavLink>
   ) : (
     <button key={it.label} type="button" className={`${styles.itemBtn} ${((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) ? styles.active : ''}`} title={it.label} onClick={it.action}>
@@ -111,7 +121,7 @@ export default function Sidebar({
 
       </nav>
 
-      <div className={`${styles.bottom} app-sidebar__bottom`}>
+      <div className={cx(styles.bottom, responsiveStyles.bottom, 'app-sidebar__bottom')}>
         <button className={styles.itemBtn} type="button" title="Xem thêm">
           <span className={styles.icon}>≡</span>
           <span className={styles.label}>Xem thêm</span>

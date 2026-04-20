@@ -1,0 +1,5 @@
+@media (min-width: 993px) and (max-width: 1200px) {
+  .page {
+    padding: 20px 20px 32px;
+  }
+}

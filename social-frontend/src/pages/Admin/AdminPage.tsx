@@ -10,7 +10,11 @@ import {
   type PaginatedAdminPosts,
   useAdminApi,
 } from '../../features/admin/admin.api'
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles'
 import styles from './AdminPage.module.css'
+import desktopStyles from './AdminPage.desktop.module.css'
+import tabletStyles from './AdminPage.tablet.module.css'
+import mobileStyles from './AdminPage.mobile.module.css'
 
 type AdminTab = 'accounts' | 'posts' | 'reports' | 'violations'
 type ReportDecision = 'no_violation' | 'delete_post' | 'strike_account' | 'lock_account'
@@ -48,6 +52,7 @@ const DEFAULT_ACCOUNT_FILTERS = {
   keyword: '',
   status: 'all' as 'all' | 'active' | 'locked',
 }
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function formatDate(date?: string | null) {
   if (!date) return '--'
@@ -340,14 +345,14 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className={styles.page}>
+      <div className={`${styles.page} ${responsiveStyles.page}`}>
         <div className={styles.unauthorized}>Ban khong co quyen truy cap trang quan tri.</div>
       </div>
     )
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${responsiveStyles.page}`}>
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Admin Dashboard</h1>
@@ -355,7 +360,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className={styles.tabs}>
+      <div className={`${styles.tabs} ${responsiveStyles.tabs}`}>
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -373,8 +378,8 @@ export default function AdminPage() {
       {loading ? <div className={styles.loading}>Dang tai du lieu...</div> : null}
 
       {activeTab === 'accounts' ? (
-        <section className={styles.panel}>
-          <div className={styles.filters}>
+        <section className={`${styles.panel} ${responsiveStyles.panel}`}>
+          <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
               <span>Khoang thang</span>
               <select value={months} onChange={(e) => setMonths(Number(e.target.value) || 12)}>
@@ -415,7 +420,7 @@ export default function AdminPage() {
             </button>
           </div>
 
-          <div className={styles.statGrid}>
+          <div className={`${styles.statGrid} ${responsiveStyles.statGrid}`}>
             <div className={styles.statCard}>
               <div className={styles.statLabel}>Tong tai khoan</div>
               <div className={styles.statValue}>{accountStats?.summary?.totalAccounts ?? 0}</div>
@@ -540,8 +545,8 @@ export default function AdminPage() {
       ) : null}
 
       {activeTab === 'posts' ? (
-        <section className={styles.panel}>
-          <div className={styles.filters}>
+        <section className={`${styles.panel} ${responsiveStyles.panel}`}>
+          <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
               <span>Tu ngay</span>
               <input
@@ -669,8 +674,8 @@ export default function AdminPage() {
       ) : null}
 
       {activeTab === 'reports' ? (
-        <section className={styles.panel}>
-          <div className={styles.filters}>
+        <section className={`${styles.panel} ${responsiveStyles.panel}`}>
+          <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
               <span>Tu ngay</span>
               <input
@@ -798,8 +803,8 @@ export default function AdminPage() {
       ) : null}
 
       {activeTab === 'violations' ? (
-        <section className={styles.panel}>
-          <div className={styles.statGrid}>
+        <section className={`${styles.panel} ${responsiveStyles.panel}`}>
+          <div className={`${styles.statGrid} ${responsiveStyles.statGrid}`}>
             <div className={styles.statCard}>
               <div className={styles.statLabel}>Tai khoan vi pham</div>
               <div className={styles.statValue}>{violationsData?.summary?.violatingAccounts ?? 0}</div>
@@ -881,8 +886,8 @@ export default function AdminPage() {
       ) : null}
 
       {postDetailOpen ? (
-        <div className={styles.modalOverlay} onMouseDown={closePostDetail}>
-          <div className={styles.modalCard} onMouseDown={(event) => event.stopPropagation()}>
+        <div className={`${styles.modalOverlay} ${responsiveStyles.modalOverlay}`} onMouseDown={closePostDetail}>
+          <div className={`${styles.modalCard} ${responsiveStyles.modalCard}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div>
                 <h3 className={styles.modalTitle}>Chi tiet bai viet</h3>
@@ -898,8 +903,8 @@ export default function AdminPage() {
             {postDetailLoading ? <div className={styles.loading}>Dang tai chi tiet...</div> : null}
 
             {!postDetailLoading && postDetailData?.post ? (
-              <div className={styles.modalContent}>
-                <div className={styles.modalMain}>
+              <div className={`${styles.modalContent} ${responsiveStyles.modalContent}`}>
+                <div className={`${styles.modalMain} ${responsiveStyles.modalMain}`}>
                   <div className={styles.modalPostHeader}>
                     <div><b>@{postDetailData.post.authorUsername}</b></div>
                     <div className={styles.muted}>{formatDate(postDetailData.post.createdAt)}</div>
@@ -990,8 +995,8 @@ export default function AdminPage() {
       ) : null}
 
       {penaltyModalOpen ? (
-        <div className={styles.modalOverlay} onMouseDown={closePenaltyModal}>
-          <div className={styles.penaltyModalCard} onMouseDown={(event) => event.stopPropagation()}>
+        <div className={`${styles.modalOverlay} ${responsiveStyles.modalOverlay}`} onMouseDown={closePenaltyModal}>
+          <div className={`${styles.penaltyModalCard} ${responsiveStyles.penaltyModalCard}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div>
                 <h3 className={styles.modalTitle}>Xu phat bai viet</h3>

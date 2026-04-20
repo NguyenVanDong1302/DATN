@@ -2,17 +2,26 @@
 import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../features/notifications/NotificationProvider'
 import type { NotificationItem } from '../features/notifications/notifications.types'
+import { combineResponsiveStyles } from '../lib/combineResponsiveStyles'
 import styles from './NotificationsPage.module.css'
+import desktopStyles from './NotificationsPage.desktop.module.css'
+import tabletStyles from './NotificationsPage.tablet.module.css'
+import mobileStyles from './NotificationsPage.mobile.module.css'
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'comment', label: 'Comments' },
-  { key: 'like', label: 'Likes' },
-  { key: 'follow', label: 'Followers' },
-  { key: 'moderation', label: 'Moderation' },
+  { key: 'all', label: 'Tat ca' },
+  { key: 'activity', label: 'Tuong tac' },
+  { key: 'follow', label: 'Theo doi' },
+  { key: 'system', label: 'He thong' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function relativeTime(value?: string) {
   if (!value) return ''
@@ -41,6 +50,13 @@ function splitSections(items: NotificationItem[]) {
     { title: 'New', items: recent },
     { title: 'This month', items: month },
   ].filter((section) => section.items.length)
+}
+
+function matchesFilter(item: NotificationItem, filter: FilterKey) {
+  if (filter === 'all') return true
+  if (filter === 'activity') return item.type === 'comment' || item.type === 'like'
+  if (filter === 'follow') return item.type === 'follow'
+  return item.type === 'moderation'
 }
 
 function buildLabel(item: NotificationItem) {
@@ -97,17 +113,14 @@ function NotificationRow({ item, onOpen, onToggleRead }: { item: NotificationIte
       </button>
 
       <div className={styles.actions}>
-        {item.type === 'follow' ? (
-          <button type="button" className={styles.followingBtn} onClick={onOpen}>
-            View profile
-          </button>
-        ) : (
-          <button type="button" className={styles.ghostBtn} onClick={onOpen}>
-            Open
-          </button>
-        )}
-        <button type="button" className={styles.dotBtn} onClick={onToggleRead}>
-          {item.isRead ? '○' : '●'}
+        <button
+          type="button"
+          className={item.isRead ? styles.statusBtn : styles.unreadDot}
+          onClick={onToggleRead}
+          aria-label={item.isRead ? 'Danh dau chua doc' : 'Danh dau da doc'}
+          title={item.isRead ? 'Danh dau chua doc' : 'Danh dau da doc'}
+        >
+          {item.isRead ? 'Chua doc' : ''}
         </button>
       </div>
     </div>
@@ -120,7 +133,7 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<FilterKey>('all')
 
   const visibleItems = useMemo(() => {
-    return items.filter((item) => (filter === 'all' ? true : item.type === filter))
+    return items.filter((item) => matchesFilter(item, filter))
   }, [items, filter])
 
   const sections = useMemo(() => splitSections(visibleItems), [visibleItems])
@@ -151,36 +164,38 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className={styles.overlay}>
-      <aside className={styles.panel}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>Notifications</h1>
-          <button type="button" className={styles.closeBtn} onClick={() => navigate(-1)}>
-            ✕
-          </button>
-        </div>
-
-        <div className={styles.filterRow}>
-          {FILTERS.map((entry) => (
-            <button
-              key={entry.key}
-              type="button"
-              className={`${styles.filterBtn} ${filter === entry.key ? styles.filterBtnActive : ''}`}
-              onClick={() => setFilter(entry.key)}
-            >
-              {entry.label}
+    <div className={cx(styles.pageOverlay, responsiveStyles.pageOverlay)}>
+      <aside className={cx(styles.pagePanel, responsiveStyles.pagePanel)}>
+        <div className={cx(styles.pageTop, responsiveStyles.pageTop)}>
+          <div className={styles.header}>
+            <h1 className={styles.title}>Notifications</h1>
+            <button type="button" className={styles.closeBtn} onClick={() => navigate(-1)}>
+              ✕
             </button>
-          ))}
+          </div>
+
+          <div className={cx(styles.filterRow, responsiveStyles.filterRow)}>
+            {FILTERS.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                className={`${styles.filterBtn} ${filter === entry.key ? styles.filterBtnActive : ''}`}
+                onClick={() => setFilter(entry.key)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+
+          <div className={cx(styles.summaryRow, responsiveStyles.summaryRow)}>
+            <span>{loading ? 'Dang tai...' : `${unreadCount} chua doc`}</span>
+            <button type="button" className={styles.markAllBtn} onClick={() => markAllRead()} disabled={!unreadCount}>
+              Mark all as read
+            </button>
+          </div>
         </div>
 
-        <div className={styles.summaryRow}>
-          <span>{loading ? 'Dang tai...' : `${unreadCount} chua doc`}</span>
-          <button type="button" className={styles.markAllBtn} onClick={() => markAllRead()} disabled={!unreadCount}>
-            Mark all as read
-          </button>
-        </div>
-
-        <div className={styles.content}>
+        <div className={cx(styles.content, responsiveStyles.content)}>
           {sections.map((section) => (
             <section key={section.title} className={styles.section}>
               <h2 className={styles.sectionTitle}>{section.title}</h2>

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import styles from './CommentSheet.module.css'
+import desktopStyles from './CommentSheet.desktop.module.css'
+import tabletStyles from './CommentSheet.tablet.module.css'
+import mobileStyles from './CommentSheet.mobile.module.css'
 import { useApi, resolveMediaUrl } from '../../lib/api'
 import { getAvatarUrl } from '../../lib/avatar'
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles'
 import { useToast } from '../Toast'
 import { useAppStore } from '../../state/store'
 import type { Post, PostComment } from '../../types'
@@ -10,6 +14,9 @@ type Props = {
   postId: string
   onChanged?: (count: number) => void
   mode?: 'full' | 'panel'
+  hidePostMeta?: boolean
+  presentation?: 'dialog' | 'fullscreen'
+  onClose?: () => void
 }
 
 type NormalizedMedia = {
@@ -21,6 +28,12 @@ type GroupedComment = {
   root: PostComment
   replies: PostComment[]
 }
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function detectMediaType(item: any): 'image' | 'video' | null {
   const type = String(item?.type || item?.mediaType || '').toLowerCase()
@@ -103,8 +116,22 @@ function MediaPreview({ media }: { media: NormalizedMedia[] }) {
         {current.type === 'video' ? <video className={styles.media} src={current.url} controls playsInline /> : <img className={styles.media} src={current.url} alt="post" />}
         {media.length > 1 ? (
           <>
-            <button type="button" className={`${styles.mediaNav} ${styles.mediaPrev}`} onClick={() => setActive((v) => (v - 1 + media.length) % media.length)} aria-label="Ảnh trước">‹</button>
-            <button type="button" className={`${styles.mediaNav} ${styles.mediaNext}`} onClick={() => setActive((v) => (v + 1) % media.length)} aria-label="Ảnh sau">›</button>
+            <button
+              type="button"
+              className={cx(styles.mediaNav, responsiveStyles.mediaNav, styles.mediaPrev, responsiveStyles.mediaPrev)}
+              onClick={() => setActive((v) => (v - 1 + media.length) % media.length)}
+              aria-label="Ảnh trước"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className={cx(styles.mediaNav, responsiveStyles.mediaNav, styles.mediaNext, responsiveStyles.mediaNext)}
+              onClick={() => setActive((v) => (v + 1) % media.length)}
+              aria-label="Ảnh sau"
+            >
+              ›
+            </button>
           </>
         ) : null}
       </div>
@@ -124,13 +151,20 @@ function CommentAttachment({ comment }: { comment: PostComment }) {
   const url = resolveMediaUrl(comment.mediaUrl)
   if (!mediaType || !url) return null
   return mediaType === 'video' ? (
-    <video className={styles.commentMedia} src={url} controls playsInline />
+    <video className={cx(styles.commentMedia, responsiveStyles.commentMedia)} src={url} controls playsInline />
   ) : (
-    <img className={styles.commentMedia} src={url} alt="comment media" />
+    <img className={cx(styles.commentMedia, responsiveStyles.commentMedia)} src={url} alt="comment media" />
   )
 }
 
-export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props) {
+export default function CommentSheet({
+  postId,
+  onChanged,
+  mode = 'full',
+  hidePostMeta = false,
+  presentation = 'dialog',
+  onClose,
+}: Props) {
   const api = useApi()
   const toast = useToast()
   const { state } = useAppStore()
@@ -239,11 +273,15 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
     const isReply = modeValue === 'reply'
 
     return (
-      <div key={comment._id} className={`${styles.item} ${isReply ? styles.replyItem : ''}`}>
-        <img className={styles.itemAvatarImage} src={getAvatarUrl({ username: comment.authorUsername, avatarUrl: (comment as any).authorAvatarUrl })} alt={comment.authorUsername || 'user'} />
+      <div key={comment._id} className={cx(styles.item, responsiveStyles.item, isReply && styles.replyItem)}>
+        <img
+          className={cx(styles.itemAvatarImage, responsiveStyles.itemAvatarImage)}
+          src={getAvatarUrl({ username: comment.authorUsername, avatarUrl: (comment as any).authorAvatarUrl })}
+          alt={comment.authorUsername || 'user'}
+        />
         <div className={styles.itemBody}>
           {isReply ? (
-            <div className={styles.replyBadgeRow}>
+            <div className={cx(styles.replyBadgeRow, responsiveStyles.replyBadgeRow)}>
               <span className={styles.replyBadge}>Trả lời</span>
               {targetUsername ? <span className={styles.replyTarget}>@{targetUsername}</span> : null}
             </div>
@@ -261,7 +299,7 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
           ) : null}
           <CommentAttachment comment={comment} />
 
-          <div className={styles.actions}>
+          <div className={cx(styles.actions, responsiveStyles.actions)}>
             <button className={styles.actionBtn} type="button" onClick={() => setReplyTo(comment)}>Trả lời</button>
             {canDelete ? <button className={`${styles.actionBtn} ${styles.actionDanger}`} type="button" onClick={() => remove(comment)}>Xóa</button> : null}
           </div>
@@ -275,52 +313,77 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
   }
 
   const panelOnly = mode === 'panel'
+  const showPostMeta = !hidePostMeta
+  const isFullscreen = presentation === 'fullscreen'
 
   return (
-    <div className={`${styles.shell} ${panelOnly ? styles.shellPanelOnly : ''}`}>
-      {!panelOnly ? <div className={styles.previewCol}><MediaPreview media={media} /></div> : null}
+    <div
+      className={cx(
+        styles.shell,
+        responsiveStyles.shell,
+        panelOnly && styles.shellPanelOnly,
+        panelOnly && responsiveStyles.shellPanelOnly,
+        isFullscreen && styles.shellFullscreen,
+        isFullscreen && responsiveStyles.shellFullscreen,
+      )}
+    >
+      {isFullscreen ? (
+        <button
+          type="button"
+          className={cx(styles.fullscreenCloseBtn, responsiveStyles.fullscreenCloseBtn)}
+          onClick={onClose}
+          aria-label="Dong binh luan"
+        >
+          {'\u00D7'}
+        </button>
+      ) : null}
 
-      <div className={`${styles.panelCol} ${panelOnly ? styles.panelColOnly : ''}`}>
-        <div className={styles.header}>
+      {!panelOnly ? <div className={cx(styles.previewCol, responsiveStyles.previewCol)}><MediaPreview media={media} /></div> : null}
+
+      <div className={cx(styles.panelCol, responsiveStyles.panelCol, panelOnly && styles.panelColOnly, panelOnly && responsiveStyles.panelColOnly)}>
+        {showPostMeta ? <div className={cx(styles.header, responsiveStyles.header)}>
           <div className={styles.postMeta}>
-            <img className={styles.postAvatarImage} src={getAvatarUrl({ username: post?.authorUsername, avatarUrl: (post as any)?.authorAvatarUrl })} alt={post?.authorUsername || 'user'} />
+            <img
+              className={cx(styles.postAvatarImage, responsiveStyles.postAvatarImage)}
+              src={getAvatarUrl({ username: post?.authorUsername, avatarUrl: (post as any)?.authorAvatarUrl })}
+              alt={post?.authorUsername || 'user'}
+            />
             <div>
               <div className={styles.postAuthor}>{post?.authorUsername || 'user'}</div>
               <div className={styles.postDate}>{post?.createdAt ? new Date(post.createdAt).toLocaleString() : 'Bài viết'}</div>
             </div>
           </div>
-          <button className={styles.refreshBtn} type="button" onClick={load} disabled={loading}>Làm mới</button>
-        </div>
+        </div> : null}
 
-        {post?.content ? (
-          <div className={styles.captionCard}>
+        {showPostMeta && post?.content ? (
+          <div className={cx(styles.captionCard, responsiveStyles.captionCard)}>
             <span className={styles.captionAuthor}>{post.authorUsername || 'user'}</span>
             <span className={styles.captionText}>{post.content}</span>
           </div>
         ) : null}
 
-        <div className={styles.list}>
+        <div className={cx(styles.list, responsiveStyles.list)}>
           {loading ? <div className={styles.empty}>Đang tải bình luận...</div> : null}
           {!loading && !items.length ? <div className={styles.empty}>Chưa có bình luận nào. Hãy là người đầu tiên để lại lời nhắn.</div> : null}
           {groups.map(({ root, replies }) => (
             <div key={root._id} className={styles.thread}>
               {renderComment(root, 'root')}
               {replies.length ? (
-                <div className={styles.repliesWrap}>
+                <div className={cx(styles.repliesWrap, responsiveStyles.repliesWrap)}>
                   <button type="button" className={styles.repliesToggle} onClick={() => toggleReplies(root._id)}>
                     <span className={styles.repliesToggleLine} />
                     {expandedRoots[root._id] ? 'Ẩn câu trả lời' : `Xem ${replies.length} câu trả lời`}
                   </button>
-                  {expandedRoots[root._id] ? <div className={styles.repliesStack}>{replies.map((reply) => renderComment(reply, 'reply'))}</div> : null}
+                  {expandedRoots[root._id] ? <div className={cx(styles.repliesStack, responsiveStyles.repliesStack)}>{replies.map((reply) => renderComment(reply, 'reply'))}</div> : null}
                 </div>
               ) : null}
             </div>
           ))}
         </div>
 
-        <div className={styles.composer}>
+        <div className={cx(styles.composer, responsiveStyles.composer)}>
           {replyTo ? (
-            <div className={styles.replyHint}>
+            <div className={cx(styles.replyHint, responsiveStyles.replyHint)}>
               <div>
                 Đang trả lời <strong>@{replyTo.authorUsername}</strong>
                 {replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername ? <span className={styles.replyHintMeta}> trong luồng với @{replyTo.replyTo?.authorUsername || replyTo.replyToAuthorUsername}</span> : null}
@@ -336,9 +399,9 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
             </div>
           ) : null}
 
-          <div className={styles.composerRow}>
-            <div className={styles.composerIcon}>☺</div>
-            <textarea className={styles.textarea} value={text} onChange={(event) => setText(event.target.value)} placeholder={replyTo ? `Trả lời @${replyTo.authorUsername}...` : 'Thêm bình luận...'} rows={1} />
+          <div className={cx(styles.composerRow, responsiveStyles.composerRow)}>
+            <div className={cx(styles.composerIcon, responsiveStyles.composerIcon)}>☺</div>
+            <textarea className={cx(styles.textarea, responsiveStyles.textarea)} value={text} onChange={(event) => setText(event.target.value)} placeholder={replyTo ? `Trả lời @${replyTo.authorUsername}...` : 'Thêm bình luận...'} rows={1} />
             <input
               ref={mediaInputRef}
               type="file"
@@ -346,8 +409,8 @@ export default function CommentSheet({ postId, onChanged, mode = 'full' }: Props
               hidden
               onChange={(event) => setMediaFile(event.target.files?.[0] || null)}
             />
-            <button className={styles.attachBtn} type="button" onClick={() => mediaInputRef.current?.click()}>🖼</button>
-            <button className={styles.submitBtn} type="button" onClick={submit} disabled={submitting || (!text.trim() && !mediaFile)}>
+            <button className={cx(styles.attachBtn, responsiveStyles.attachBtn)} type="button" onClick={() => mediaInputRef.current?.click()}>🖼</button>
+            <button className={cx(styles.submitBtn, responsiveStyles.submitBtn)} type="button" onClick={submit} disabled={submitting || (!text.trim() && !mediaFile)}>
               {submitting ? 'Đang gửi...' : 'Đăng'}
             </button>
           </div>

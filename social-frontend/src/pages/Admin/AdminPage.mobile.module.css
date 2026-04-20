@@ -1,0 +1,48 @@
+@media (max-width: 640px) {
+  .page {
+    padding: 16px 12px 24px;
+  }
+
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .statGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+
+  .modalCard {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .penaltyModalCard {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .modalContent {
+    grid-template-columns: 1fr;
+  }
+
+  .modalMain {
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+}

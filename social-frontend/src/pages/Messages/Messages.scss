@@ -44,16 +44,15 @@
   cursor: pointer;
 }
 
-.ig-msg__headerBack {
-  display: none;
-}
-
 .ig-msg__userBtn {
   font-size: 20px;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  margin-right: auto;
+  justify-content: flex-start;
 }
 
 .ig-msg__compose,
@@ -65,6 +64,16 @@
   border-radius: 50%;
 }
 
+.ig-msg__iconBtn.ig-msg__headerBack {
+  display: none;
+}
+
+.ig-msg__callIcon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .ig-msg__compose:hover,
 .ig-msg__iconBtn:hover,
 .ig-msg__searchItem:hover,
@@ -73,6 +82,16 @@
 .ig-msg__detailMenuItem:hover,
 .ig-msg__detailInlineBtn:hover {
   background: #f2f2f2;
+}
+
+.ig-msg__iconBtn.is-active {
+  background: #eef6ff;
+  color: #0095f6;
+}
+
+.ig-msg__iconBtn:disabled {
+  opacity: 0.46;
+  cursor: default;
 }
 
 .ig-msg__searchWrap {
@@ -266,7 +285,8 @@
   border-bottom: 1px solid #dbdbdb;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 14px;
   padding: 0 20px;
   flex: 0 0 auto;
 }
@@ -275,6 +295,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.ig-msg__peerMeta {
+  min-width: 0;
 }
 
 .ig-msg__peerName,
@@ -289,6 +315,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.ig-msg__peerName,
+.ig-msg__peerUser {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ig-msg__mainShell {
@@ -564,6 +597,32 @@
   font-weight: 400;
   color: #8e8e8e;
   letter-spacing: 0.01em;
+}
+
+.ig-msg__callEvent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 16px 0 12px;
+}
+
+.ig-msg__callEventText {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #f6f7f9;
+  color: #3d4451;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ig-msg__callEventTime {
+  font-size: 12px;
+  color: #8e8e8e;
 }
 
 .ig-msg__composerWrap {

@@ -1,0 +1,25 @@
+@media (min-width: 769px) and (max-width: 1024px), (hover: none) and (pointer: coarse) and (min-width: 769px) {
+  .sidebar,
+  .sidebar:hover {
+    width: var(--sb-collapsed);
+  }
+
+  .item {
+    justify-content: center;
+    gap: 0;
+    padding-inline: 10px;
+  }
+
+  .logoRow {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .label {
+    display: none;
+  }
+
+  .bottom {
+    display: none;
+  }
+}

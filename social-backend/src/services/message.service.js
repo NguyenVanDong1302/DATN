@@ -10,7 +10,7 @@ const ConversationMember = require("../models/ConversationMember");
 const { AppError } = require("../utils/errors");
 const { buildDirectKey } = require("../utils/buildDirectKey");
 const { getPresence } = require("../utils/presenceStore");
-const { getIO } = require("../realtime/socket");
+const { getIO } = require("../realtime/io");
 const { ensureCanMessage } = require("../utils/accountModeration");
 
 const MAX_MESSAGE_MEDIA_FILES = 10;

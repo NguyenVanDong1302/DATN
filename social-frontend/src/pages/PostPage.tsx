@@ -7,6 +7,10 @@ import CommentSheet from '../components/comments/CommentSheet'
 import { useModal } from '../components/Modal'
 import type { Post } from '../types'
 import styles from './PostPage.module.css'
+import desktopStyles from './PostPage.desktop.module.css'
+import tabletStyles from './PostPage.tablet.module.css'
+import mobileStyles from './PostPage.mobile.module.css'
+import { combineResponsiveStyles } from '../lib/combineResponsiveStyles'
 
 type PreviewMedia = {
   type: 'image' | 'video'
@@ -57,6 +61,8 @@ function getPreviewMedia(post: Post): PreviewMedia | null {
 
   return null
 }
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 export default function PostPage() {
   const { id = '' } = useParams()
@@ -172,7 +178,7 @@ export default function PostPage() {
   )
 
   return (
-    <section className={styles.page}>
+    <section className={`${styles.page} ${responsiveStyles.page}`}>
       <div className={styles.mainSection}>
         {loadingPost && !post ? <div className={styles.stateCard}>Dang tai bai viet...</div> : null}
         {!loadingPost && !post ? <div className={styles.stateCard}>Khong tim thay bai viet.</div> : null}
@@ -196,8 +202,8 @@ export default function PostPage() {
         ) : null}
       </div>
 
-      <section className={styles.suggestedSection}>
-        <div className={styles.suggestedHeader}>
+      <section className={`${styles.suggestedSection} ${responsiveStyles.suggestedSection}`}>
+        <div className={`${styles.suggestedHeader} ${responsiveStyles.suggestedHeader}`}>
           <h2 className={styles.suggestedTitle}>Bai viet de xuat</h2>
           <button
             type="button"
@@ -223,16 +229,16 @@ export default function PostPage() {
         ) : null}
 
         {suggestedItems.length ? (
-          <div className={styles.suggestedGrid}>
+          <div className={`${styles.suggestedGrid} ${responsiveStyles.suggestedGrid}`}>
             {suggestedItems.map((item) => {
               const preview = getPreviewMedia(item)
               const likesCount = Number(item.likesCount || (Array.isArray(item.likes) ? item.likes.length : 0))
               const commentsCount = Number(item.commentsCount || 0)
 
               return (
-                <article key={item._id} className={styles.suggestedCard}>
+                <article key={item._id} className={`${styles.suggestedCard} ${responsiveStyles.suggestedCard}`}>
                   <Link to={`/post/${item._id}`} className={styles.mediaLink}>
-                    <div className={styles.mediaWrap}>
+                    <div className={`${styles.mediaWrap} ${responsiveStyles.mediaWrap}`}>
                       {preview ? (
                         preview.type === 'video' ? (
                           preview.thumbnailSrc ? (

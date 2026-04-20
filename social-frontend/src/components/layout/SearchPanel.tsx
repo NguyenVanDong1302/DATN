@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApi, resolveMediaUrl } from '../../lib/api';
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles';
 import styles from './SearchPanel.module.css';
+import desktopStyles from './SearchPanel.desktop.module.css';
+import tabletStyles from './SearchPanel.tablet.module.css';
+import mobileStyles from './SearchPanel.mobile.module.css';
 
 type SearchUser = {
   _id?: string;
@@ -35,6 +39,7 @@ type Props = {
 };
 
 const CLOSE_ANIMATION_MS = 220;
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles);
 
 function resolveAvatar(user: SearchUser) {
   const src = user.avatarUrl || user.avatar || user.image || user.profilePicture || '';
@@ -179,16 +184,16 @@ export default function SearchPanel(props: Props) {
 
   return (
     <>
-      <div
-        className={`${styles.overlay} ${visible ? styles.overlayVisible : styles.overlayHidden}`}
+        <div
+        className={`${styles.overlay} ${responsiveStyles.overlay} ${visible ? styles.overlayVisible : styles.overlayHidden}`}
         onClick={onClose}
       />
       <aside
-        className={`${styles.panel} ${visible ? styles.panelOpen : styles.panelClosed}`}
+        className={`${styles.panel} ${responsiveStyles.panel} ${visible ? styles.panelOpen : styles.panelClosed}`}
         aria-label="Search panel"
       >
-        <div className={styles.header}>
-          <h2 className={styles.title}>Search</h2>
+        <div className={`${styles.header} ${responsiveStyles.header}`}>
+          <h2 className={`${styles.title} ${responsiveStyles.title}`}>Search</h2>
           <button
             type="button"
             className={styles.closeButton}
@@ -199,7 +204,7 @@ export default function SearchPanel(props: Props) {
           </button>
         </div>
 
-        <div className={styles.searchBox}>
+        <div className={`${styles.searchBox} ${responsiveStyles.searchBox}`}>
           <input
             ref={inputRef}
             value={localQuery}
@@ -210,7 +215,7 @@ export default function SearchPanel(props: Props) {
           {!!localQuery && (
             <button
               type="button"
-              className={styles.clearButton}
+              className={`${styles.clearButton} ${responsiveStyles.clearButton}`}
               onClick={() => {
                 setLocalQuery('');
                 inputRef.current?.focus();
@@ -222,7 +227,7 @@ export default function SearchPanel(props: Props) {
           )}
         </div>
 
-        <div className={styles.results}>
+        <div className={`${styles.results} ${responsiveStyles.results}`}>
           {isLoading && normalizedUsers.length === 0 ? (
             <div className={styles.empty}>Đang tải danh sách người dùng...</div>
           ) : loadError && normalizedUsers.length === 0 ? (
@@ -242,7 +247,7 @@ export default function SearchPanel(props: Props) {
                 <button
                   key={key}
                   type="button"
-                  className={styles.userItem}
+                  className={`${styles.userItem} ${responsiveStyles.userItem}`}
                   onClick={() => handleUserClick(user)}
                 >
                   <div className={styles.avatarWrap}>

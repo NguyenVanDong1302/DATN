@@ -6,6 +6,8 @@ import { useAppStore } from './store'
 type Ctx = { socket: Socket | null }
 const SocketCtx = createContext<Ctx>({ socket: null })
 
+const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4000')).replace(/\/$/, '')
+
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const toast = useToast()
@@ -14,7 +16,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.username) return
 
-    const s = io('http://localhost:4000', {
+    const s = io(SOCKET_URL, {
+      path: '/socket.io',
       auth: { username: state.username, token: state.token },
     })
     setSocket(s)

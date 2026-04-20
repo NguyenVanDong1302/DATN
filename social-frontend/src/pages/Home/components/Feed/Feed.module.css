@@ -32,6 +32,30 @@
   text-align: center;
 }
 
+.suggestedSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.suggestedHeader {
+  padding: 16px 18px;
+  border: 1px solid #e5e7eb;
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  background: #fff;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.suggestedList {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .pagination {
   display: flex;
   align-items: center;

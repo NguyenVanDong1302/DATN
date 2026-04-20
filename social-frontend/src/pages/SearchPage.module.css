@@ -16,6 +16,8 @@
   box-shadow: 12px 0 36px rgba(0, 0, 0, 0.12);
   padding: 18px 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .header {
@@ -32,11 +34,23 @@
 }
 
 .closeBtn {
+  width: 34px;
+  height: 34px;
   border: none;
+  border-radius: 999px;
   background: transparent;
-  font-size: 34px;
+  color: #111;
+  font-size: 0;
   line-height: 1;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.closeBtn::before {
+  content: 'x';
+  font-size: 24px;
+  line-height: 1;
 }
 
 .searchBox {
@@ -67,12 +81,23 @@
   background: #d0d0d0;
   color: #fff;
   cursor: pointer;
+  font-size: 0;
+  display: grid;
+  place-items: center;
+}
+
+.clearBtn::before {
+  content: 'x';
+  font-size: 12px;
+  line-height: 1;
 }
 
 .list {
   padding: 6px 12px 0 18px;
   overflow: auto;
   height: calc(100vh - 120px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .item {

@@ -6,10 +6,10 @@ import type { NotificationItem } from '../../features/notifications/notification
 import styles from '../../pages/NotificationsPage.module.css'
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'comment', label: 'Comments' },
-  { key: 'like', label: 'Likes' },
-  { key: 'follow', label: 'Followers' },
+  { key: 'all', label: 'Tat ca' },
+  { key: 'activity', label: 'Tuong tac' },
+  { key: 'follow', label: 'Theo doi' },
+  { key: 'system', label: 'He thong' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
@@ -24,6 +24,13 @@ function relativeTime(value?: string) {
   const days = Math.round(hours / 24)
   if (days < 7) return `${days}d`
   return new Date(value).toLocaleDateString('vi-VN')
+}
+
+function matchesFilter(item: NotificationItem, filter: FilterKey) {
+  if (filter === 'all') return true
+  if (filter === 'activity') return item.type === 'comment' || item.type === 'like'
+  if (filter === 'follow') return item.type === 'follow'
+  return item.type === 'moderation'
 }
 function splitSections(items: NotificationItem[]) {
   const now = Date.now()
@@ -72,7 +79,7 @@ export default function NotificationsPanel({ open, onClose }: { open: boolean; o
   const navigate = useNavigate()
   const { items, markRead, markUnread } = useNotifications()
   const [filter, setFilter] = useState<FilterKey>('all')
-  const filtered = useMemo(() => items.filter((item) => filter === 'all' || item.type === filter), [items, filter])
+  const filtered = useMemo(() => items.filter((item) => matchesFilter(item, filter)), [items, filter])
   if (!open) return null
   return (
     <div className={styles.overlayFixed} onClick={onClose}>

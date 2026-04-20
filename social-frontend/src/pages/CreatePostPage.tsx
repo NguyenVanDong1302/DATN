@@ -9,9 +9,13 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './CreatePostPage.module.css'
+import desktopStyles from './CreatePostPage.desktop.module.css'
+import tabletStyles from './CreatePostPage.tablet.module.css'
+import mobileStyles from './CreatePostPage.mobile.module.css'
 import { useAuth } from '../features/auth/AuthProvider'
 import { useAppStore } from '../state/store'
 import { createPostApi } from '../features/posts/posts.api'
+import { combineResponsiveStyles } from '../lib/combineResponsiveStyles'
 
 type ShareTarget = 'threads' | 'facebook'
 type MediaItem = {
@@ -29,6 +33,7 @@ type UtilityKey = 'accessibility' | 'quality'
 type AdvancedKey = 'hideLikes' | 'disableComments'
 
 const MAX_CAPTION = 2200
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function buildMediaItems(files: FileList | File[]) {
   return Array.from(files)
@@ -326,15 +331,15 @@ export default function CreatePostPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${responsiveStyles.page}`}>
       <div className={styles.scrim} onClick={() => navigate(-1)} />
 
-      <section className={styles.modal} aria-label="Tạo bài viết mới">
-        <header className={styles.header}>
+      <section className={`${styles.modal} ${responsiveStyles.modal}`} aria-label="Tạo bài viết mới">
+        <header className={`${styles.header} ${responsiveStyles.header}`}>
           <button className={styles.iconButton} type="button" onClick={() => (step === 'compose' ? setStep('upload') : navigate(-1))}>
             ←
           </button>
-          <h1 className={styles.title}>Tạo bài viết mới</h1>
+          <h1 className={`${styles.title} ${responsiveStyles.title}`}>Tạo bài viết mới</h1>
           <button
             className={`${styles.shareButton} ${!canProceed ? styles.shareButtonDisabled : ''}`}
             type="button"
@@ -346,9 +351,9 @@ export default function CreatePostPage() {
         </header>
 
         {step === 'upload' && (
-          <div className={styles.uploadStep}>
+          <div className={`${styles.uploadStep} ${responsiveStyles.uploadStep}`}>
             <div
-              className={`${styles.dropZone} ${isDragging ? styles.dropZoneActive : ''}`}
+              className={`${styles.dropZone} ${responsiveStyles.dropZone} ${isDragging ? styles.dropZoneActive : ''}`}
               onDragOver={(event) => {
                 event.preventDefault()
                 setIsDragging(true)
@@ -382,21 +387,25 @@ export default function CreatePostPage() {
         )}
 
         {step === 'compose' && (
-          <div className={styles.composeStep}>
-            <div className={styles.previewPane}>
+          <div className={`${styles.composeStep} ${responsiveStyles.composeStep}`}>
+            <div className={`${styles.previewPane} ${responsiveStyles.previewPane}`}>
               {activeItem ? (
                 <>
                   <div
                     className={[
                       styles.previewMediaFrame,
+                      responsiveStyles.previewMediaFrame,
                       activeItem.type === 'video' && activeItem.orientation
                         ? styles[`previewMediaFrame${activeItem.orientation.charAt(0).toUpperCase() + activeItem.orientation.slice(1)}`]
+                        : '',
+                      activeItem.type === 'video' && activeItem.orientation
+                        ? responsiveStyles[`previewMediaFrame${activeItem.orientation.charAt(0).toUpperCase() + activeItem.orientation.slice(1)}`]
                         : '',
                     ].join(' ')}
                   >
                     {activeItem.type === 'image' ? (
                       <img
-                        className={styles.previewMedia}
+                        className={`${styles.previewMedia} ${responsiveStyles.previewMedia}`}
                         src={activeItem.previewUrl}
                         alt={activeItem.file.name}
                         draggable={false}
@@ -405,7 +414,9 @@ export default function CreatePostPage() {
                       <video
                         className={[
                           styles.previewMedia,
+                          responsiveStyles.previewMedia,
                           activeItem.orientation ? styles[`previewMedia${activeItem.orientation.charAt(0).toUpperCase() + activeItem.orientation.slice(1)}`] : '',
+                          activeItem.orientation ? responsiveStyles[`previewMedia${activeItem.orientation.charAt(0).toUpperCase() + activeItem.orientation.slice(1)}`] : '',
                         ].join(' ')}
                         src={activeItem.previewUrl}
                         controls
@@ -419,7 +430,7 @@ export default function CreatePostPage() {
                     <>
                       <button
                         type="button"
-                        className={`${styles.previewNavButton} ${styles.previewNavButtonLeft}`}
+                        className={`${styles.previewNavButton} ${styles.previewNavButtonLeft} ${responsiveStyles.previewNavButton} ${responsiveStyles.previewNavButtonLeft}`}
                         onClick={goToPrevMedia}
                         aria-label="Xem tệp trước"
                       >
@@ -428,7 +439,7 @@ export default function CreatePostPage() {
 
                       <button
                         type="button"
-                        className={`${styles.previewNavButton} ${styles.previewNavButtonRight}`}
+                        className={`${styles.previewNavButton} ${styles.previewNavButtonRight} ${responsiveStyles.previewNavButton} ${responsiveStyles.previewNavButtonRight}`}
                         onClick={goToNextMedia}
                         aria-label="Xem tệp tiếp theo"
                       >
@@ -454,7 +465,7 @@ export default function CreatePostPage() {
               )}
             </div>
 
-            <div className={styles.sidebarPane}>
+            <div className={`${styles.sidebarPane} ${responsiveStyles.sidebarPane}`}>
               <div className={styles.authorRow}>
                 <div className={styles.authorInfo}>
                   {avatar ? (

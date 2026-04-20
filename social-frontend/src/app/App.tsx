@@ -21,8 +21,8 @@ import RegisterPage from '../pages/Auth/RegisterPage'
 import { AuthProvider } from '../features/auth/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import { MessageIndicatorProvider } from '../features/messages/MessageIndicatorProvider'
+import { CallsProvider } from '../features/calls/CallsProvider'
 import ProtectedRoute from '../features/auth/ProtectedRoute'
-import '../styles/responsive.css'
 
 function ProtectedShell() {
   return (
@@ -38,34 +38,36 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <SocketProvider>
-            <MessageIndicatorProvider>
-              <NotificationProvider>
-                <ModalProvider>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/account-locked" element={<AccountLockedPage />} />
+            <CallsProvider>
+              <MessageIndicatorProvider>
+                <NotificationProvider>
+                  <ModalProvider>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/account-locked" element={<AccountLockedPage />} />
 
-                  <Route element={<ProtectedRoute />}>
-                    <Route element={<ProtectedShell />}>
-                      <Route path="/" element={<HomePage />} />
-                      <Route path="/explore" element={<ExplorePage />} />
-                      <Route path="/profile/:username" element={<ProfilePage />} />
-                      <Route path="/notifications" element={<NotificationsPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/reels" element={<ReelsPage />} />
-                      <Route path="/messages" element={<MessagesPage />} />
-                      <Route path="/search" element={<SearchPage />} />
-                      <Route path="/create" element={<CreatePostPage />} />
-                      <Route path="/post/:id" element={<PostPage />} />
-                      <Route path="/admin" element={<AdminPage />} />
+                    <Route element={<ProtectedRoute />}>
+                      <Route element={<ProtectedShell />}>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/explore" element={<ExplorePage />} />
+                        <Route path="/profile/:username" element={<ProfilePage />} />
+                        <Route path="/notifications" element={<NotificationsPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/reels" element={<ReelsPage />} />
+                        <Route path="/messages" element={<MessagesPage />} />
+                        <Route path="/search" element={<SearchPage />} />
+                        <Route path="/create" element={<CreatePostPage />} />
+                        <Route path="/post/:id" element={<PostPage />} />
+                        <Route path="/admin" element={<AdminPage />} />
+                      </Route>
                     </Route>
-                  </Route>
-                </Routes>
-                </ModalProvider>
-                <ToastHost />
-              </NotificationProvider>
-            </MessageIndicatorProvider>
+                  </Routes>
+                  </ModalProvider>
+                  <ToastHost />
+                </NotificationProvider>
+              </MessageIndicatorProvider>
+            </CallsProvider>
           </SocketProvider>
         </AuthProvider>
       </ToastProvider>

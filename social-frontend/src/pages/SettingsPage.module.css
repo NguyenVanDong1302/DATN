@@ -243,35 +243,3 @@
   color: #666;
 }
 
-@media (max-width: 768px) {
-  .page {
-    padding: 20px 12px 44px;
-  }
-
-  .profileCard,
-  .switchCard {
-    align-items: flex-start;
-  }
-
-  .profileCard {
-    flex-direction: column;
-  }
-
-  .username {
-    font-size: 24px;
-  }
-
-  .fullName {
-    font-size: 18px;
-  }
-
-  .inlineField {
-    grid-template-columns: 1fr;
-  }
-
-  .secondaryBtn,
-  .submitBtn {
-    width: 100%;
-  }
-}
-

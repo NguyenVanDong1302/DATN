@@ -1,8 +1,30 @@
 import { useCallback, useMemo } from 'react'
 import { useAppStore } from '../state/store'
 
-const API_BASE = '/api'
-export const MEDIA_BASE_URL = (import.meta.env.VITE_MEDIA_BASE_URL || 'http://localhost:4000').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').trim() || '/api'
+const DEFAULT_BACKEND_PORT = (import.meta.env.VITE_BACKEND_PORT || '4000').trim() || '4000'
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/$/, '')
+}
+
+function currentOrigin() {
+  if (typeof window === 'undefined') return ''
+  return trimTrailingSlash(window.location.origin)
+}
+
+function isLoopbackHost(hostname: string) {
+  const normalized = String(hostname || '').trim().toLowerCase()
+  return normalized === 'localhost'
+    || normalized === '127.0.0.1'
+    || normalized === '0.0.0.0'
+    || normalized === '::1'
+    || normalized === '[::1]'
+}
+
+export const MEDIA_BASE_URL = trimTrailingSlash(
+  String(import.meta.env.VITE_MEDIA_BASE_URL || currentOrigin() || `http://localhost:${DEFAULT_BACKEND_PORT}`),
+)
 
 export type ApiError = Error & { status?: number; data?: any }
 
@@ -10,8 +32,20 @@ export function resolveMediaUrl(url?: string | null) {
   if (!url) return ''
   const raw = String(url).trim().replace(/\\/g, '/')
   if (!raw) return ''
-  if (/^(https?:)?\/\//i.test(raw)) return raw
   if (/^(data:|blob:)/i.test(raw)) return raw
+
+  if (/^(https?:)?\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw, currentOrigin() || `http://localhost:${DEFAULT_BACKEND_PORT}`)
+      const fullPath = `${parsed.pathname}${parsed.search}${parsed.hash}`
+      if (fullPath.toLowerCase().includes('/uploads/') && isLoopbackHost(parsed.hostname)) {
+        return `${MEDIA_BASE_URL}${fullPath.startsWith('/') ? fullPath : `/${fullPath}`}`
+      }
+      return parsed.toString()
+    } catch {
+      return raw
+    }
+  }
 
   const uploadsIndex = raw.toLowerCase().indexOf('/uploads/')
   if (uploadsIndex >= 0) return `${MEDIA_BASE_URL}${raw.slice(uploadsIndex)}`

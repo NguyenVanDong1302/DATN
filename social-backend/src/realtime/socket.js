@@ -5,9 +5,9 @@ const {
   sendMessage,
   markConversationRead,
 } = require("../services/message.service");
+const { registerCallHandlers } = require("./calls/registerCallHandlers");
+const { setIO, getIO } = require("./io");
 const { setPresence, clearPresence } = require("../utils/presenceStore");
-
-let ioRef = null;
 
 function legacyUserId(username) {
   return crypto
@@ -42,7 +42,7 @@ async function resolveSocketUser(socket) {
 }
 
 function initSocket(io) {
-  ioRef = io;
+  setIO(io);
 
   io.on("connection", async (socket) => {
     const me = await resolveSocketUser(socket);
@@ -95,6 +95,7 @@ function initSocket(io) {
           currentUser,
           conversationId: payload.conversationId,
           text: payload.text,
+          replyToMessageId: payload.replyToMessageId,
         });
         if (typeof ack === "function") ack({ ok: true, data: { message } });
       } catch (err) {
@@ -117,15 +118,12 @@ function initSocket(io) {
       }
     });
 
+    registerCallHandlers(io, socket);
+
     socket.on("disconnect", () => {
       if (socket.data.userId) clearPresence(String(socket.data.userId));
     });
   });
-}
-
-function getIO() {
-  if (!ioRef) throw new Error("Socket.io not initialized");
-  return ioRef;
 }
 
 module.exports = { initSocket, getIO };

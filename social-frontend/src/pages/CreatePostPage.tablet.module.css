@@ -1,0 +1,20 @@
+@media (min-width: 769px) and (max-width: 1024px) {
+  .modal {
+    inset: 0;
+    border-radius: 0;
+  }
+
+  .composeStep {
+    grid-template-columns: 1fr;
+  }
+
+  .previewPane {
+    min-height: 340px;
+    max-height: 48vh;
+  }
+
+  .sidebarPane {
+    border-left: none;
+    border-top: 1px solid #dbdbdb;
+  }
+}

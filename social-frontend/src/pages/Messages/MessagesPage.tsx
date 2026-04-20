@@ -3,10 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
-import { joinConversation, leaveConversation, markConversationReadRealtime } from '../../features/messages/messages.socket'
+import { joinConversation, leaveConversation, markConversationReadRealtime, sendRealtimeMessage } from '../../features/messages/messages.socket'
 import type { ChatMessage, ChatMessageMediaItem, ConversationItem, ConversationSettings, DeletedMessageEvent, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
+import { useCalls } from '../../features/calls/CallsProvider'
+import { resolveMediaUrl } from '../../lib/api'
 import './Messages.scss'
-import '../../styles/messages-responsive.css'
+import '../../styles/messages-desktop.css'
+import '../../styles/messages-tablet.css'
+import '../../styles/messages-mobile.css'
 
 const TIME_SEPARATOR_MS = 10 * 60 * 1000
 const MAX_MESSAGE_MEDIA_FILES = 10
@@ -108,7 +112,8 @@ function sortConversationsByLastMessage(items: ConversationItem[]) {
 }
 
 function avatarOf(user?: Pick<MessageUser, 'avatarUrl' | 'username'> | null) {
-  if (user?.avatarUrl) return user.avatarUrl
+  const resolved = resolveMediaUrl(user?.avatarUrl)
+  if (resolved) return resolved
   const seed = encodeURIComponent(user?.username || 'instagram_user')
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`
 }
@@ -165,6 +170,11 @@ function buildMessagePreview(message: ChatMessage) {
   return message.text
 }
 
+function isCallEventMessage(message: ChatMessage) {
+  const text = String(message.text || '').trim()
+  return message.type === 'text' && (text.startsWith('📞 ') || text.startsWith('📹 '))
+}
+
 function RichMessageMedia({ message }: { message: ChatMessage }) {
   const mediaItems = getMessageMediaItems(message)
   if (!mediaItems.length) return null
@@ -191,12 +201,39 @@ function RichMessageMedia({ message }: { message: ChatMessage }) {
   )
 }
 
+function CallEventMessage({ message }: { message: ChatMessage }) {
+  return (
+    <div className="ig-msg__callEvent">
+      <div className="ig-msg__callEventText">{message.text}</div>
+      <div className="ig-msg__callEventTime">{formatTime(message.createdAt)}</div>
+    </div>
+  )
+}
+
+function PhoneCallIcon() {
+  return (
+    <svg className="ig-msg__callIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7.2 3.6h3.1l1.1 4.2-2 1.8a15.5 15.5 0 0 0 5 5l1.8-2 4.2 1.1v3.1a1.8 1.8 0 0 1-1.8 1.8A15.8 15.8 0 0 1 3.6 5.4 1.8 1.8 0 0 1 5.4 3.6Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+function VideoCallIcon() {
+  return (
+    <svg className="ig-msg__callIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4.8 7.2A2.4 2.4 0 0 1 7.2 4.8h7.6a2.4 2.4 0 0 1 2.4 2.4v9.6a2.4 2.4 0 0 1-2.4 2.4H7.2a2.4 2.4 0 0 1-2.4-2.4Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="m17.2 10 3-2v8l-3-2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 export default function MessagesPage() {
   const api = useMessagesApi()
   const location = useLocation()
   const navigate = useNavigate()
   const { state } = useAppStore()
   const { socket } = useSocket()
+  const { activeCall, startCall, expandCallWindow } = useCalls()
   const currentViewer = String(state.username || '')
   if (messagesPageCache.viewerUsername && currentViewer && messagesPageCache.viewerUsername !== currentViewer) {
     resetMessagesPageCache()
@@ -243,6 +280,17 @@ export default function MessagesPage() {
   const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
   const settings = useMemo(() => settingsByConversation[activeId] || null, [settingsByConversation, activeId])
   const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
+  const isCurrentConversationInCall = Boolean(activeCall && activeConversation && activeCall.conversationId === activeConversation.id)
+  const isAnotherConversationInCall = Boolean(activeCall && activeConversation && activeCall.conversationId !== activeConversation.id)
+  const headerPeerSubtitle = isCurrentConversationInCall
+    ? activeCall?.phase === 'incoming'
+      ? 'Cuộc gọi đến'
+      : activeCall?.phase === 'outgoing'
+        ? 'Đang gọi...'
+        : activeCall?.phase === 'connecting'
+          ? 'Đang kết nối cuộc gọi'
+          : 'Đang trong cuộc gọi'
+    : activeConversation?.peer.bio || 'Instagram User'
   const isBlocked = Boolean(settings?.isBlocked ?? activeConversation?.isBlocked)
   const isMuted = Boolean(mutedConversationIds[activeId])
   const shouldShowInbox = !isCompactLayout || compactView === 'inbox'
@@ -353,14 +401,15 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!routeConversationId) return
     setActiveId(routeConversationId)
-    if (routeState?.directUser) {
+    const directUser = routeState?.directUser
+    if (directUser) {
       setConversations((prev) => (
         prev.some((item) => item.id === routeConversationId)
           ? prev
           : [{
               id: routeConversationId,
               type: 'direct',
-              peer: routeState.directUser,
+              peer: directUser,
               lastMessageText: '',
               lastMessageAt: null,
               unreadCount: 0,
@@ -619,6 +668,30 @@ export default function MessagesPage() {
     setCompactView('inbox')
   }
 
+  const handleStartCall = async (mode: 'audio' | 'video') => {
+    if (!activeConversation || !activeConversation.peer?.id) return
+    if (isCurrentConversationInCall) {
+      expandCallWindow()
+      return
+    }
+
+    try {
+      setError('')
+      await startCall({
+        conversationId: activeConversation.id,
+        peer: {
+          id: activeConversation.peer.id,
+          username: activeConversation.peer.username,
+          avatarUrl: activeConversation.peer.avatarUrl,
+          bio: activeConversation.peer.bio,
+        },
+        mode,
+      })
+    } catch (err: any) {
+      setError(err?.message || 'Không thể bắt đầu cuộc gọi')
+    }
+  }
+
   const handlePickUser = async (user: MessageUser) => {
     try {
       const conversation = await api.createDirectConversation({ targetUserId: user.id, username: user.username })
@@ -725,7 +798,23 @@ export default function MessagesPage() {
     setSending(true)
     setError('')
     try {
-      const message = await api.sendMessageHttp(activeId, { text: value, media: mediaFiles.map((item) => item.file), replyToMessageId: replyTo?.id || null })
+      let message: ChatMessage
+
+      if (!mediaFiles.length) {
+        const ack = await sendRealtimeMessage(socket, activeId, {
+          text: value,
+          replyToMessageId: replyTo?.id || null,
+        }) as { ok?: boolean; data?: { message?: ChatMessage }; message?: string }
+
+        if (!ack?.ok || !ack.data?.message) {
+          throw new Error(ack?.message || 'Gửi tin nhắn thất bại')
+        }
+
+        message = ack.data.message
+      } else {
+        message = await api.sendMessageHttp(activeId, { text: value, media: mediaFiles.map((item) => item.file), replyToMessageId: replyTo?.id || null })
+      }
+
       loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
       messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
       touchMessageCache(activeId)
@@ -926,12 +1015,30 @@ export default function MessagesPage() {
                   <img className="ig-msg__peerAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                   <div className="ig-msg__peerMeta">
                     <div className="ig-msg__peerName">{displayPeerName}</div>
-                    <div className="ig-msg__peerUser">{activeConversation.peer.bio || 'Instagram User'}</div>
+                    <div className="ig-msg__peerUser">{headerPeerSubtitle}</div>
                   </div>
                 </div>
                 <div className="ig-msg__actions">
-                  <button className="ig-msg__iconBtn" type="button">📞</button>
-                  <button className="ig-msg__iconBtn" type="button">📹</button>
+                  <button
+                    className={`ig-msg__iconBtn ${isCurrentConversationInCall ? 'is-active' : ''}`}
+                    type="button"
+                    onClick={() => void handleStartCall('audio')}
+                    aria-label={isCurrentConversationInCall ? 'Mở cửa sổ cuộc gọi' : 'Gọi thoại'}
+                    title={isCurrentConversationInCall ? 'Mở cửa sổ cuộc gọi' : isAnotherConversationInCall ? 'Bạn đang có cuộc gọi ở đoạn chat khác' : 'Gọi thoại'}
+                    disabled={isBlocked || (!isCurrentConversationInCall && isAnotherConversationInCall)}
+                  >
+                    <PhoneCallIcon />
+                  </button>
+                  <button
+                    className={`ig-msg__iconBtn ${isCurrentConversationInCall && activeCall?.mode === 'video' ? 'is-active' : ''}`}
+                    type="button"
+                    onClick={() => void handleStartCall('video')}
+                    aria-label={isCurrentConversationInCall ? 'Mở cửa sổ cuộc gọi' : 'Gọi video'}
+                    title={isCurrentConversationInCall ? 'Mở cửa sổ cuộc gọi' : isAnotherConversationInCall ? 'Bạn đang có cuộc gọi ở đoạn chat khác' : 'Gọi video'}
+                    disabled={isBlocked || (!isCurrentConversationInCall && isAnotherConversationInCall)}
+                  >
+                    <VideoCallIcon />
+                  </button>
                   <button className="ig-msg__iconBtn" type="button" onClick={() => setIsDetailOpen((prev) => !prev)} aria-pressed={isDetailOpen}>ⓘ</button>
                 </div>
               </div>
@@ -952,6 +1059,7 @@ export default function MessagesPage() {
                       {activeMessages.map((message, index) => {
                         const fromMe = message.senderUsername === state.username
                         const showCenterTime = shouldShowCenterTime(activeMessages, index)
+                        const isCallEvent = isCallEventMessage(message)
                         const showActions = hoveredMessageId === message.id
                         const hasText = Boolean(message.text)
                         const hasMedia = getMessageMediaItems(message).length > 0
@@ -959,6 +1067,8 @@ export default function MessagesPage() {
                         return (
                           <div key={message.id}>
                             {showCenterTime ? <div className="ig-msg__centerTime">{formatTime(message.createdAt)}</div> : null}
+                            {isCallEvent ? <CallEventMessage message={message} /> : null}
+                            {!isCallEvent ? (
                             <div className={`ig-msg__row ${fromMe ? 'is-me' : 'is-them'}`} onMouseEnter={() => setHoveredMessageId(message.id)} onMouseLeave={() => setHoveredMessageId((prev) => (prev === message.id ? '' : prev))}>
                               {!fromMe ? <img className="ig-msg__bubbleAvatar" src={avatarOf(activeConversation.peer)} alt="" /> : null}
                               <div className="ig-msg__bubbleWrap">
@@ -1026,6 +1136,7 @@ export default function MessagesPage() {
                                 </div>
                               </div>
                             </div>
+                            ) : null}
                           </div>
                         )
                       })}

@@ -1,16 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import CommentSheet from '../components/comments/CommentSheet'
 import { useModal } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import { combineResponsiveStyles } from '../lib/combineResponsiveStyles'
 import { resolveMediaUrl, useApi } from '../lib/api'
 import type { Post } from '../types'
 import styles from './ExplorePage.module.css'
+import desktopStyles from './ExplorePage.desktop.module.css'
+import tabletStyles from './ExplorePage.tablet.module.css'
+import mobileStyles from './ExplorePage.mobile.module.css'
+
+const MOBILE_SEARCH_LAYOUT_QUERY = '(max-width: 768px)'
 
 type PreviewMedia = {
   type: 'image' | 'video'
   src: string
   thumbnailSrc?: string
   hasMultiple: boolean
+}
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
+
+function getMobileLayoutMatches() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia(MOBILE_SEARCH_LAYOUT_QUERY).matches
 }
 
 function detectMediaType(item: any): 'image' | 'video' | null {
@@ -64,6 +82,7 @@ export default function ExplorePage() {
   const modal = useModal()
   const toast = useToast()
 
+  const [redirectToSearch, setRedirectToSearch] = useState(getMobileLayoutMatches)
   const [items, setItems] = useState<Post[]>([])
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
@@ -93,8 +112,28 @@ export default function ExplorePage() {
   )
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const mediaQuery = window.matchMedia(MOBILE_SEARCH_LAYOUT_QUERY)
+    const handleChange = (event?: MediaQueryListEvent) => {
+      setRedirectToSearch(event?.matches ?? mediaQuery.matches)
+    }
+
+    handleChange()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    mediaQuery.addListener(handleChange)
+    return () => mediaQuery.removeListener(handleChange)
+  }, [])
+
+  useEffect(() => {
+    if (redirectToSearch) return
     void loadPosts(page)
-  }, [loadPosts, page])
+  }, [loadPosts, page, redirectToSearch])
 
   const exploreItems = useMemo(() => {
     return items
@@ -141,21 +180,15 @@ export default function ExplorePage() {
     )
   }
 
+  if (redirectToSearch) return <Navigate to="/search" replace />
+
   return (
-    <section className={styles.page}>
-      <header className={styles.header}>
+    <section className={cx(styles.page, responsiveStyles.page)}>
+      <header className={cx(styles.header, responsiveStyles.header)}>
         <div>
           <h1 className={styles.title}>Explore</h1>
           <p className={styles.subtitle}>Danh sach bai viet image/video co tuong tac cao</p>
         </div>
-        <button
-          type="button"
-          className={styles.refreshBtn}
-          disabled={loading}
-          onClick={() => void loadPosts(page)}
-        >
-          {loading ? 'Dang tai...' : 'Lam moi'}
-        </button>
       </header>
 
       {error ? (
@@ -172,13 +205,13 @@ export default function ExplorePage() {
       {!loading && !error && !exploreItems.length ? <div className={styles.stateBox}>Chua co bai viet media nao de hien thi.</div> : null}
 
       {exploreItems.length ? (
-        <div className={styles.grid}>
+        <div className={cx(styles.grid, responsiveStyles.grid)}>
           {exploreItems.map((item) => {
             return (
               <button
                 key={item.post._id}
                 type="button"
-                className={styles.tile}
+                className={cx(styles.tile, responsiveStyles.tile)}
                 onClick={() => openPostPopup(item.post)}
                 title={`@${item.post.authorUsername || 'user'} - ${item.engagementCount} tuong tac`}
               >
@@ -219,15 +252,15 @@ export default function ExplorePage() {
                   ) : null}
                 </div>
 
-                <div className={styles.overlayBottom}>
-                  <span className={styles.statItem}>
-                    <svg className={styles.statIcon} viewBox="0 0 24 24" aria-hidden="true">
+                <div className={cx(styles.overlayBottom, responsiveStyles.overlayBottom)}>
+                  <span className={cx(styles.statItem, responsiveStyles.statItem)}>
+                    <svg className={cx(styles.statIcon, responsiveStyles.statIcon)} viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M12 21s-7-4.4-9.3-8.1C.8 9.9 2.1 6 6 6c2.2 0 3.5 1.3 4 2.1C10.5 7.3 11.8 6 14 6c3.9 0 5.2 3.9 3.3 6.9C19 16.6 12 21 12 21z" />
                     </svg>
                     <span>{item.likesCount}</span>
                   </span>
-                  <span className={styles.statItem}>
-                    <svg className={styles.statIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <span className={cx(styles.statItem, responsiveStyles.statItem)}>
+                    <svg className={cx(styles.statIcon, responsiveStyles.statIcon)} viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 5h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
                     </svg>
                     <span>{item.commentsCount}</span>
@@ -240,7 +273,7 @@ export default function ExplorePage() {
       ) : null}
 
       {totalPages > 1 ? (
-        <div className={styles.pagination}>
+        <div className={cx(styles.pagination, responsiveStyles.pagination)}>
           <button
             type="button"
             className={styles.pageBtn}
@@ -249,7 +282,7 @@ export default function ExplorePage() {
           >
             Truoc
           </button>
-          <span className={styles.pageInfo}>
+          <span className={cx(styles.pageInfo, responsiveStyles.pageInfo)}>
             Trang {page}/{totalPages}
           </span>
           <button

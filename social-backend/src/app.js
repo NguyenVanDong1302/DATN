@@ -8,12 +8,59 @@ const routes = require("./routes");
 const { errorHandler } = require("./middlewares/errorHandler");
 const { mediaRoot } = require("./config/media");
 
+function normalizeOrigins(value = "") {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "y", "on"].includes(normalized);
+}
+
+function createCorsOriginMatcher() {
+  const allowedOrigins = new Set([
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    ...normalizeOrigins(process.env.CORS_ALLOWED_ORIGINS),
+    ...normalizeOrigins(process.env.FRONTEND_URL),
+  ]);
+  const allowVercelPreviews = parseBoolean(process.env.CORS_ALLOW_VERCEL_PREVIEWS, true);
+  const vercelPreviewPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
+
+  return (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowVercelPreviews && vercelPreviewPattern.test(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS origin not allowed: ${origin}`));
+  };
+}
+
 function createApp() {
   const app = express();
+  const corsOrigin = createCorsOriginMatcher();
+
+  app.set("trust proxy", 1);
 
   app.use(
     cors({
-      origin: ["http://localhost:5173"],
+      origin: corsOrigin,
       credentials: true,
     }),
   );
@@ -29,6 +76,10 @@ function createApp() {
 
   app.use("/uploads", express.static(mediaRoot));
   app.use("/uploads/posts", express.static(path.join(mediaRoot, "posts")));
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true, service: "social-backend" });
+  });
 
   app.use("/api", routes);
   app.use(express.static(path.join(__dirname, "..", "public")));

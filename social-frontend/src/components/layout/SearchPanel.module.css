@@ -205,29 +205,3 @@
   font-size: 14px;
   color: #8e8e8e;
 }
-
-@media (max-width: 520px) {
-  .header {
-    padding: 18px 16px 14px;
-  }
-
-  .title {
-    font-size: 26px;
-  }
-
-  .searchBox {
-    padding: 0 16px 14px;
-  }
-
-  .clearButton {
-    right: 28px;
-  }
-
-  .results {
-    padding: 10px 6px 16px;
-  }
-
-  .userItem {
-    padding: 8px 10px;
-  }
-}

@@ -3,8 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '../components/Toast'
 import { useUsersApi } from '../features/users/users.api'
 import { resolveMediaUrl } from '../lib/api'
+import { combineResponsiveStyles } from '../lib/combineResponsiveStyles'
 import { useAppStore } from '../state/store'
 import styles from './SettingsPage.module.css'
+import desktopStyles from './SettingsPage.desktop.module.css'
+import tabletStyles from './SettingsPage.tablet.module.css'
+import mobileStyles from './SettingsPage.mobile.module.css'
 
 const GENDER_OPTIONS = [
   { value: '', label: 'Khong muon tiet lo' },
@@ -14,6 +18,7 @@ const GENDER_OPTIONS = [
 ]
 
 const USERNAME_PATTERN = /^[a-z0-9._]{3,30}$/
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function fallbackAvatar(username?: string) {
   const seed = encodeURIComponent(username || 'user')
@@ -221,21 +226,21 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <div className={styles.state}>Dang tai trang chinh sua trang ca nhan...</div>
+    return <div className={`${styles.state} ${responsiveStyles.state}`}>Dang tai trang chinh sua trang ca nhan...</div>
   }
 
   return (
-    <div className={styles.page}>
-      <form className={styles.container} onSubmit={handleProfileSubmit}>
-        <div className={styles.profileCard}>
-          <div className={styles.profileLeft}>
+    <div className={`${styles.page} ${responsiveStyles.page}`}>
+      <form className={`${styles.container} ${responsiveStyles.container}`} onSubmit={handleProfileSubmit}>
+        <div className={`${styles.profileCard} ${responsiveStyles.profileCard}`}>
+          <div className={`${styles.profileLeft} ${responsiveStyles.profileLeft}`}>
             <img className={styles.avatar} src={avatarSrc} alt={state.username} />
             <div>
-              <div className={styles.username}>{state.username}</div>
-              <div className={styles.fullName}>{form.fullName || 'Chua dat ten hien thi'}</div>
+              <div className={`${styles.username} ${responsiveStyles.username}`}>{state.username}</div>
+              <div className={`${styles.fullName} ${responsiveStyles.fullName}`}>{form.fullName || 'Chua dat ten hien thi'}</div>
             </div>
           </div>
-          <button className={styles.changePhotoBtn} type="button" onClick={() => fileInputRef.current?.click()}>
+          <button className={`${styles.changePhotoBtn} ${responsiveStyles.changePhotoBtn}`} type="button" onClick={() => fileInputRef.current?.click()}>
             Doi anh
           </button>
           <input ref={fileInputRef} hidden type="file" accept="image/*" onChange={handleAvatarPick} />
@@ -294,7 +299,7 @@ export default function SettingsPage() {
 
         <section className={styles.fieldBlock}>
           <label className={styles.label}>Hien thi huy hieu Threads</label>
-          <div className={styles.switchCard}>
+          <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div className={styles.switchTitle}>Hien thi huy hieu Threads</div>
             <button
               type="button"
@@ -309,7 +314,7 @@ export default function SettingsPage() {
 
         <section className={styles.fieldBlock}>
           <label className={styles.label}>Goi y tai khoan tren profile</label>
-          <div className={styles.switchCard}>
+          <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div className={styles.switchTitle}>Hien thi goi y tai khoan tren profile</div>
             <button
               type="button"
@@ -324,7 +329,7 @@ export default function SettingsPage() {
 
         <section className={styles.fieldBlock}>
           <label className={styles.label}>Quyen rieng tu tai khoan</label>
-          <div className={styles.switchCard}>
+          <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div>
               <div className={styles.switchTitle}>Tai khoan rieng tu</div>
               <div className={styles.switchDesc}>Chi nguoi theo doi moi xem duoc noi dung cua ban.</div>
@@ -342,7 +347,7 @@ export default function SettingsPage() {
 
         <section className={styles.fieldBlock}>
           <label className={styles.label}>Trang thai hoat dong</label>
-          <div className={styles.switchCard}>
+          <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div>
               <div className={styles.switchTitle}>Hien thi trang thai hoat dong</div>
               <div className={styles.switchDesc}>Cho phep nguoi khac biet khi ban dang online.</div>
@@ -359,15 +364,15 @@ export default function SettingsPage() {
         </section>
 
         <div className={styles.actions}>
-          <button className={styles.submitBtn} type="submit" disabled={savingProfile}>
+          <button className={`${styles.submitBtn} ${responsiveStyles.submitBtn}`} type="submit" disabled={savingProfile}>
             {savingProfile ? 'Dang luu...' : 'Luu thong tin ho so'}
           </button>
         </div>
       </form>
 
-      <form className={styles.panel} onSubmit={handleUsernameSubmit}>
+      <form className={`${styles.panel} ${responsiveStyles.panel}`} onSubmit={handleUsernameSubmit}>
         <div className={styles.panelTitle}>Doi username</div>
-        <div className={styles.inlineField}>
+        <div className={`${styles.inlineField} ${responsiveStyles.inlineField}`}>
           <input
             className={styles.input}
             value={usernameDraft}
@@ -375,13 +380,13 @@ export default function SettingsPage() {
             placeholder="username moi"
             autoComplete="off"
           />
-          <button className={styles.secondaryBtn} type="submit" disabled={savingUsername}>
+          <button className={`${styles.secondaryBtn} ${responsiveStyles.secondaryBtn}`} type="submit" disabled={savingUsername}>
             {savingUsername ? 'Dang doi...' : 'Doi username'}
           </button>
         </div>
       </form>
 
-      <form className={styles.panel} onSubmit={handlePasswordSubmit}>
+      <form className={`${styles.panel} ${responsiveStyles.panel}`} onSubmit={handlePasswordSubmit}>
         <div className={styles.panelTitle}>Doi mat khau</div>
         <div className={styles.grid2}>
           <input
@@ -410,7 +415,7 @@ export default function SettingsPage() {
           />
         </div>
         <div className={styles.actionsLeft}>
-          <button className={styles.secondaryBtn} type="submit" disabled={savingPassword}>
+          <button className={`${styles.secondaryBtn} ${responsiveStyles.secondaryBtn}`} type="submit" disabled={savingPassword}>
             {savingPassword ? 'Dang cap nhat...' : 'Doi mat khau'}
           </button>
         </div>

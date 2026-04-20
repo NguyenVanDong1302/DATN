@@ -3,8 +3,12 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../../features/auth/AuthProvider'
 import { useApi } from '../../lib/api'
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles'
 import { useAppStore } from '../../state/store'
 import styles from './LoginPage.module.css'
+import desktopStyles from './LoginPage.desktop.module.css'
+import tabletStyles from './LoginPage.tablet.module.css'
+import mobileStyles from './LoginPage.mobile.module.css'
 
 type LocationState = {
   from?: { pathname?: string }
@@ -14,6 +18,7 @@ const photoLeft = 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?
 const photoCenter = 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80'
 const photoRight = 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=700&q=80'
 const photoProfile = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80'
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function getFirebaseMessage(error: unknown) {
   if (error instanceof FirebaseError) {
@@ -93,17 +98,17 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.content}>
-        <section className={styles.visual}>
+      <div className={`${styles.content} ${responsiveStyles.content}`}>
+        <section className={`${styles.visual} ${responsiveStyles.visual}`}>
           <div className={styles.logo} aria-hidden="true" />
           <div className={styles.visualInner}>
-            <div className={styles.hero}>
+            <div className={`${styles.hero} ${responsiveStyles.hero}`}>
               <h1>
                 Hay xem cac khoanh khac thuong ngay cua <span className={styles.highlightWarm}>ban</span>{' '}
                 <span className={styles.highlightPink}>than nhe.</span>
               </h1>
             </div>
-            <div className={styles.stack} aria-hidden="true">
+            <div className={`${styles.stack} ${responsiveStyles.stack}`} aria-hidden="true">
               <div className={styles.card}><img className={styles.photo} src={photoLeft} alt="" /><div className={styles.storyBar} /></div>
               <div className={styles.cardCenter}><img className={styles.photo} src={photoCenter} alt="" /><div className={styles.storyBar} /><div className={styles.reactionBubble}>🔮👀🥳</div><div className={styles.bottomInput} /><div className={styles.bottomIcons}>♡</div></div>
               <div className={styles.cardRight}><img className={styles.photo} src={photoRight} alt="" /><div className={styles.likeBubble}>💗</div></div>
@@ -111,21 +116,21 @@ export default function LoginPage() {
             </div>
           </div>
         </section>
-        <section className={styles.panel}>
+        <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.formWrap}>
-            <div className={styles.formHeader}><button type="button" className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Quay lai">‹</button><div>Dang nhap vao Instagram</div></div>
+            <div className={`${styles.formHeader} ${responsiveStyles.formHeader}`}><button type="button" className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Quay lai">‹</button><div>Dang nhap vao Instagram</div></div>
             <div className={styles.form}>
               {configError ? <div className={styles.error}>{configError}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}
-              <input className={styles.input} placeholder="Email" value={formState.email} onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))} />
-              <input className={styles.input} type="password" placeholder="Mat khau" value={formState.password} onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))} />
-              <button type="button" className={styles.primaryBtn} onClick={onSubmitBackend} disabled={isSubmitting}>Dang nhap</button>
+              <input className={`${styles.input} ${responsiveStyles.input}`} placeholder="Email" value={formState.email} onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))} />
+              <input className={`${styles.input} ${responsiveStyles.input}`} type="password" placeholder="Mat khau" value={formState.password} onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))} />
+              <button type="button" className={`${styles.primaryBtn} ${responsiveStyles.primaryBtn}`} onClick={onSubmitBackend} disabled={isSubmitting}>Dang nhap</button>
               <div className={styles.links}>
-                <button type="button" className={styles.textLink}>Quen mat khau?</button>
-                <button type="button" className={styles.facebookBtn}>Dang nhap bang Facebook</button>
-                <button type="button" className={styles.outlineBtn} onClick={() => navigate('/register')}>Tao tai khoan moi</button>
+                <button type="button" className={`${styles.textLink} ${responsiveStyles.textLink}`}>Quen mat khau?</button>
+                <button type="button" className={`${styles.facebookBtn} ${responsiveStyles.facebookBtn}`}>Dang nhap bang Facebook</button>
+                <button type="button" className={`${styles.outlineBtn} ${responsiveStyles.outlineBtn}`} onClick={() => navigate('/register')}>Tao tai khoan moi</button>
               </div>
-              <button type="button" className={styles.googleBtn} onClick={onGoogleLogin} disabled={isSubmitting || Boolean(configError)}>
+              <button type="button" className={`${styles.googleBtn} ${responsiveStyles.googleBtn}`} onClick={onGoogleLogin} disabled={isSubmitting || Boolean(configError)}>
                 {isSubmitting ? 'Dang ket noi...' : 'Tiep tuc voi Google'}
               </button>
             </div>

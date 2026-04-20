@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './StoriesBar.module.css'
+import desktopStyles from './StoriesBar.desktop.module.css'
+import tabletStyles from './StoriesBar.tablet.module.css'
+import mobileStyles from './StoriesBar.mobile.module.css'
 import { useModal } from '../../../../components/Modal'
 import { useToast } from '../../../../components/Toast'
 import StoryViewer from './StoryViewer'
@@ -8,6 +11,7 @@ import { useStoriesApi } from '../../../../features/stories/stories.api'
 import type { StoryGroup } from '../../../../features/stories/stories.types'
 import { useUsersApi, type UserSummary } from '../../../../features/users/users.api'
 import { getAvatarUrl } from '../../../../lib/avatar'
+import { combineResponsiveStyles } from '../../../../lib/combineResponsiveStyles'
 import { useAppStore } from '../../../../state/store'
 
 function avatarOf(story?: StoryGroup | null) {
@@ -50,6 +54,12 @@ function buildSuggestedUsers(users: UserSummary[], stories: StoryGroup[], curren
     })
     .slice(0, 8)
 }
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 export default function StoriesBar() {
   const modal = useModal()
@@ -171,9 +181,9 @@ export default function StoriesBar() {
   }
 
   return (
-    <div className={`${styles.wrap} stories-bar`}>
-      <button className={`${styles.storyBtn} stories-bar__trigger`} type="button" onClick={() => fileRef.current?.click()}>
-        <div className={`${styles.story} stories-bar__item`}>
+    <div className={cx(styles.wrap, responsiveStyles.wrap, 'stories-bar')}>
+      <button className={styles.storyBtn} type="button" onClick={() => fileRef.current?.click()}>
+        <div className={cx(styles.story, responsiveStyles.story, 'stories-bar__item')}>
           <div className={`${styles.ring} ${styles.ringOwn}`}>
             <div className={`${styles.avatar} ${styles.ownAvatar}`}>+</div>
           </div>
@@ -188,11 +198,11 @@ export default function StoriesBar() {
           type="button"
           onClick={() => openStoryViewer(index, s)}
         >
-          <div className={`${styles.story} stories-bar__item`}>
+          <div className={cx(styles.story, responsiveStyles.story, 'stories-bar__item')}>
             <div className={`${styles.ring} ${s.hasUnseen ? styles.ringUnseen : styles.ringSeen}`}>
               <img className={styles.avatar} src={avatarOf(s)} alt={s.username} onError={(event) => handleStoryAvatarError(event, s.username)} />
             </div>
-            <div className={`${styles.name} stories-bar__name`}>{s.username}</div>
+            <div className={cx(styles.name, responsiveStyles.name, 'stories-bar__name')}>{s.username}</div>
           </div>
         </button>
       ))}
@@ -202,7 +212,7 @@ export default function StoriesBar() {
         const isPending = followPendingId === suggestionId
 
         return (
-          <div key={`suggestion-${suggestionId}`} className={`${styles.story} ${styles.suggestedStory} stories-bar__item`}>
+          <div key={`suggestion-${suggestionId}`} className={cx(styles.story, responsiveStyles.story, styles.suggestedStory, 'stories-bar__item')}>
             <button
               type="button"
               className={styles.suggestionProfileBtn}
@@ -217,13 +227,13 @@ export default function StoriesBar() {
                   onError={(event) => handleStoryAvatarError(event, user.username)}
                 />
               </div>
-              <div className={`${styles.name} stories-bar__name`}>{user.username}</div>
-              <div className={`${styles.helper} stories-bar__helper`}>De xuat</div>
+              <div className={cx(styles.name, responsiveStyles.name, 'stories-bar__name')}>{user.username}</div>
+              <div className={cx(styles.helper, responsiveStyles.helper, 'stories-bar__helper')}>De xuat</div>
             </button>
 
             <button
               type="button"
-              className={styles.followQuickAction}
+              className={cx(styles.followQuickAction, responsiveStyles.followQuickAction)}
               disabled={isPending}
               onClick={() => handleFollowSuggestion(user)}
               aria-label={`Follow ${user.username}`}

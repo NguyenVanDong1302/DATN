@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import styles from './ProfilePage.module.css'
+import desktopStyles from './ProfilePage.desktop.module.css'
+import tabletStyles from './ProfilePage.tablet.module.css'
+import mobileStyles from './ProfilePage.mobile.module.css'
 import { useApi, resolveMediaUrl } from '../../lib/api'
 import { getAvatarUrl } from '../../lib/avatar'
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles'
 import type { Post } from '../../types'
 import { useToast } from '../../components/Toast'
 import { useModal } from '../../components/Modal'
@@ -17,6 +21,12 @@ import StoryViewer from '../Home/components/StoriesBar/StoryViewer'
 type Profile = UserProfile
 
 const footerLinks = ['Meta', 'Giới thiệu', 'Blog', 'Việc làm', 'Trợ giúp', 'API', 'Quyền riêng tư', 'Điều khoản', 'Vị trí', 'Meta AI', 'Threads']
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function IconGrid({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z" stroke="currentColor" strokeWidth="1.8" /></svg>
@@ -35,6 +45,9 @@ function IconGear({ size = 18 }: { size?: number }) {
 }
 function IconMore({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M6.75 12a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm5.25 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm5.25 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z" fill="currentColor" /></svg>
+}
+function IconCamera({ size = 18 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M7.2 6.5 8.8 4h6.4l1.6 2.5H19A2.5 2.5 0 0 1 21.5 9v8A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V9A2.5 2.5 0 0 1 5 6.5h2.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.7" /></svg>
 }
 
 function detectMediaType(item: any): 'image' | 'video' | null {
@@ -110,9 +123,10 @@ function PostDetailModal({ post, onChanged }: { post: Post; onChanged: () => voi
   const [active, setActive] = useState(0)
   const authorAvatar = getAvatarUrl({ username: post.authorUsername, authorAvatarUrl: (post as any).authorAvatarUrl })
   const current = media[active]
+  const detailDate = post.createdAt ? new Date(post.createdAt).toLocaleString() : ''
 
   return (
-    <div className={styles.detailShell}>
+    <div className={cx(styles.detailShell, responsiveStyles.detailShell)}>
       <div className={styles.detailMediaCol}>
         <div className={styles.detailMediaWrap}>
           {current?.type === 'video' ? (
@@ -143,18 +157,19 @@ function PostDetailModal({ post, onChanged }: { post: Post; onChanged: () => voi
         ) : null}
       </div>
 
-      <div className={styles.detailSide}>
+      <div className={cx(styles.detailSide, responsiveStyles.detailSide)}>
         <div className={styles.detailHeader}>
           <div className={styles.detailAuthor}>
             <img className={styles.detailAvatar} src={authorAvatar} alt={post.authorUsername || 'user'} />
             <div>
               <div className={styles.detailUsername}>{post.authorUsername || 'Người dùng'}</div>
+              {detailDate ? <div className={styles.detailDate}>{detailDate}</div> : null}
               {post.content ? <div className={styles.detailCaption}>{post.content}</div> : null}
             </div>
           </div>
         </div>
         <div className={styles.detailComments}>
-          <CommentSheet postId={post._id} onChanged={onChanged} mode="panel" />
+          <CommentSheet postId={post._id} onChanged={onChanged} mode="panel" hidePostMeta />
         </div>
       </div>
     </div>
@@ -360,6 +375,7 @@ export default function ProfilePage() {
   const canMessage = !isOwnProfile && !!profile?._id
   const followersCount = profile?.counts?.followers ?? 0
   const followingCount = profile?.counts?.following ?? 0
+  const showOwnPostsEmpty = isOwnProfile && activeTab === 'posts' && !shownPosts.length
 
   const openDetail = (post: Post) => {
     modal.open(
@@ -459,51 +475,36 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className={styles.page}>
-      <div className={styles.container}>
-        <section className={styles.header}>
-          <div className={styles.avatarWrap}>
-            <div className={styles.avatar}>
+    <div className={cx(styles.page, responsiveStyles.page)}>
+      <div className={cx(styles.container, responsiveStyles.container)}>
+        <section className={cx(styles.header, responsiveStyles.header)}>
+          <div className={cx(styles.avatarWrap, responsiveStyles.avatarWrap)}>
+            <div className={cx(styles.avatar, responsiveStyles.avatar)}>
               <img className={styles.avatarImg} src={avatarSrc} alt={username} />
             </div>
           </div>
 
-          <div className={styles.meta}>
-            <div className={styles.topRow}>
-              <div className={styles.usernameRow}>
-                <div className={styles.username}>{username}</div>
+          <div className={cx(styles.meta, responsiveStyles.meta)}>
+            <div className={cx(styles.topRow, responsiveStyles.topRow)}>
+              <div className={cx(styles.usernameRow, responsiveStyles.usernameRow)}>
+                <div className={cx(styles.username, responsiveStyles.username)}>{username}</div>
                 {profile?.isVerified ? <span className={styles.verifiedBadge} title="Tai khoan da xac thuc">✓</span> : null}
                 {!isOwnProfile && profile?.relationship?.isFollowedBy ? <span className={styles.mutualBadge}>Theo dõi bạn</span> : null}
+                {isOwnProfile ? (
+                  <button className={cx(styles.topIconBtn, responsiveStyles.topIconBtn)} type="button" title="Cài đặt" onClick={() => nav('/settings')}>
+                    <IconGear size={18} />
+                  </button>
+                ) : null}
               </div>
-
-              {isOwnProfile ? (
-                <>
-                  <button className={`${styles.actionBtn} ${styles.secondaryBtn}`} type="button" onClick={() => nav('/settings')}>Chỉnh sửa trang cá nhân</button>
-                  <button className={`${styles.iconBtn} ${styles.secondaryBtn}`} type="button" title="Cài đặt" onClick={() => nav('/settings')}>
-                    <IconGear size={16} />
-                  </button>
-                </>
-              ) : (
-                <div className={styles.actionGroup}>
-                  <button
-                    className={`${styles.actionBtn} ${profile?.relationship?.isFollowing ? styles.secondaryBtn : styles.primaryBtn}`}
-                    type="button"
-                    onClick={handleToggleFollow}
-                    disabled={followPending}
-                  >
-                    {followPending ? 'Đang xử lý...' : profile?.relationship?.isFollowing ? 'Following' : 'Follow'}
-                  </button>
-                  <button className={`${styles.actionBtn} ${styles.secondaryBtn}`} type="button" onClick={handleMessage} disabled={!canMessage || messagePending}>
-                    {messagePending ? 'Đang mở...' : 'Message'}
-                  </button>
-                  <button className={`${styles.iconBtn} ${styles.secondaryBtn}`} type="button" title="Tùy chọn khác">
-                    <IconMore size={17} />
-                  </button>
-                </div>
-              )}
             </div>
 
-            <div className={styles.stats}>
+            <div className={cx(styles.identityBlock, responsiveStyles.identityBlock)}>
+              <div className={styles.name}>{displayName}</div>
+              {profile?.bio ? <div className={styles.bio}>{profile.bio}</div> : null}
+              {profile?.website ? <a className={styles.website} href={profile.website} target="_blank" rel="noreferrer">{profile.website}</a> : null}
+            </div>
+
+            <div className={cx(styles.stats, responsiveStyles.stats)}>
               <div className={styles.stat}><b>{posts.length}</b> posts</div>
               {isOwnProfile ? (
                 <button type="button" className={`${styles.stat} ${styles.statBtn}`} onClick={() => openConnectionsModal('followers')}>
@@ -521,24 +522,48 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <div className={styles.identityBlock}>
-              <div className={styles.name}>{displayName}</div>
-              {profile?.bio ? <div className={styles.bio}>{profile.bio}</div> : null}
-              {profile?.website ? <a className={styles.website} href={profile.website} target="_blank" rel="noreferrer">{profile.website}</a> : null}
+            <div className={cx(styles.actionsBar, responsiveStyles.actionsBar)}>
+              {isOwnProfile ? (
+                <div className={cx(styles.actionGroup, styles.ownActionGroup, responsiveStyles.actionGroup, responsiveStyles.ownActionGroup)}>
+                  <button className={cx(styles.actionBtn, styles.secondaryBtn, responsiveStyles.actionBtn)} type="button" onClick={() => nav('/settings')}>
+                    Chỉnh sửa trang cá nhân
+                  </button>
+                  <button className={cx(styles.actionBtn, styles.secondaryBtn, responsiveStyles.actionBtn)} type="button" onClick={() => setActiveTab('archive')}>
+                    Xem kho lưu trữ
+                  </button>
+                </div>
+              ) : (
+                <div className={cx(styles.actionGroup, responsiveStyles.actionGroup)}>
+                  <button
+                    className={cx(styles.actionBtn, profile?.relationship?.isFollowing ? styles.secondaryBtn : styles.primaryBtn, responsiveStyles.actionBtn)}
+                    type="button"
+                    onClick={handleToggleFollow}
+                    disabled={followPending}
+                  >
+                    {followPending ? 'Đang xử lý...' : profile?.relationship?.isFollowing ? 'Following' : 'Follow'}
+                  </button>
+                  <button className={cx(styles.actionBtn, styles.secondaryBtn, responsiveStyles.actionBtn)} type="button" onClick={handleMessage} disabled={!canMessage || messagePending}>
+                    {messagePending ? 'Đang mở...' : 'Message'}
+                  </button>
+                  <button className={cx(styles.iconBtn, styles.secondaryBtn, responsiveStyles.iconBtn)} type="button" title="Tùy chọn khác">
+                    <IconMore size={17} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {!isOwnProfile ? (
-              <div className={styles.storyHighlights}>
-                <div className={styles.highlightItem}>
-                  <span className={styles.highlightRing}><img src={avatarSrc} alt={username} /></span>
+              <div className={cx(styles.storyHighlights, responsiveStyles.storyHighlights)}>
+                <div className={cx(styles.highlightItem, responsiveStyles.highlightItem)}>
+                  <span className={cx(styles.highlightRing, responsiveStyles.highlightRing)}><img src={avatarSrc} alt={username} /></span>
                   <span className={styles.highlightLabel}>TÀ XƯA</span>
                 </div>
-                <div className={styles.highlightItem}>
-                  <span className={styles.highlightRing}><img src={avatarSrc} alt={username} /></span>
+                <div className={cx(styles.highlightItem, responsiveStyles.highlightItem)}>
+                  <span className={cx(styles.highlightRing, responsiveStyles.highlightRing)}><img src={avatarSrc} alt={username} /></span>
                   <span className={styles.highlightLabel}>LÝ SƠN</span>
                 </div>
-                <div className={styles.highlightItem}>
-                  <span className={styles.highlightRing}><img src={avatarSrc} alt={username} /></span>
+                <div className={cx(styles.highlightItem, responsiveStyles.highlightItem)}>
+                  <span className={cx(styles.highlightRing, responsiveStyles.highlightRing)}><img src={avatarSrc} alt={username} /></span>
                   <span className={styles.highlightLabel}>SAPA</span>
                 </div>
               </div>
@@ -546,14 +571,14 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section className={styles.tabs}>
-          <button className={`${styles.tab} ${activeTab === 'posts' ? styles.tabActive : ''}`} onClick={() => setActiveTab('posts')}><IconGrid /> <span>Posts</span></button>
-          <button className={`${styles.tab} ${activeTab === 'reels' ? styles.tabActive : ''}`} onClick={() => setActiveTab('reels')}><IconReel /> <span>Reels</span></button>
-          <button className={`${styles.tab} ${activeTab === 'tagged' ? styles.tabActive : ''}`} onClick={() => setActiveTab('tagged')}><IconTagged /> <span>Tagged</span></button>
-          {isOwnProfile ? <button className={`${styles.tab} ${activeTab === 'archive' ? styles.tabActive : ''}`} onClick={() => setActiveTab('archive')}><IconArchive /> <span>Archive</span></button> : null}
+        <section className={cx(styles.tabs, responsiveStyles.tabs)}>
+          <button className={cx(styles.tab, responsiveStyles.tab, activeTab === 'posts' && styles.tabActive)} onClick={() => setActiveTab('posts')}><IconGrid /> <span>Posts</span></button>
+          <button className={cx(styles.tab, responsiveStyles.tab, activeTab === 'reels' && styles.tabActive)} onClick={() => setActiveTab('reels')}><IconReel /> <span>Reels</span></button>
+          <button className={cx(styles.tab, responsiveStyles.tab, activeTab === 'tagged' && styles.tabActive)} onClick={() => setActiveTab('tagged')}><IconTagged /> <span>Tagged</span></button>
+          {isOwnProfile ? <button className={cx(styles.tab, responsiveStyles.tab, activeTab === 'archive' && styles.tabActive)} onClick={() => setActiveTab('archive')}><IconArchive /> <span>Archive</span></button> : null}
         </section>
 
-        <section className={styles.grid}>
+        <section className={cx(styles.grid, responsiveStyles.grid)}>
           {activeTab === 'archive' ? archivedStories.map((story, index) => {
             const thumb = getArchivedStoryThumb(story)
             return (
@@ -567,6 +592,18 @@ export default function ProfilePage() {
               </button>
             )
           }) : null}
+          {showOwnPostsEmpty ? (
+            <div className={cx(styles.emptyPostState, responsiveStyles.emptyPostState)}>
+              <div className={styles.emptyPostIcon}>
+                <IconCamera size={38} />
+              </div>
+              <h2 className={styles.emptyPostTitle}>Chia sẻ ảnh</h2>
+              <p className={styles.emptyPostText}>Khi bạn chia sẻ ảnh, ảnh sẽ xuất hiện trên trang cá nhân của bạn.</p>
+              <button type="button" className={styles.emptyPostCta} onClick={() => nav('/create')}>
+                Chia sẻ ảnh đầu tiên của bạn
+              </button>
+            </div>
+          ) : null}
           {(activeTab !== 'archive' ? shownPosts : []).map((post) => {
             const thumb = getTileThumb(post)
             return (
@@ -579,12 +616,12 @@ export default function ProfilePage() {
               </button>
             )
           })}
-          {activeTab !== 'archive' && !shownPosts.length ? <div className={styles.emptyState}>{activeTab === 'posts' ? 'Chưa có bài viết.' : activeTab === 'reels' ? 'Chưa có reel nào.' : 'Chưa có bài viết được gắn thẻ.'}</div> : null}
+          {!showOwnPostsEmpty && activeTab !== 'archive' && !shownPosts.length ? <div className={styles.emptyState}>{activeTab === 'posts' ? 'Chưa có bài viết.' : activeTab === 'reels' ? 'Chưa có reel nào.' : 'Chưa có bài viết được gắn thẻ.'}</div> : null}
           {activeTab === 'archive' && !archiveLoading && !archivedStories.length ? <div className={styles.emptyState}>Chưa có story nào trong kho lưu trữ.</div> : null}
           {activeTab === 'archive' && archiveLoading ? <div className={styles.emptyState}>Đang tải kho lưu trữ...</div> : null}
         </section>
 
-        <footer className={styles.footer}>
+        <footer className={cx(styles.footer, responsiveStyles.footer)}>
           <div className={styles.footerLinks}>{footerLinks.map((t) => <a key={t} href="#" onClick={(e) => e.preventDefault()}>{t}</a>)}</div>
         </footer>
       </div>

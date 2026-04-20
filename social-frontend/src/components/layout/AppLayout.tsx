@@ -4,6 +4,10 @@ import Sidebar from './Sidebar/Sidebar'
 import NotificationsPanel from './NotificationsPanel'
 import SearchPanel from './SearchPanel'
 import styles from './AppLayout.module.css'
+import desktopStyles from './AppLayout.desktop.module.css'
+import tabletStyles from './AppLayout.tablet.module.css'
+import mobileStyles from './AppLayout.mobile.module.css'
+import { combineResponsiveStyles } from '../../lib/combineResponsiveStyles'
 
 const COMPACT_LAYOUT_QUERY = '(max-width: 1024px)'
 
@@ -11,6 +15,12 @@ function getCompactLayoutMatches() {
   if (typeof window === 'undefined') return false
   return window.matchMedia(COMPACT_LAYOUT_QUERY).matches
 }
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
@@ -45,7 +55,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [compactMode])
 
   return (
-    <div className={`${styles.shell} app-shell ${hideSidebarForRoute ? 'app-shell--messages-compact' : ''}`}>
+    <div className={cx(styles.shell, responsiveStyles.shell, 'app-shell', hideSidebarForRoute && 'app-shell--messages-compact')}>
       {!hideSidebarForRoute ? (
         <Sidebar
           compactMode={compactMode}
@@ -62,7 +72,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         />
       ) : null}
 
-      <main className={`${styles.main} app-layout__main ${hideSidebarForRoute ? 'app-layout__main--messages-compact' : ''}`}>{children}</main>
+      <main className={cx(styles.main, responsiveStyles.main, 'app-layout__main', hideSidebarForRoute && 'app-layout__main--messages-compact')}>{children}</main>
 
       {!compactMode ? <NotificationsPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /> : null}
       {!compactMode ? <SearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} /> : null}

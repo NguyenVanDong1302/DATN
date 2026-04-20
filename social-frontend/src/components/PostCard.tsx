@@ -247,6 +247,8 @@ export default function PostCard({
   followPending,
   reportPending,
   showFollowButton,
+  showHeaderFollowButton = false,
+  showBottomFollowButton = true,
   following,
   onLike,
   onOpenComment,
@@ -264,6 +266,8 @@ export default function PostCard({
   followPending?: boolean
   reportPending?: boolean
   showFollowButton?: boolean
+  showHeaderFollowButton?: boolean
+  showBottomFollowButton?: boolean
   following?: boolean
   onLike: () => void
   onOpenComment: () => void
@@ -330,48 +334,64 @@ export default function PostCard({
           </div>
         </div>
 
-        <div style={styles.moreWrap} ref={menuRef}>
-          <button type="button" style={styles.moreBtn} onClick={() => setMenuOpen((prev) => !prev)}>
-            {ICON_ELLIPSIS}
-          </button>
-          {menuOpen ? (
-            <div style={styles.menu}>
-              {showFollowButton && onToggleFollow ? (
-                <button type="button" style={styles.menuBtn} disabled={!!followPending} onClick={() => { onToggleFollow(); setMenuOpen(false) }}>
-                  {followPending ? 'Dang xu ly...' : following ? 'Unfollow' : 'Follow'}
-                </button>
-              ) : null}
-              {onReport ? (
-                <button type="button" style={styles.menuBtn} disabled={!!reportPending} onClick={handleReport}>
-                  {reportPending ? 'Dang gui...' : 'Bao cao bai viet'}
-                </button>
-              ) : null}
-              {onDelete ? (
-                <button
-                  type="button"
-                  style={{ ...styles.menuBtn, ...styles.menuDanger }}
-                  onClick={() => {
-                    onDelete()
-                    setMenuOpen(false)
-                  }}
-                >
-                  Xoa bai viet
-                </button>
-              ) : null}
-              {onEdit ? (
-                <button
-                  type="button"
-                  style={styles.menuBtn}
-                  onClick={() => {
-                    onEdit()
-                    setMenuOpen(false)
-                  }}
-                >
-                  Chinh sua bai viet
-                </button>
-              ) : null}
-            </div>
+        <div style={styles.headerActions}>
+          {showHeaderFollowButton && showFollowButton && onToggleFollow ? (
+            <button
+              type="button"
+              style={{
+                ...styles.headerFollowBtn,
+                ...(followPending ? styles.buttonPending : null),
+              }}
+              onClick={onToggleFollow}
+              disabled={!!followPending}
+            >
+              {followPending ? 'Dang theo doi...' : 'Theo doi'}
+            </button>
           ) : null}
+
+          <div style={styles.moreWrap} ref={menuRef}>
+            <button type="button" style={styles.moreBtn} onClick={() => setMenuOpen((prev) => !prev)}>
+              {ICON_ELLIPSIS}
+            </button>
+            {menuOpen ? (
+              <div style={styles.menu}>
+                {showFollowButton && onToggleFollow ? (
+                  <button type="button" style={styles.menuBtn} disabled={!!followPending} onClick={() => { onToggleFollow(); setMenuOpen(false) }}>
+                    {followPending ? 'Dang xu ly...' : following ? 'Unfollow' : 'Follow'}
+                  </button>
+                ) : null}
+                {onReport ? (
+                  <button type="button" style={styles.menuBtn} disabled={!!reportPending} onClick={handleReport}>
+                    {reportPending ? 'Dang gui...' : 'Bao cao bai viet'}
+                  </button>
+                ) : null}
+                {onDelete ? (
+                  <button
+                    type="button"
+                    style={{ ...styles.menuBtn, ...styles.menuDanger }}
+                    onClick={() => {
+                      onDelete()
+                      setMenuOpen(false)
+                    }}
+                  >
+                    Xoa bai viet
+                  </button>
+                ) : null}
+                {onEdit ? (
+                  <button
+                    type="button"
+                    style={styles.menuBtn}
+                    onClick={() => {
+                      onEdit()
+                      setMenuOpen(false)
+                    }}
+                  >
+                    Chinh sua bai viet
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -410,7 +430,7 @@ export default function PostCard({
           <span>{ICON_COMMENT}</span>
           <span>{commentsCount}</span>
         </button>
-        {showFollowButton && onToggleFollow ? (
+        {showBottomFollowButton && showFollowButton && onToggleFollow ? (
           <button
             style={{
               ...styles.actionBtn,
@@ -499,6 +519,22 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: '#777',
     marginTop: 2,
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  headerFollowBtn: {
+    border: 'none',
+    background: 'transparent',
+    color: '#1877f2',
+    fontSize: 14,
+    fontWeight: 700,
+    padding: '6px 8px',
+    borderRadius: 10,
+    cursor: 'pointer',
   },
   moreWrap: {
     position: 'relative',

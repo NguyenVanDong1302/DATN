@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import "./Reel.scss";
-import "../../styles/reel-responsive.css";
+import "../../styles/reel-desktop.css";
+import "../../styles/reel-tablet.css";
+import "../../styles/reel-mobile.css";
 import ReelComments, { type ReelComment } from "./comments/ReelComments";
 import { resolveMediaUrl, useApi } from "../../lib/api";
 import { getAvatarUrl } from "../../lib/avatar";

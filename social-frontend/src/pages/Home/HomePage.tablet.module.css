@@ -1,0 +1,10 @@
+@media (min-width: 769px) and (max-width: 1024px) {
+  .wrapper {
+    gap: 24px;
+    padding-top: 20px;
+  }
+
+  .center {
+    width: min(100%, 640px);
+  }
+}

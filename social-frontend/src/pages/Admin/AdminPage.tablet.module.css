@@ -1,0 +1,9 @@
+@media (min-width: 641px) and (max-width: 992px) {
+  .page {
+    padding: 16px;
+  }
+
+  .statGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

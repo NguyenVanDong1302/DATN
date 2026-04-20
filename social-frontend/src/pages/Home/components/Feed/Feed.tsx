@@ -9,7 +9,11 @@ import type { Post } from '../../../../types'
 import { useUsersApi } from '../../../../features/users/users.api'
 import { usePostsApi } from '../../../../features/posts/posts.api'
 import { useAppStore } from '../../../../state/store'
+import { combineResponsiveStyles } from '../../../../lib/combineResponsiveStyles'
 import styles from './Feed.module.css'
+import desktopStyles from './Feed.desktop.module.css'
+import tabletStyles from './Feed.tablet.module.css'
+import mobileStyles from './Feed.mobile.module.css'
 
 type NormalizedMedia = {
   type: 'image' | 'video'
@@ -28,6 +32,12 @@ type EditModalProps = {
   onSave: (nextContent: string) => Promise<void>
   onCancel: () => void
 }
+
+function cx(...classNames: Array<string | false | null | undefined>) {
+  return classNames.filter(Boolean).join(' ')
+}
+
+const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
 function detectMediaType(item: any): 'image' | 'video' | null {
   const type = String(item?.type || '').toLowerCase()
@@ -178,16 +188,24 @@ export default function Feed() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set())
+  const [followStateReady, setFollowStateReady] = useState(false)
   const [followPendingMap, setFollowPendingMap] = useState<Record<string, boolean>>({})
   const [reportPendingMap, setReportPendingMap] = useState<Record<string, boolean>>({})
 
   const loadFollowState = useCallback(async () => {
-    if (!state.username) return
+    if (!state.username) {
+      setFollowingSet(new Set())
+      setFollowStateReady(true)
+      return
+    }
+    setFollowStateReady(false)
     try {
       const following = await usersApi.getFollowing(state.username)
-      setFollowingSet(new Set(following.map((user) => user.username)))
+      setFollowingSet(new Set(following.map((user) => String(user.username || '').trim().toLowerCase()).filter(Boolean)))
     } catch {
       // ignore follow state error on feed
+    } finally {
+      setFollowStateReady(true)
     }
   }, [state.username, usersApi])
 
@@ -246,14 +264,15 @@ export default function Feed() {
 
   const handleToggleFollow = async (post: Post) => {
     const targetUsername = String(post.authorUsername || '').trim()
-    if (!targetUsername || targetUsername === state.username || followPendingMap[targetUsername]) return
+    const normalizedTargetUsername = targetUsername.toLowerCase()
+    if (!targetUsername || normalizedTargetUsername === currentUsername || followPendingMap[normalizedTargetUsername]) return
 
-    const wasFollowing = followingSet.has(targetUsername)
-    setFollowPendingMap((prev) => ({ ...prev, [targetUsername]: true }))
+    const wasFollowing = followingSet.has(normalizedTargetUsername)
+    setFollowPendingMap((prev) => ({ ...prev, [normalizedTargetUsername]: true }))
     setFollowingSet((prev) => {
       const next = new Set(prev)
-      if (wasFollowing) next.delete(targetUsername)
-      else next.add(targetUsername)
+      if (wasFollowing) next.delete(normalizedTargetUsername)
+      else next.add(normalizedTargetUsername)
       return next
     })
 
@@ -266,13 +285,13 @@ export default function Feed() {
     } catch (error: any) {
       setFollowingSet((prev) => {
         const next = new Set(prev)
-        if (wasFollowing) next.add(targetUsername)
-        else next.delete(targetUsername)
+        if (wasFollowing) next.add(normalizedTargetUsername)
+        else next.delete(normalizedTargetUsername)
         return next
       })
       toast.push(error?.message || 'Khong the cap nhat follow')
     } finally {
-      setFollowPendingMap((prev) => ({ ...prev, [targetUsername]: false }))
+      setFollowPendingMap((prev) => ({ ...prev, [normalizedTargetUsername]: false }))
     }
   }
 
@@ -311,6 +330,18 @@ export default function Feed() {
     )
   }
 
+  const openCommentPopup = (post: Post) => {
+    modal.openFullscreen(
+      <CommentSheet
+        postId={post._id}
+        onChanged={(count) => updatePost(post._id, { commentsCount: count })}
+        mode="panel"
+        presentation="fullscreen"
+        onClose={() => modal.close()}
+      />,
+    )
+  }
+
   const openDetailPopup = (post: Post) => {
     modal.open(
       <DetailModal
@@ -323,14 +354,7 @@ export default function Feed() {
           modal.close()
           nav(`/post/${post._id}`)
         }}
-        onOpenComment={() => {
-          modal.open(
-            <CommentSheet
-              postId={post._id}
-              onChanged={(count) => updatePost(post._id, { commentsCount: count })}
-            />,
-          )
-        }}
+        onOpenComment={() => openCommentPopup(post)}
       />,
     )
   }
@@ -354,60 +378,88 @@ export default function Feed() {
 
   const followingLookup = useMemo(() => followingSet, [followingSet])
   const currentUsername = String(state.username || '').trim().toLowerCase()
+  const { primaryPosts, suggestedPosts } = useMemo(() => {
+    if (!followStateReady) {
+      return {
+        primaryPosts: items,
+        suggestedPosts: [] as Post[],
+      }
+    }
+
+    return items.reduce(
+      (acc, item) => {
+        const authorUsername = String(item.authorUsername || '').trim().toLowerCase()
+        const isOwnPost = !!authorUsername && authorUsername === currentUsername
+        const shouldPrioritize = !authorUsername || isOwnPost || followingLookup.has(authorUsername)
+        if (shouldPrioritize) acc.primaryPosts.push(item)
+        else acc.suggestedPosts.push(item)
+        return acc
+      },
+      {
+        primaryPosts: [] as Post[],
+        suggestedPosts: [] as Post[],
+      },
+    )
+  }, [currentUsername, followStateReady, followingLookup, items])
+
+  const renderPostCard = (post: Post, isSuggested = false) => {
+    const authorUsername = String(post.authorUsername || '').trim()
+    const normalizedAuthorUsername = authorUsername.toLowerCase()
+    const showFollowButton = !!authorUsername && normalizedAuthorUsername !== currentUsername
+    const canManagePost = !!authorUsername && normalizedAuthorUsername === currentUsername
+
+    return (
+      <GlobalPostCard
+        key={post._id}
+        post={post}
+        onLike={() => toggleLike(post)}
+        onOpenComment={() => openCommentPopup(post)}
+        onOpenDetail={() => openDetailPopup(post)}
+        onOpenAuthor={() => nav(`/profile/${encodeURIComponent(post.authorUsername || post.authorId || 'user')}`)}
+        showFollowButton={showFollowButton}
+        showHeaderFollowButton={isSuggested}
+        showBottomFollowButton={false}
+        following={followingLookup.has(normalizedAuthorUsername)}
+        followPending={!!followPendingMap[normalizedAuthorUsername]}
+        reportPending={!!reportPendingMap[post._id]}
+        onToggleFollow={() => handleToggleFollow(post)}
+        onDelete={canManagePost ? () => handleDeletePost(post) : undefined}
+        onEdit={canManagePost ? () => handleEditPost(post) : undefined}
+        onReport={(reason) => handleReportPost(post, reason)}
+      />
+    )
+  }
 
   return (
-    <div className={`${styles.feed} home-feed`}>
-      <div className={`${styles.topbar} home-feed__topbar`}>
+    <div className={cx(styles.feed, responsiveStyles.feed, 'home-feed')}>
+      <div className={cx(styles.topbar, responsiveStyles.topbar, 'home-feed__topbar')}>
         <div>
           <div className={styles.title}>Bai viet moi nhat</div>
-          <div className={`${styles.subtitle} home-feed__subtitle`}>Hien thi toan bo bai viet theo thoi gian gan nhat</div>
+          <div className={cx(styles.subtitle, responsiveStyles.subtitle, 'home-feed__subtitle')}>Hien thi toan bo bai viet theo thoi gian gan nhat</div>
         </div>
-        <button className="btn home-feed__refresh" type="button" onClick={refresh} disabled={loading}>
+        <button className={cx('btn', responsiveStyles.refresh, 'home-feed__refresh')} type="button" onClick={refresh} disabled={loading}>
           {loading ? 'Dang tai...' : 'Lam moi'}
         </button>
       </div>
 
-      {loading && !items.length ? <div className={styles.state}>Dang tai bai viet...</div> : null}
-      {!loading && !items.length ? <div className={styles.state}>Chua co bai viet nao.</div> : null}
+      {loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Dang tai bai viet...</div> : null}
+      {!loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Chua co bai viet nao.</div> : null}
 
-      {items.map((post) => {
-        const authorUsername = String(post.authorUsername || '').trim()
-        const showFollowButton = !!authorUsername && authorUsername !== state.username
-        const canManagePost = !!authorUsername && authorUsername.toLowerCase() === currentUsername
+      {primaryPosts.map((post) => renderPostCard(post))}
 
-        return (
-          <GlobalPostCard
-            key={post._id}
-            post={post}
-            onLike={() => toggleLike(post)}
-            onOpenComment={() =>
-              modal.open(
-                <CommentSheet
-                  postId={post._id}
-                  onChanged={(count) => updatePost(post._id, { commentsCount: count })}
-                />,
-              )
-            }
-            onOpenDetail={() => openDetailPopup(post)}
-            onOpenAuthor={() => nav(`/profile/${encodeURIComponent(post.authorUsername || post.authorId || 'user')}`)}
-            showFollowButton={showFollowButton}
-            following={followingLookup.has(authorUsername)}
-            followPending={!!followPendingMap[authorUsername]}
-            reportPending={!!reportPendingMap[post._id]}
-            onToggleFollow={() => handleToggleFollow(post)}
-            onDelete={canManagePost ? () => handleDeletePost(post) : undefined}
-            onEdit={canManagePost ? () => handleEditPost(post) : undefined}
-            onReport={(reason) => handleReportPost(post, reason)}
-          />
-        )
-      })}
+      {suggestedPosts.length ? (
+        <section className={styles.suggestedSection}>
+          <div className={cx(styles.suggestedHeader, responsiveStyles.suggestedHeader)}>Bai viet goi y</div>
+          <div className={styles.suggestedList}>{suggestedPosts.map((post) => renderPostCard(post, true))}</div>
+        </section>
+      ) : null}
 
       {items.length ? (
-        <div className={styles.pagination}>
+        <div className={cx(styles.pagination, responsiveStyles.pagination)}>
           <button className="btn" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1 || loading}>
             Truoc
           </button>
-          <span className={styles.pageText}>
+          <span className={cx(styles.pageText, responsiveStyles.pageText)}>
             Trang {page}/{totalPages}
           </span>
           <button className="btn" type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages || loading}>

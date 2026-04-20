@@ -6,6 +6,7 @@
   /* Sidebar sizes */
   --sb-collapsed: 72px;
   --sb-expanded: 244px;
+  overflow-x: clip;
 }
 
 .main {

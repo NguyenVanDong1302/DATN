@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: social-backend
+    runtime: node
+    rootDir: social-backend
+    plan: free
+    autoDeployTrigger: commit
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 10000
+      - key: CORS_ALLOW_VERCEL_PREVIEWS
+        value: "true"
+
+# After the first sync on Render, add these environment variables in the dashboard:
+# - MONGO_URI
+# - JWT_SECRET
+# - MEDIA_PUBLIC_BASE_URL
+# - CORS_ALLOWED_ORIGINS
