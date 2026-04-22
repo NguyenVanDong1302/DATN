@@ -2,7 +2,7 @@ require("dotenv").config();
 const http = require("http");
 const os = require("os");
 const { Server } = require("socket.io");
-const { createApp } = require("./app");
+const { createApp, createCorsOriginMatcher } = require("./app");
 const { connectDB } = require("./config/db");
 const { initSocket } = require("./realtime/socket");
 const { initPostModerationWorker } = require("./services/postModeration.service");
@@ -26,9 +26,13 @@ function listNetworkUrls(port) {
 async function main() {
   const app = createApp();
   const server = http.createServer(app);
+  const corsOrigin = createCorsOriginMatcher();
 
   const io = new Server(server, {
-    cors: { origin: true, credentials: true },
+    cors: {
+      origin: corsOrigin,
+      credentials: true,
+    },
   });
   initSocket(io);
 

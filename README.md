@@ -35,5 +35,5 @@ npm run dev
 See `DEPLOYMENT.md` for the recommended production setup:
 
 - frontend on Vercel
-- backend on Render or Railway
+- backend self-hosted on your machine with HTTPS, or on Render/Railway
 - MongoDB on Atlas
