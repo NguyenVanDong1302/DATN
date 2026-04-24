@@ -154,6 +154,22 @@ function cleanupUploadedFiles(files = []) {
   }
 }
 
+function removeCommentMediaFiles(comments = []) {
+  for (const comment of comments || []) {
+    const rawUrl = String(comment?.mediaUrl || "").trim();
+    if (!rawUrl) continue;
+    const filename = path.basename(rawUrl);
+    const absolutePath = path.join(postMediaDir, "comments", filename);
+    if (fs.existsSync(absolutePath)) {
+      try {
+        fs.unlinkSync(absolutePath);
+      } catch (_err) {
+        // noop
+      }
+    }
+  }
+}
+
 function removePostMediaFiles(post) {
   for (const item of post?.media || []) {
     if (!item?.url) continue;
@@ -733,6 +749,8 @@ async function deletePost(req, res, next) {
     }
 
     removePostMediaFiles(post);
+    const comments = await Comment.find({ postId: post._id }).select("mediaUrl").lean();
+    removeCommentMediaFiles(comments);
     await Post.deleteOne({ _id: post._id });
     await Comment.deleteMany({ postId: post._id });
     res.json({ ok: true, data: { id: post._id } });
@@ -981,6 +999,7 @@ async function addComment(req, res, next) {
 
     res.status(201).json({ ok: true, data: serializeComment(c, req.user.sub, post.authorId, req.user?.avatarUrl || "") });
   } catch (err) {
+    cleanupUploadedFiles(req.file ? [req.file] : []);
     if (err?.name === "ZodError") {
       return next(
         new AppError(
@@ -1030,11 +1049,15 @@ async function deleteComment(req, res, next) {
       throw new AppError("Forbidden", 403, "FORBIDDEN");
     }
 
-    await Comment.deleteMany({
+    const commentsToDelete = await Comment.find({
       $or: [
         { _id: comment._id },
         { parentCommentId: comment._id },
       ],
+    }).select("mediaUrl");
+    removeCommentMediaFiles(commentsToDelete);
+    await Comment.deleteMany({
+      _id: { $in: commentsToDelete.map((item) => item._id) },
     });
     res.json({ ok: true, data: { id: comment._id } });
   } catch (err) {

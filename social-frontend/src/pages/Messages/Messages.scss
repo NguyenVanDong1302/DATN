@@ -372,6 +372,28 @@
   padding: 0 20px 0;
 }
 
+.ig-msg__historyActions {
+  display: flex;
+  justify-content: center;
+  padding: 0 0 16px;
+}
+
+.ig-msg__historyBtn {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #dbdbdb;
+  background: #fff;
+  color: #262626;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ig-msg__historyBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .ig-msg__row {
   display: flex;
   margin-bottom: 10px;

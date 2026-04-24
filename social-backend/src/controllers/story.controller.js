@@ -7,10 +7,15 @@ const User = require('../models/User');
 const { postMediaDir } = require('../config/media');
 const { AppError } = require('../utils/errors');
 const { ensureCanLike } = require('../utils/accountModeration');
+const notificationService = require('../services/notification.service');
 
 const execFileAsync = promisify(execFile);
 const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
 const STORY_LIFETIME_MS = 10 * 60 * 1000;
+const MAX_STORY_VIDEO_DURATION_SECONDS = Math.max(
+  5,
+  Number.parseInt(String(process.env.STORY_VIDEO_MAX_DURATION_SECONDS || ''), 10) || 60,
+);
 const thumbnailDir = path.join(postMediaDir, 'thumbnails');
 fs.mkdirSync(thumbnailDir, { recursive: true });
 
@@ -238,13 +243,34 @@ async function listArchivedStories(req, res, next) {
 }
 
 async function createStory(req, res, next) {
+  let shouldCleanupUpload = false;
+  let generatedThumbnailPath = '';
   try {
     const viewer = await resolveViewer(req);
     const file = req.file;
     if (!file) throw new AppError('Story media is required', 400, 'STORY_MEDIA_REQUIRED');
+    shouldCleanupUpload = true;
     const isVideo = String(file.mimetype || '').startsWith('video/');
     const mediaUrl = normalizePublicMediaUrl(`/uploads/posts/stories/${path.basename(file.path)}`);
-    const thumbnailUrl = isVideo ? await buildVideoThumbnail(file.path, path.basename(file.path)) : mediaUrl;
+    const caption = String(req.body?.caption || '').trim();
+    if (caption.length > 300) {
+      throw new AppError('Story caption is too long', 400, 'INVALID_STORY_CAPTION');
+    }
+
+    let thumbnailUrl = mediaUrl;
+    if (isVideo) {
+      const durationSec = await getVideoDurationSeconds(file.path);
+      if (durationSec > MAX_STORY_VIDEO_DURATION_SECONDS) {
+        throw new AppError(
+          `Story video must be ${MAX_STORY_VIDEO_DURATION_SECONDS} seconds or shorter`,
+          400,
+          'STORY_VIDEO_TOO_LONG',
+        );
+      }
+
+      thumbnailUrl = await buildVideoThumbnail(file.path, path.basename(file.path));
+      generatedThumbnailPath = thumbnailUrl && thumbnailUrl !== mediaUrl ? toLocalMediaPath(thumbnailUrl) : '';
+    }
 
     const story = await Story.create({
       authorId: String(viewer._id),
@@ -252,13 +278,17 @@ async function createStory(req, res, next) {
       mediaType: isVideo ? 'video' : 'image',
       mediaUrl,
       thumbnailUrl,
-      caption: String(req.body?.caption || '').trim(),
+      caption,
       expiresAt: new Date(Date.now() + STORY_LIFETIME_MS),
       archivedAt: null,
     });
+    shouldCleanupUpload = false;
+    generatedThumbnailPath = '';
 
     res.status(201).json({ ok: true, data: { item: serializeStory(story, String(viewer._id)) } });
   } catch (err) {
+    if (shouldCleanupUpload && req.file?.path) safeUnlink(req.file.path);
+    if (generatedThumbnailPath) safeUnlink(generatedThumbnailPath);
     next(err);
   }
 }
@@ -339,6 +369,30 @@ async function toggleStoryLike(req, res, next) {
       liked = true;
     }
     await story.save();
+
+    const actorId = String(viewer._id);
+    const actorUsername = viewer.username;
+    if (liked) {
+      notificationService.notifyStoryLike({
+        story,
+        actorId,
+        actorUsername,
+      }).catch((error) => {
+        console.error('notifyStoryLike failed:', error?.message || error);
+      });
+    } else {
+      notificationService.removeNotificationActor({
+        type: 'like',
+        targetType: 'story',
+        targetId: String(story._id),
+        recipientId: String(story.authorId),
+        actorId,
+        actorUsername,
+      }).catch((error) => {
+        console.error('removeStoryLikeNotification failed:', error?.message || error);
+      });
+    }
+
     res.json({ ok: true, data: { liked, likesCount: story.likes.length } });
   } catch (err) {
     next(err);

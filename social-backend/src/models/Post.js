@@ -76,4 +76,7 @@ const postSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+postSchema.index({ visibility: 1, moderationStatus: 1, createdAt: -1 });
+postSchema.index({ authorId: 1, createdAt: -1 });
+
 module.exports = mongoose.model("Post", postSchema);

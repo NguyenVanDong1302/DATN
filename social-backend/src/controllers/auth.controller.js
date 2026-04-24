@@ -1,11 +1,12 @@
 ﻿const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const User = require("../models/User");
 const LoginActivity = require("../models/LoginActivity");
 const { AppError } = require("../utils/errors");
 const { isUserAdmin } = require("../utils/adminAccess");
 const { buildLockDetails, normalizeRestrictions } = require("../utils/accountModeration");
+const { getJwtExpiresIn, signAccessToken } = require("../utils/authToken");
+const { hashPassword } = require("../utils/passwords");
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(30),
@@ -20,17 +21,14 @@ const loginSchema = z.object({
 });
 
 function signToken(user) {
-  const secret = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
   const role = isUserAdmin(user) ? "admin" : "user";
-  return jwt.sign(
+  return signAccessToken(
     {
       sub: String(user._id),
       username: user.username,
       email: user.email,
       role,
     },
-    secret,
-    { expiresIn: "7d" },
   );
 }
 
@@ -63,7 +61,7 @@ async function register(req, res, next) {
       throw new AppError("Username already exists", 409, "USERNAME_EXISTS");
     }
 
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    const passwordHash = await hashPassword(body.password);
 
     const role = isUserAdmin({ username, email }) ? "admin" : "user";
     const newUser = await User.create({
@@ -82,6 +80,8 @@ async function register(req, res, next) {
       message: "Register successful",
       data: {
         token,
+        tokenType: "Bearer",
+        expiresIn: getJwtExpiresIn(),
         user: {
           id: String(newUser._id),
           username: newUser.username,
@@ -163,6 +163,8 @@ async function login(req, res, next) {
       message: "Login successful",
       data: {
         token,
+        tokenType: "Bearer",
+        expiresIn: getJwtExpiresIn(),
         user: {
           id: String(user._id),
           username: user.username,

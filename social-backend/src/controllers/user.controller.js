@@ -14,6 +14,7 @@ const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 const { AppError } = require("../utils/errors");
 const notificationService = require('../services/notification.service');
+const { hashPassword } = require("../utils/passwords");
 
 const PROFILE_SELECT = "_id username email bio avatarUrl website fullName gender showThreadsBadge showSuggestedAccountsOnProfile isVerified isPrivateAccount showActivityStatus createdAt";
 const MEDIA_PUBLIC_BASE_URL = (process.env.MEDIA_PUBLIC_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
@@ -635,7 +636,7 @@ async function changeMyPassword(req, res, next) {
       throw new AppError("Máº­t kháº©u má»›i pháº£i khÃ¡c máº­t kháº©u hiá»‡n táº¡i", 400, "PASSWORD_NOT_CHANGED");
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = await hashPassword(newPassword);
     await user.save();
 
     return res.json({

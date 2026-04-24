@@ -78,6 +78,17 @@ export type DeletedMessageEvent = {
   lastMessageAt?: string | null
 }
 
+export type ConversationMessagesPageInfo = {
+  hasMore: boolean
+  nextBeforeMessageId?: string
+  limit?: number
+}
+
+export type ConversationMessagesPage = {
+  items: ChatMessage[]
+  pageInfo: ConversationMessagesPageInfo
+}
+
 export type SearchUsersResponse = {
   following: MessageUser[]
   suggested: MessageUser[]

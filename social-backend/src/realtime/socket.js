@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const {
   sendMessage,
@@ -8,6 +7,10 @@ const {
 const { registerCallHandlers } = require("./calls/registerCallHandlers");
 const { setIO, getIO } = require("./io");
 const { setPresence, clearPresence } = require("../utils/presenceStore");
+const {
+  isProbablyJwt,
+  verifyAccessToken,
+} = require("../utils/authToken");
 
 function legacyUserId(username) {
   return crypto
@@ -22,14 +25,13 @@ async function resolveSocketUser(socket) {
   const token = String(auth.token || "").trim();
   const username = String(auth.username || "").trim();
 
-  if (token) {
+  if (token && isProbablyJwt(token)) {
     try {
-      const secret = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
-      const payload = jwt.verify(token, secret);
+      const payload = verifyAccessToken(token);
       const byId = payload?.sub ? await User.findById(String(payload.sub)).select("_id username") : null;
       if (byId) return byId;
     } catch (_err) {
-      // ignore and fallback to username
+      return null;
     }
   }
 

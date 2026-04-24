@@ -25,13 +25,18 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function isJwtLikeToken(value: string) {
+  return String(value || '').trim().split('.').length === 3
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(!firebaseConfigError)
   const { state, setState } = useAppStore()
+  const shouldUseStoredSessionDirectly = Boolean(state.token && state.username) && (Boolean(firebaseConfigError) || isJwtLikeToken(state.token))
 
   useEffect(() => {
-    if (state.token && state.username) {
+    if (shouldUseStoredSessionDirectly) {
       setUser({
         uid: state.token,
         email: state.username.includes('@') ? state.username : `${state.username}@local.app`,
@@ -56,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => unsub()
-  }, [firebaseConfigError, setState, state.token, state.username])
+  }, [firebaseConfigError, setState, shouldUseStoredSessionDirectly, state.token, state.username])
 
   const value = useMemo<AuthContextValue>(
     () => ({

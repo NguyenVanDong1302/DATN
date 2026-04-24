@@ -1,6 +1,12 @@
 import { useMemo } from 'react'
 import { useApi } from '../../lib/api'
-import type { ChatMessage, ConversationItem, ConversationSettings, SearchUsersResponse } from './messages.types'
+import type {
+  ChatMessage,
+  ConversationItem,
+  ConversationMessagesPage,
+  ConversationSettings,
+  SearchUsersResponse,
+} from './messages.types'
 
 export function useMessagesApi() {
   const api = useApi()
@@ -19,9 +25,23 @@ export function useMessagesApi() {
         const res = await api.get(`/messages/conversations/${conversationId}`)
         return res?.data as ConversationItem
       },
-      getMessages: async (conversationId: string) => {
-        const res = await api.get(`/messages/conversations/${conversationId}/messages`)
-        return (res?.data?.items || []) as ChatMessage[]
+      getMessages: async (
+        conversationId: string,
+        options?: { limit?: number; beforeMessageId?: string },
+      ) => {
+        const query = new URLSearchParams()
+        if (options?.limit) query.set('limit', String(options.limit))
+        if (options?.beforeMessageId) query.set('beforeMessageId', options.beforeMessageId)
+        const suffix = query.toString() ? `?${query.toString()}` : ''
+        const res = await api.get(`/messages/conversations/${conversationId}/messages${suffix}`)
+        return {
+          items: (res?.data?.items || []) as ChatMessage[],
+          pageInfo: {
+            hasMore: Boolean(res?.data?.pageInfo?.hasMore),
+            nextBeforeMessageId: String(res?.data?.pageInfo?.nextBeforeMessageId || ''),
+            limit: Number(res?.data?.pageInfo?.limit || options?.limit || 50),
+          },
+        } as ConversationMessagesPage
       },
       createDirectConversation: async (payload: string | { targetUserId?: string; username?: string }) => {
         const body = typeof payload === 'string' ? { targetUserId: payload } : payload

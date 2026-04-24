@@ -1,18 +1,24 @@
-const jwt = require("jsonwebtoken");
 const { AppError } = require("../utils/errors");
+const {
+  extractBearerToken,
+  verifyAccessToken,
+} = require("../utils/authToken");
 
 function auth(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = extractBearerToken(req.headers.authorization || "");
   if (!token) return next(new AppError("Missing token", 401, "UNAUTHORIZED"));
 
   try {
-    const secret = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
-    const payload = jwt.verify(token, secret);
-    req.user = payload; // { sub: userId }
+    const payload = verifyAccessToken(token);
+    req.user = {
+      sub: String(payload?.sub || ""),
+      username: String(payload?.username || ""),
+      email: String(payload?.email || ""),
+      role: String(payload?.role || "user"),
+    };
     next();
   } catch (e) {
-    return next(new AppError("Invalid/Expired token", 401, "UNAUTHORIZED"));
+    return next(e);
   }
 }
 

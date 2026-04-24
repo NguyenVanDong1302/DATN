@@ -26,5 +26,6 @@ const storySchema = new mongoose.Schema(
 );
 
 storySchema.index({ authorId: 1, createdAt: -1 });
+storySchema.index({ archivedAt: 1, expiresAt: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Story', storySchema);

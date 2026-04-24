@@ -7,7 +7,7 @@ const conversationSchema = new mongoose.Schema(
       enum: ["direct"],
       default: "direct",
     },
-    memberIds: [{ type: String, required: true, index: true }],
+    memberIds: [{ type: String, required: true }],
     memberUsernames: [{ type: String, required: true }],
     directKey: { type: String, unique: true, sparse: true, index: true },
     lastMessageText: { type: String, default: "" },

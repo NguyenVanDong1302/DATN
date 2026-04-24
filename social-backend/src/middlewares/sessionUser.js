@@ -2,8 +2,13 @@ const crypto = require("crypto");
 const { AppError } = require("../utils/errors");
 const User = require("../models/User");
 const { buildLockDetails } = require("../utils/accountModeration");
+const {
+  extractBearerToken,
+  isProbablyJwt,
+  verifyAccessToken,
+} = require("../utils/authToken");
 
-function toUserId(username) {
+function toLegacyUserId(username) {
   return crypto
     .createHash("sha256")
     .update(String(username))
@@ -12,25 +17,80 @@ function toUserId(username) {
 }
 
 async function sessionUser(req, res, next) {
-  const username = (req.headers["x-username"] || "").toString().trim();
+  const headerUsername = String(req.headers["x-username"] || "").trim();
+  const accessToken = extractBearerToken(req.headers.authorization || "");
 
-  if (!username) {
+  if (!headerUsername && !accessToken) {
     return next(new AppError("Username required", 401, "USERNAME_REQUIRED"));
   }
 
-  req.user = {
-    sub: toUserId(username),
-    username,
-  };
-
   try {
-    const currentUser = await User.findOne({ username })
-      .select(
-        "_id username role avatarUrl isVerified moderationStatus accountLocked accountLockedAt accountLockedReason strikesCount restrictions",
+    let tokenPayload = null;
+    if (accessToken && isProbablyJwt(accessToken)) {
+      tokenPayload = verifyAccessToken(accessToken);
+    }
+
+    let currentUser = null;
+
+    if (tokenPayload?.sub) {
+      currentUser = await User.findById(String(tokenPayload.sub))
+        .select(
+          "_id username role avatarUrl isVerified moderationStatus accountLocked accountLockedAt accountLockedReason strikesCount restrictions",
+        )
+        .lean();
+
+      if (!currentUser) {
+        return next(new AppError("User not found", 401, "UNAUTHORIZED"));
+      }
+    } else if (headerUsername) {
+      currentUser = await User.findOne({ username: headerUsername })
+        .select(
+          "_id username role avatarUrl isVerified moderationStatus accountLocked accountLockedAt accountLockedReason strikesCount restrictions",
+        )
+        .lean();
+    }
+
+    const resolvedUsername = String(
+      currentUser?.username || tokenPayload?.username || headerUsername || "",
+    ).trim();
+
+    if (!resolvedUsername) {
+      return next(new AppError("Username required", 401, "USERNAME_REQUIRED"));
+    }
+
+    if (tokenPayload && headerUsername) {
+      const normalizedHeaderUsername = headerUsername.toLowerCase();
+      const normalizedTokenUsername = String(
+        currentUser?.username || tokenPayload?.username || "",
       )
-      .lean();
+        .trim()
+        .toLowerCase();
+
+      if (
+        normalizedHeaderUsername
+        && normalizedTokenUsername
+        && normalizedHeaderUsername !== normalizedTokenUsername
+      ) {
+        return next(
+          new AppError(
+            "Authenticated user does not match username header",
+            401,
+            "SESSION_MISMATCH",
+          ),
+        );
+      }
+    }
 
     req.currentUser = currentUser || null;
+    req.user = {
+      sub: String(currentUser?._id || tokenPayload?.sub || toLegacyUserId(resolvedUsername)),
+      username: resolvedUsername,
+      role: String(currentUser?.role || tokenPayload?.role || "user"),
+    };
+    req.authContext = {
+      mode: tokenPayload ? "jwt" : "legacy_username",
+      hasCurrentUser: Boolean(currentUser),
+    };
 
     if (currentUser?.accountLocked) {
       return next(

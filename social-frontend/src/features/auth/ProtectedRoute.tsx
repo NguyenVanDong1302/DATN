@@ -11,7 +11,7 @@ type LockInfo = {
 
 export default function ProtectedRoute() {
   const { user, loading } = useAuth()
-  const { state } = useAppStore()
+  const { state, setState } = useAppStore()
   const api = useApi()
   const location = useLocation()
 
@@ -46,6 +46,12 @@ export default function ProtectedRoute() {
         }
       } catch (err: any) {
         if (cancelled) return
+        if (err?.data?.code === 'TOKEN_EXPIRED' || err?.data?.code === 'SESSION_MISMATCH') {
+          localStorage.removeItem('account_lock_info')
+          setState({ username: '', token: '', role: 'user' })
+          setLockedInfo(null)
+          return
+        }
         if (err?.data?.code === 'ACCOUNT_LOCKED') {
           const info = {
             reason: err?.data?.data?.reason || 'Tai khoan da bi khoa',
@@ -65,7 +71,7 @@ export default function ProtectedRoute() {
     return () => {
       cancelled = true
     }
-  }, [api, hasBackendSession, state.token, state.username])
+  }, [api, hasBackendSession, setState, state.token, state.username])
 
   if ((loading && !hasBackendSession) || checkingSession) {
     return (

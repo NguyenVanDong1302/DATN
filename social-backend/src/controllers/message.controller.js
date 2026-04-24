@@ -93,12 +93,13 @@ async function getConversation(req, res, next) {
 async function getConversationMessages(req, res, next) {
   try {
     const currentUser = await resolveCurrentUserFromReq(req);
-    const items = await listMessages({
+    const data = await listMessages({
       currentUser,
       conversationId: req.params.conversationId,
       limit: req.query.limit || 50,
+      beforeMessageId: req.query.beforeMessageId || "",
     });
-    res.json({ ok: true, data: { items } });
+    res.json({ ok: true, data });
   } catch (err) {
     next(err);
   }

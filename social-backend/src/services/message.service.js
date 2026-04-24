@@ -356,14 +356,53 @@ async function getConversationDetail({ currentUser, conversationId }) {
   return serializeConversation(conversation, currentUser._id, currentUser.username, peer, member);
 }
 
-async function listMessages({ currentUser, conversationId, limit = 50 }) {
+async function listMessages({
+  currentUser,
+  conversationId,
+  limit = 50,
+  beforeMessageId = "",
+}) {
   await getConversationOrThrow({ currentUser, conversationId });
-  const rows = await Message.find({ conversationId: String(conversationId) })
-    .sort({ createdAt: 1 })
-    .limit(Math.max(1, Math.min(Number(limit) || 50, 200)))
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 100));
+  const filter = { conversationId: String(conversationId) };
+
+  if (beforeMessageId) {
+    const anchor = await Message.findOne({
+      _id: String(beforeMessageId),
+      conversationId: String(conversationId),
+    })
+      .select("_id createdAt")
+      .lean();
+
+    if (!anchor) {
+      throw new AppError("Khong tim thay moc phan trang tin nhan", 404, "MESSAGE_CURSOR_NOT_FOUND");
+    }
+
+    filter.$or = [
+      { createdAt: { $lt: anchor.createdAt } },
+      { createdAt: anchor.createdAt, _id: { $lt: anchor._id } },
+    ];
+  }
+
+  const rows = await Message.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(safeLimit + 1)
     .lean();
 
-  return rows.map((row) => serializeMessage(row, currentUser._id));
+  const hasMore = rows.length > safeLimit;
+  const slice = hasMore ? rows.slice(0, safeLimit) : rows;
+  const ordered = slice.reverse();
+  const items = ordered.map((row) => serializeMessage(row, currentUser._id));
+
+  return {
+    items,
+    pageInfo: {
+      hasMore,
+      nextBeforeMessageId: hasMore ? items[0]?.id || "" : "",
+      limit: safeLimit,
+    },
+  };
 }
 
 function getSocketIOOrNull() {
@@ -565,12 +604,16 @@ async function sendMessage({ currentUser, conversationId, text, files = [], repl
     },
   );
 
+  const receiverMemberUpdate = {
+    $set: { username: receiver.username },
+  };
+  if (nextStatus !== "seen") {
+    receiverMemberUpdate.$inc = { unreadCount: 1 };
+  }
+
   await ConversationMember.updateOne(
     { conversationId: String(conversation._id), userId: String(receiver._id) },
-    {
-      $set: { username: receiver.username },
-      $inc: nextStatus === 'seen' ? {} : { unreadCount: 1 },
-    },
+    receiverMemberUpdate,
   );
 
   if (nextStatus === 'seen') {
@@ -580,7 +623,7 @@ async function sendMessage({ currentUser, conversationId, text, files = [], repl
     );
   }
 
-  if (String(receiver._id) !== String(currentUser._id)) {
+  if (String(receiver._id) !== String(currentUser._id) && nextStatus !== "seen") {
     await createMessageNotification({ recipient: receiver, sender: currentUser, message });
   }
 
@@ -770,12 +813,21 @@ async function markConversationRead({ currentUser, conversationId }) {
 
   const io = getSocketIOOrNull();
   if (io) {
-    io.to(`conversation:${conversation._id}`).emit("message:seen", {
+    const payload = {
       conversationId: String(conversation._id),
       userId: String(currentUser._id),
       username: currentUser.username,
       seenAt: now,
-    });
+    };
+    io.to(`conversation:${conversation._id}`).emit("message:seen", payload);
+    const peerId = conversation.memberIds.find((id) => String(id) !== String(currentUser._id));
+    if (peerId) {
+      const peer = await User.findById(peerId).select("_id username").lean();
+      if (peer) {
+        emitToUser(io, String(peer._id), peer.username, "message:seen", payload);
+        emitToUser(io, String(peer._id), peer.username, "inbox:refresh", { reason: "read" });
+      }
+    }
     emitToUser(io, String(currentUser._id), currentUser.username, "inbox:refresh", { reason: "read" });
   }
 
@@ -881,6 +933,7 @@ async function safeUnlink(filePath) {
 async function clearConversationHistory({ currentUser, conversationId }) {
   const conversation = await getConversationOrThrow({ currentUser, conversationId });
   const messages = await Message.find({ conversationId: String(conversation._id) }).lean();
+  const messageIds = messages.map((message) => String(message._id)).filter(Boolean);
   const files = new Set();
   messages.forEach((message) => {
     collectPossibleMediaPaths(message).forEach((p) => {
@@ -890,7 +943,13 @@ async function clearConversationHistory({ currentUser, conversationId }) {
   });
 
   await Message.deleteMany({ conversationId: String(conversation._id) });
-  await Notification.deleteMany({ type: "message", targetType: "conversation", conversationId: String(conversation._id) }).catch(() => {});
+  if (messageIds.length) {
+    await Notification.deleteMany({
+      type: "message",
+      targetType: "conversation",
+      targetId: { $in: messageIds },
+    }).catch(() => {});
+  }
   await Conversation.updateOne(
     { _id: conversation._id },
     {

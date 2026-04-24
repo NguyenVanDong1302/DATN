@@ -4,7 +4,16 @@ import { useAppStore } from '../../state/store'
 import { useSocket } from '../../state/socket'
 import { useMessagesApi } from '../../features/messages/messages.api'
 import { joinConversation, leaveConversation, markConversationReadRealtime, sendRealtimeMessage } from '../../features/messages/messages.socket'
-import type { ChatMessage, ChatMessageMediaItem, ConversationItem, ConversationSettings, DeletedMessageEvent, MessageUser, SearchUsersResponse } from '../../features/messages/messages.types'
+import type {
+  ChatMessage,
+  ChatMessageMediaItem,
+  ConversationItem,
+  ConversationMessagesPageInfo,
+  ConversationSettings,
+  DeletedMessageEvent,
+  MessageUser,
+  SearchUsersResponse,
+} from '../../features/messages/messages.types'
 import { useCalls } from '../../features/calls/CallsProvider'
 import { resolveMediaUrl } from '../../lib/api'
 import './Messages.scss'
@@ -39,6 +48,7 @@ const messagesPageCache: {
   conversations: ConversationItem[]
   activeId: string
   messagesByConversation: Record<string, ChatMessage[]>
+  messagePageInfoByConversation: Record<string, ConversationMessagesPageInfo>
   settingsByConversation: Record<string, ConversationSettings>
   loadedMessagesByConversation: Record<string, boolean>
   messageFetchedAtByConversation: Record<string, number>
@@ -50,6 +60,7 @@ const messagesPageCache: {
   conversations: [],
   activeId: '',
   messagesByConversation: {},
+  messagePageInfoByConversation: {},
   settingsByConversation: {},
   loadedMessagesByConversation: {},
   messageFetchedAtByConversation: {},
@@ -62,6 +73,7 @@ function resetMessagesPageCache() {
   messagesPageCache.conversations = []
   messagesPageCache.activeId = ''
   messagesPageCache.messagesByConversation = {}
+  messagesPageCache.messagePageInfoByConversation = {}
   messagesPageCache.settingsByConversation = {}
   messagesPageCache.loadedMessagesByConversation = {}
   messagesPageCache.messageFetchedAtByConversation = {}
@@ -248,10 +260,12 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const [savingDetail, setSavingDetail] = useState(false)
   const [conversations, setConversations] = useState<ConversationItem[]>(() => messagesPageCache.conversations)
   const [activeId, setActiveId] = useState(initialActiveId)
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, ChatMessage[]>>(() => messagesPageCache.messagesByConversation)
+  const [messagePageInfoByConversation, setMessagePageInfoByConversation] = useState<Record<string, ConversationMessagesPageInfo>>(() => messagesPageCache.messagePageInfoByConversation)
   const [settingsByConversation, setSettingsByConversation] = useState<Record<string, ConversationSettings>>(() => messagesPageCache.settingsByConversation)
   const [mutedConversationIds, setMutedConversationIds] = useState<Record<string, boolean>>(() => messagesPageCache.mutedConversationIds)
   const [query, setQuery] = useState('')
@@ -278,6 +292,10 @@ export default function MessagesPage() {
 
   const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId) || null, [conversations, activeId])
   const activeMessages = useMemo(() => messagesByConversation[activeId] || [], [messagesByConversation, activeId])
+  const activeMessagePageInfo = useMemo(
+    () => messagePageInfoByConversation[activeId] || { hasMore: false, nextBeforeMessageId: '' },
+    [messagePageInfoByConversation, activeId],
+  )
   const settings = useMemo(() => settingsByConversation[activeId] || null, [settingsByConversation, activeId])
   const displayPeerName = activeConversation?.nickname?.trim() || activeConversation?.peer.username || ''
   const isCurrentConversationInCall = Boolean(activeCall && activeConversation && activeCall.conversationId === activeConversation.id)
@@ -352,6 +370,10 @@ export default function MessagesPage() {
     messagesByConversationRef.current = messagesByConversation
     messagesPageCache.messagesByConversation = messagesByConversation
   }, [messagesByConversation])
+
+  useEffect(() => {
+    messagesPageCache.messagePageInfoByConversation = messagePageInfoByConversation
+  }, [messagePageInfoByConversation])
 
   useEffect(() => {
     settingsByConversationRef.current = settingsByConversation
@@ -517,9 +539,10 @@ export default function MessagesPage() {
         }
 
         setDetailLoading(!hasLoadedMessages)
-        const items = await api.getMessages(activeId)
+        const data = await api.getMessages(activeId)
         if (!mounted) return
-        setMessagesByConversation((prev) => ({ ...prev, [activeId]: items }))
+        setMessagesByConversation((prev) => ({ ...prev, [activeId]: data.items }))
+        setMessagePageInfoByConversation((prev) => ({ ...prev, [activeId]: data.pageInfo }))
         loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
         messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
         touchMessageCache(activeId)
@@ -625,7 +648,24 @@ export default function MessagesPage() {
       touchMessageCache(conversationId)
       touchConversationListCache()
       setMessagesByConversation((prev) => ({ ...prev, [conversationId]: [] }))
+      setMessagePageInfoByConversation((prev) => ({
+        ...prev,
+        [conversationId]: { hasMore: false, nextBeforeMessageId: '' },
+      }))
       setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === conversationId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
+    }
+
+    const onReconnect = async () => {
+      await onInboxRefresh()
+      if (!activeId || !shouldLoadActiveConversation) return
+      try {
+        const data = await api.getMessages(activeId)
+        loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
+        messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+        touchMessageCache(activeId)
+        setMessagesByConversation((prev) => ({ ...prev, [activeId]: data.items }))
+        setMessagePageInfoByConversation((prev) => ({ ...prev, [activeId]: data.pageInfo }))
+      } catch {}
     }
 
     socket.on('message:new', onMessageNew)
@@ -634,6 +674,7 @@ export default function MessagesPage() {
     socket.on('inbox:refresh', onInboxRefresh)
     socket.on('conversation:updated', onConversationUpdated)
     socket.on('conversation:history-cleared', onHistoryCleared)
+    socket.on('connect', onReconnect)
 
     return () => {
       socket.off('message:new', onMessageNew)
@@ -642,6 +683,7 @@ export default function MessagesPage() {
       socket.off('inbox:refresh', onInboxRefresh)
       socket.off('conversation:updated', onConversationUpdated)
       socket.off('conversation:history-cleared', onHistoryCleared)
+      socket.off('connect', onReconnect)
     }
   }, [socket, activeId, state.username, api, shouldLoadActiveConversation])
 
@@ -791,6 +833,44 @@ export default function MessagesPage() {
     setActionMenuMessageId((prev) => (prev === payload.messageId ? '' : prev))
   }
 
+  const loadOlderMessages = async () => {
+    if (!activeId || loadingOlder || !activeMessagePageInfo.hasMore) return
+    const beforeMessageId = activeMessagePageInfo.nextBeforeMessageId || activeMessages[0]?.id || ''
+    if (!beforeMessageId) return
+
+    const previousScrollHeight = contentScrollRef.current?.scrollHeight || 0
+    const previousScrollTop = contentScrollRef.current?.scrollTop || 0
+
+    try {
+      setLoadingOlder(true)
+      const data = await api.getMessages(activeId, { beforeMessageId })
+      loadedMessagesRef.current = { ...loadedMessagesRef.current, [activeId]: true }
+      messagesPageCache.loadedMessagesByConversation = loadedMessagesRef.current
+      touchMessageCache(activeId)
+
+      setMessagesByConversation((prev) => {
+        const existing = prev[activeId] || []
+        const existingIds = new Set(existing.map((item) => item.id))
+        const olderItems = data.items.filter((item) => !existingIds.has(item.id))
+        return {
+          ...prev,
+          [activeId]: [...olderItems, ...existing],
+        }
+      })
+      setMessagePageInfoByConversation((prev) => ({ ...prev, [activeId]: data.pageInfo }))
+
+      window.requestAnimationFrame(() => {
+        if (!contentScrollRef.current) return
+        const nextScrollHeight = contentScrollRef.current.scrollHeight
+        contentScrollRef.current.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop
+      })
+    } catch (err: any) {
+      setError(err?.message || 'Khong tai duoc tin nhan cu hon')
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
   const handleSend = async () => {
     if (!activeId || sending || isBlocked) return
     const value = text.trim()
@@ -907,6 +987,10 @@ export default function MessagesPage() {
       touchMessageCache(activeId)
       touchConversationListCache()
       setMessagesByConversation((prev) => ({ ...prev, [activeId]: [] }))
+      setMessagePageInfoByConversation((prev) => ({
+        ...prev,
+        [activeId]: { hasMore: false, nextBeforeMessageId: '' },
+      }))
       setConversations((prev) => sortConversationsByLastMessage(prev.map((item) => (item.id === activeId ? { ...item, lastMessageText: '', lastMessageAt: null, unreadCount: 0 } : item))))
     } catch (err: any) {
       setError(err?.message || 'Không thể xóa lịch sử đoạn chat')
@@ -1054,6 +1138,18 @@ export default function MessagesPage() {
                     </div>
 
                     <div className="ig-msg__body">
+                      {activeMessagePageInfo.hasMore ? (
+                        <div className="ig-msg__historyActions">
+                          <button
+                            className="ig-msg__historyBtn"
+                            type="button"
+                            onClick={() => void loadOlderMessages()}
+                            disabled={loadingOlder || detailLoading}
+                          >
+                            {loadingOlder ? 'Dang tai tin nhan cu hon...' : 'Xem tin nhan cu hon'}
+                          </button>
+                        </div>
+                      ) : null}
                       {detailLoading ? <div className="ig-msg__empty">Đang tải tin nhắn...</div> : null}
                       {!detailLoading && !activeMessages.length ? <div className="ig-msg__empty">Chưa có tin nhắn nào.</div> : null}
                       {activeMessages.map((message, index) => {
