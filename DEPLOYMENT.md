@@ -36,8 +36,8 @@ Required:
 ```env
 MONGO_URI=your_mongodb_atlas_connection_string
 JWT_SECRET=replace_with_a_long_random_secret
-MEDIA_PUBLIC_BASE_URL=https://your-backend.vercel.app
-CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app
+MEDIA_PUBLIC_BASE_URL=https://social-backend-indol.vercel.app
+CORS_ALLOWED_ORIGINS=https://datn-hx48.vercel.app
 CORS_ALLOW_VERCEL_PREVIEWS=true
 ```
 
@@ -93,7 +93,7 @@ Recommended backend `.env` values for self-hosting:
 ```env
 HOST=0.0.0.0
 PORT=4000
-MONGO_URI=your_mongodb_atlas_connection_string
+MONGO_URI=mongodb+srv://dongyh2002bghs_db_user:<Xincamon123>@instagramclone.owta2ao.mongodb.net/?appName=InstagramClone
 JWT_SECRET=replace_with_a_long_random_secret
 MEDIA_PUBLIC_BASE_URL=https://api.example.com
 CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app
