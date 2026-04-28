@@ -460,6 +460,19 @@
   align-items: flex-end;
 }
 
+.syncBadge {
+  align-self: flex-end;
+  margin-bottom: 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(29, 91, 143, 0.14);
+  background: rgba(241, 249, 255, 0.92);
+  color: var(--admin-info);
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .searchBox {
   min-width: 320px;
   display: grid;
@@ -495,6 +508,7 @@
 
 .panel {
   padding: 22px;
+  min-height: 420px;
 }
 
 .filters {
@@ -749,6 +763,10 @@
   transform: translateX(18px);
 }
 
+.switch input:disabled + .switchTrack {
+  opacity: 0.6;
+}
+
 .pagination {
   display: flex;
   justify-content: flex-end;
@@ -877,6 +895,7 @@
 }
 
 .modalCard,
+.accountModalCard,
 .penaltyModalCard {
   width: min(1200px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
@@ -891,6 +910,10 @@
 
 .penaltyModalCard {
   width: min(620px, calc(100vw - 40px));
+}
+
+.accountModalCard {
+  width: min(920px, calc(100vw - 40px));
 }
 
 .modalHeader {
@@ -960,6 +983,48 @@
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(91, 64, 42, 0.08);
   font-size: 13px;
+}
+
+.accountInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.accountInfoGrid div {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(91, 64, 42, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.accountInfoGrid span {
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.accountInfoGrid strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.accountControlGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.accountModalActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .reportList {

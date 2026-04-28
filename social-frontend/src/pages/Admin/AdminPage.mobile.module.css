@@ -24,7 +24,8 @@
     padding: 12px;
   }
 
-  .modalCard {
+  .modalCard,
+  .accountModalCard {
     width: calc(100vw - 24px);
     max-height: calc(100dvh - 24px);
     border-radius: 22px;

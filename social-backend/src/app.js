@@ -52,9 +52,10 @@ function createCorsOriginMatcher() {
   };
 }
 
-function createApp() {
+function createApp(options = {}) {
   const app = express();
   const corsOrigin = createCorsOriginMatcher();
+  const beforeApiRoutes = Array.isArray(options.beforeApiRoutes) ? options.beforeApiRoutes : [];
 
   app.set("trust proxy", 1);
 
@@ -81,6 +82,9 @@ function createApp() {
     res.json({ ok: true, service: "social-backend" });
   });
 
+  if (beforeApiRoutes.length) {
+    app.use("/api", ...beforeApiRoutes);
+  }
   app.use("/api", routes);
   app.use(express.static(path.join(__dirname, "..", "public")));
   app.use(errorHandler);

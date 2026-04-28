@@ -176,6 +176,18 @@ function hasAccountDraftChanged(row: AdminAccountRow, draft: AccountDraft) {
   )
 }
 
+function summarizeAccountRestrictions(draft: AccountDraft) {
+  const items = [
+    draft.verified ? 'verified' : '',
+    draft.commentBlocked ? 'chan comment' : '',
+    draft.messagingBlocked ? 'chan message' : '',
+    draft.likeBlocked ? 'chan like' : '',
+    draft.dailyPostLimit > 0 ? `${draft.dailyPostLimit} bai/ngay` : '',
+  ].filter(Boolean)
+
+  return items.length ? items.join(', ') : 'Khong gioi han'
+}
+
 function loadStoredTab(): AdminTab {
   if (typeof window === 'undefined') return 'overview'
   const raw = window.localStorage.getItem(STORAGE_KEYS.activeTab)
@@ -303,14 +315,16 @@ function Toggle({
   checked,
   label,
   onChange,
+  disabled = false,
 }: {
   checked: boolean
   label: string
   onChange: (next: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <label className={styles.switch}>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <span className={styles.switchTrack}>
         <span className={styles.switchThumb} />
       </span>
@@ -347,6 +361,7 @@ export default function AdminPage() {
   const [accountDraftMap, setAccountDraftMap] = useState<Record<string, AccountDraft>>({})
   const [accountSavingMap, setAccountSavingMap] = useState<Record<string, boolean>>({})
   const [savingVisibleAccounts, setSavingVisibleAccounts] = useState(false)
+  const [accountDetailId, setAccountDetailId] = useState<string | null>(null)
 
   const [postDraftFilters, setPostDraftFilters] = useState(DEFAULT_POST_FILTERS)
   const [postFilters, setPostFilters] = useState(DEFAULT_POST_FILTERS)
@@ -580,11 +595,15 @@ export default function AdminPage() {
       }
       if (postDetailOpen && !postDetailSaving) {
         setPostDetailOpen(false)
+        return
+      }
+      if (accountDetailId && !accountSavingMap[accountDetailId]) {
+        setAccountDetailId(null)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [postDetailOpen, postDetailSaving, reportDecisionTarget, reportDecisionSaving])
+  }, [accountDetailId, accountSavingMap, postDetailOpen, postDetailSaving, reportDecisionTarget, reportDecisionSaving])
 
   const updateAccountDraft = (id: string, patch: Partial<AccountDraft>) => {
     setAccountDraftMap((previous) => ({
@@ -680,6 +699,19 @@ export default function AdminPage() {
 
   const resetAccountRow = (row: AdminAccountRow) => {
     updateAccountDraft(row.id, toAccountDraft(row))
+  }
+
+  const openAccountDetail = (row: AdminAccountRow) => {
+    setAccountDraftMap((previous) => ({
+      ...previous,
+      [row.id]: previous[row.id] || toAccountDraft(row),
+    }))
+    setAccountDetailId(row.id)
+  }
+
+  const closeAccountDetail = (force = false) => {
+    if (accountDetailId && accountSavingMap[accountDetailId] && !force) return
+    setAccountDetailId(null)
   }
 
   const openPostDetail = async (postId: string, source: 'posts' | 'reports') => {
@@ -939,6 +971,19 @@ export default function AdminPage() {
     )
   }, [violationsData, deferredSearch])
 
+  const selectedAccountRow = useMemo(() => {
+    if (!accountDetailId) return null
+    return (accountsData?.items || []).find((row) => row.id === accountDetailId) || null
+  }, [accountDetailId, accountsData])
+
+  const selectedAccountDraft = selectedAccountRow
+    ? accountDraftMap[selectedAccountRow.id] || toAccountDraft(selectedAccountRow)
+    : null
+  const selectedAccountChanged = selectedAccountRow && selectedAccountDraft
+    ? hasAccountDraftChanged(selectedAccountRow, selectedAccountDraft)
+    : false
+  const selectedAccountSaving = selectedAccountRow ? Boolean(accountSavingMap[selectedAccountRow.id]) : false
+
   const accountSummary = useMemo(() => {
     return {
       locked: visibleAccounts.filter((row) => row.accountLocked).length,
@@ -992,6 +1037,15 @@ export default function AdminPage() {
   }[activeTab]
 
   const headerBusy = loading || overviewLoading || savingVisibleAccounts || reportDecisionSaving || postDetailSaving
+  const hasActiveTabData = {
+    overview: Boolean(accountStats || overviewQueue || overviewTopPosts),
+    accounts: Boolean(accountsData),
+    posts: Boolean(postsData),
+    reports: Boolean(reportsData),
+    violations: Boolean(violationsData),
+  }[activeTab]
+  const showPageLoading = (loading || overviewLoading) && !error && !hasActiveTabData
+  const showInlineSync = (loading || overviewLoading) && !error && hasActiveTabData
 
   const exportCurrentView = () => {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
@@ -1215,6 +1269,7 @@ export default function AdminPage() {
         </div>
 
         <div className={styles.toolbarControls}>
+          {showInlineSync ? <span className={styles.syncBadge}>Dang cap nhat...</span> : null}
           <label className={styles.searchBox}>
             <span>Tim nhanh</span>
             <input value={pageSearch} onChange={(event) => setPageSearch(event.target.value)} placeholder={quickSearchPlaceholder} />
@@ -1227,7 +1282,7 @@ export default function AdminPage() {
 
       {error ? <div className={styles.error}>{error}</div> : null}
       {success ? <div className={styles.success}>{success}</div> : null}
-      {(loading || overviewLoading) && !error ? <div className={styles.loading}>Dang tai du lieu...</div> : null}
+      {showPageLoading ? <div className={styles.loading}>Dang tai du lieu...</div> : null}
 
       {activeTab === 'overview' ? (
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
@@ -1486,7 +1541,9 @@ export default function AdminPage() {
           </div>
 
           <div className={styles.tableCard}>
-            {visibleAccounts.length ? (
+            {!accountsData && loading ? (
+              <div className={styles.loading}>Dang tai danh sach tai khoan...</div>
+            ) : visibleAccounts.length ? (
               <>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
@@ -1494,9 +1551,8 @@ export default function AdminPage() {
                       <tr>
                         <th>Tai khoan</th>
                         <th>Hoat dong</th>
-                        <th>Moderation</th>
-                        <th>Restrictions</th>
-                        <th>Khoa / ghi chu</th>
+                        <th>Trang thai</th>
+                        <th>Gioi han</th>
                         <th>Hanh dong</th>
                       </tr>
                     </thead>
@@ -1504,6 +1560,9 @@ export default function AdminPage() {
                       {visibleAccounts.map((row) => {
                         const draft = accountDraftMap[row.id] || toAccountDraft(row)
                         const changed = hasAccountDraftChanged(row, draft)
+                        const moderationNote = draft.accountLocked
+                          ? draft.lockReason || row.accountLockedReason || '--'
+                          : draft.moderationReason || row.moderationReason || '--'
                         return (
                           <tr key={row.id} className={changed ? styles.rowDirty : ''}>
                             <td>
@@ -1529,62 +1588,19 @@ export default function AdminPage() {
                             </td>
                             <td>
                               <div className={styles.cellStack}>
-                                <select
-                                  className={styles.fullInput}
-                                  value={draft.moderationStatus}
-                                  onChange={(event) =>
-                                    updateAccountDraft(row.id, {
-                                      moderationStatus: event.target.value as AccountModerationStatus,
-                                    })
-                                  }
-                                >
-                                  {ACCOUNT_MODERATION_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <textarea
-                                  className={styles.textArea}
-                                  rows={3}
-                                  value={draft.moderationReason}
-                                  onChange={(event) => updateAccountDraft(row.id, { moderationReason: event.target.value })}
-                                  placeholder="Ly do moderation / ghi chu noi bo"
-                                />
-                              </div>
-                            </td>
-                            <td>
-                              <div className={styles.controlGroup}>
-                                <Toggle checked={draft.verified} label="Tick xanh" onChange={(next) => updateAccountDraft(row.id, { verified: next })} />
-                                <Toggle checked={draft.commentBlocked} label="Chan comment" onChange={(next) => updateAccountDraft(row.id, { commentBlocked: next })} />
-                                <Toggle checked={draft.messagingBlocked} label="Chan message" onChange={(next) => updateAccountDraft(row.id, { messagingBlocked: next })} />
-                                <Toggle checked={draft.likeBlocked} label="Chan like" onChange={(next) => updateAccountDraft(row.id, { likeBlocked: next })} />
-                                <label className={styles.inlineFieldCompact}>
-                                  <span>Gioi han bai/ngay</span>
-                                  <input
-                                    className={styles.fullInput}
-                                    type="number"
-                                    min={0}
-                                    value={draft.dailyPostLimit}
-                                    onChange={(event) =>
-                                      updateAccountDraft(row.id, {
-                                        dailyPostLimit: Math.max(Number(event.target.value) || 0, 0),
-                                      })
-                                    }
-                                  />
-                                </label>
+                                <div className={styles.badgeGroup}>
+                                  <Badge tone={badgeToneForAccount(draft.moderationStatus, draft.accountLocked)}>
+                                    {draft.accountLocked ? 'locked' : draft.moderationStatus}
+                                  </Badge>
+                                  {changed ? <Badge tone="warning">co thay doi</Badge> : null}
+                                </div>
+                                <span>{moderationNote}</span>
                               </div>
                             </td>
                             <td>
                               <div className={styles.cellStack}>
-                                <Toggle checked={draft.accountLocked} label={draft.accountLocked ? 'Dang khoa' : 'Dang mo'} onChange={(next) => updateAccountDraft(row.id, { accountLocked: next })} />
-                                <textarea
-                                  className={styles.textArea}
-                                  rows={3}
-                                  value={draft.lockReason}
-                                  onChange={(event) => updateAccountDraft(row.id, { lockReason: event.target.value })}
-                                  placeholder="Ly do khoa tai khoan"
-                                />
+                                <span>{summarizeAccountRestrictions(draft)}</span>
+                                <span>{draft.accountLocked ? `Khoa tu: ${formatDate(row.accountLockedAt)}` : 'Tai khoan dang mo'}</span>
                               </div>
                             </td>
                             <td>
@@ -1592,17 +1608,10 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   className={styles.primaryButton}
-                                  disabled={!!accountSavingMap[row.id]}
-                                  onClick={() => void saveAccountRow(row)}
+                                  onClick={() => openAccountDetail(row)}
                                 >
-                                  {accountSavingMap[row.id] ? 'Dang luu...' : 'Luu'}
+                                  Chi tiet
                                 </button>
-                                <button type="button" className={styles.secondaryButton} onClick={() => resetAccountRow(row)}>
-                                  Reset row
-                                </button>
-                                <a className={styles.inlineLink} href={`/profile/${encodeURIComponent(row.username)}`} target="_blank" rel="noreferrer">
-                                  Mo profile
-                                </a>
                               </div>
                             </td>
                           </tr>
@@ -1704,7 +1713,9 @@ export default function AdminPage() {
           </div>
 
           <div className={styles.tableCard}>
-            {visiblePosts.length ? (
+            {!postsData && loading ? (
+              <div className={styles.loading}>Dang tai danh sach bai viet...</div>
+            ) : visiblePosts.length ? (
               <>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
@@ -1923,7 +1934,9 @@ export default function AdminPage() {
           </div>
 
           <div className={styles.tableCard}>
-            {visibleReports.length ? (
+            {!reportsData && loading ? (
+              <div className={styles.loading}>Dang tai report queue...</div>
+            ) : visibleReports.length ? (
               <>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
@@ -2138,6 +2151,168 @@ export default function AdminPage() {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {selectedAccountRow && selectedAccountDraft ? (
+        <div className={`${styles.modalOverlay} ${responsiveStyles.modalOverlay}`} onMouseDown={() => closeAccountDetail()}>
+          <div className={`${styles.accountModalCard} ${responsiveStyles.accountModalCard}`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h3 className={styles.modalTitle}>Chi tiet tai khoan @{selectedAccountRow.username}</h3>
+                <div className={styles.modalSubtitle}>
+                  {selectedAccountRow.email} • {formatNumber(selectedAccountRow.loginCount)} login
+                </div>
+              </div>
+              <button type="button" className={styles.closeModalBtn} onClick={() => closeAccountDetail()} disabled={selectedAccountSaving}>
+                Dong
+              </button>
+            </div>
+
+            <div className={`${styles.modalContent} ${responsiveStyles.modalContent}`}>
+              <div className={styles.modalMain}>
+                <div className={styles.modalPostHeader}>
+                  <div>
+                    <strong>@{selectedAccountRow.username}</strong>
+                    <div className={styles.muted}>Tao luc: {formatDate(selectedAccountRow.createdAt)}</div>
+                  </div>
+                  <div className={styles.badgeGroup}>
+                    <Badge tone={selectedAccountRow.role === 'admin' ? 'info' : 'neutral'}>{selectedAccountRow.role}</Badge>
+                    {selectedAccountDraft.verified ? <Badge tone="success">verified</Badge> : null}
+                    <Badge tone={badgeToneForAccount(selectedAccountDraft.moderationStatus, selectedAccountDraft.accountLocked)}>
+                      {selectedAccountDraft.accountLocked ? 'locked' : selectedAccountDraft.moderationStatus}
+                    </Badge>
+                    {selectedAccountChanged ? <Badge tone="warning">draft chua luu</Badge> : null}
+                  </div>
+                </div>
+
+                <div className={styles.accountInfoGrid}>
+                  <div>
+                    <span>Lan dang nhap cuoi</span>
+                    <strong>{formatDate(selectedAccountRow.lastLoginAt)}</strong>
+                  </div>
+                  <div>
+                    <span>So gay</span>
+                    <strong>{formatNumber(selectedAccountRow.strikesCount)}</strong>
+                  </div>
+                  <div>
+                    <span>Gioi han hien tai</span>
+                    <strong>{summarizeAccountRestrictions(selectedAccountDraft)}</strong>
+                  </div>
+                  <div>
+                    <span>Cap nhat gan nhat</span>
+                    <strong>{formatDate(selectedAccountRow.updatedAt)}</strong>
+                  </div>
+                </div>
+
+                <div className={styles.surfaceBlock}>
+                  <div className={styles.cardTitle}>Ghi chu trang thai</div>
+                  <div className={styles.cardSubtitle}>
+                    {selectedAccountDraft.accountLocked
+                      ? selectedAccountDraft.lockReason || selectedAccountRow.accountLockedReason || 'Tai khoan dang bi khoa nhung chua co ly do.'
+                      : selectedAccountDraft.moderationReason || selectedAccountRow.moderationReason || 'Chua co ghi chu moderation.'}
+                  </div>
+                  <a className={styles.inlineLink} href={`/profile/${encodeURIComponent(selectedAccountRow.username)}`} target="_blank" rel="noreferrer">
+                    Mo profile nguoi dung
+                  </a>
+                </div>
+              </div>
+
+              <div className={styles.modalSide}>
+                <div className={styles.surfaceBlock}>
+                  <div className={styles.cardTitle}>Moderation</div>
+                  <div className={styles.controlGroup}>
+                    <select
+                      className={styles.fullInput}
+                      value={selectedAccountDraft.moderationStatus}
+                      disabled={selectedAccountSaving}
+                      onChange={(event) =>
+                        updateAccountDraft(selectedAccountRow.id, {
+                          moderationStatus: event.target.value as AccountModerationStatus,
+                        })
+                      }
+                    >
+                      {ACCOUNT_MODERATION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      className={styles.textArea}
+                      rows={4}
+                      value={selectedAccountDraft.moderationReason}
+                      disabled={selectedAccountSaving}
+                      onChange={(event) => updateAccountDraft(selectedAccountRow.id, { moderationReason: event.target.value })}
+                      placeholder="Ly do moderation / ghi chu noi bo"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.surfaceBlock}>
+                  <div className={styles.cardTitle}>Restrictions</div>
+                  <div className={styles.accountControlGrid}>
+                    <Toggle checked={selectedAccountDraft.verified} label="Tick xanh" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { verified: next })} />
+                    <Toggle checked={selectedAccountDraft.commentBlocked} label="Chan comment" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { commentBlocked: next })} />
+                    <Toggle checked={selectedAccountDraft.messagingBlocked} label="Chan message" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { messagingBlocked: next })} />
+                    <Toggle checked={selectedAccountDraft.likeBlocked} label="Chan like" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { likeBlocked: next })} />
+                  </div>
+                  <label className={styles.inlineFieldCompact}>
+                    <span>Gioi han bai/ngay</span>
+                    <input
+                      className={styles.fullInput}
+                      type="number"
+                      min={0}
+                      value={selectedAccountDraft.dailyPostLimit}
+                      disabled={selectedAccountSaving}
+                      onChange={(event) =>
+                        updateAccountDraft(selectedAccountRow.id, {
+                          dailyPostLimit: Math.max(Number(event.target.value) || 0, 0),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className={styles.surfaceBlock}>
+                  <div className={styles.cardTitle}>Khoa tai khoan</div>
+                  <Toggle
+                    checked={selectedAccountDraft.accountLocked}
+                    label={selectedAccountDraft.accountLocked ? 'Dang khoa' : 'Dang mo'}
+                    disabled={selectedAccountSaving}
+                    onChange={(next) => updateAccountDraft(selectedAccountRow.id, { accountLocked: next })}
+                  />
+                  <textarea
+                    className={styles.textArea}
+                    rows={4}
+                    value={selectedAccountDraft.lockReason}
+                    disabled={selectedAccountSaving}
+                    onChange={(event) => updateAccountDraft(selectedAccountRow.id, { lockReason: event.target.value })}
+                    placeholder="Ly do khoa tai khoan"
+                  />
+                </div>
+
+                <div className={styles.accountModalActions}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => resetAccountRow(selectedAccountRow)}
+                    disabled={selectedAccountSaving || !selectedAccountChanged}
+                  >
+                    Reset draft
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={() => void saveAccountRow(selectedAccountRow)}
+                    disabled={selectedAccountSaving || !selectedAccountChanged}
+                  >
+                    {selectedAccountSaving ? 'Dang luu...' : 'Luu thay doi'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {postDetailOpen ? (

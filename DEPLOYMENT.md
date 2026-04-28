@@ -8,7 +8,7 @@ Recommended production split for this repository:
 
 ## Important architecture note
 
-Do not deploy the current backend to Vercel Functions.
+The backend can now be deployed to Vercel for REST API/demo usage, but the full feature set still fits a long-running Node server better.
 
 This backend uses:
 
@@ -16,7 +16,56 @@ This backend uses:
 - Socket.IO realtime connections
 - local file uploads
 
-That combination needs a long-running Node server.
+Socket.IO realtime connections and durable local uploads need a long-running Node server or external services. On Vercel, REST endpoints work through a serverless entrypoint, Socket.IO emits become no-ops, and upload files use Vercel's temporary `/tmp` storage.
+
+## Option: backend on Vercel
+
+This repository includes `social-backend/api/index.js` and `social-backend/vercel.json` for Vercel Functions.
+
+### 1. Import backend project
+
+- Import this repository into Vercel as a new project
+- Set the Root Directory to `social-backend`
+- Leave Framework Preset as Other if Vercel asks
+- Deploy after adding the required environment variables below
+
+### 2. Backend Vercel environment variables
+
+Required:
+
+```env
+MONGO_URI=your_mongodb_atlas_connection_string
+JWT_SECRET=replace_with_a_long_random_secret
+MEDIA_PUBLIC_BASE_URL=https://your-backend.vercel.app
+CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app
+CORS_ALLOW_VERCEL_PREVIEWS=true
+```
+
+Optional for admin/moderation demos:
+
+```env
+ADMIN_EMAILS=admin@example.com
+ADMIN_USERNAMES=admin
+ADULT_MODERATION_PROVIDER_URL=
+```
+
+After deploy, verify:
+
+```text
+https://your-backend.vercel.app/api/health
+```
+
+### 3. Frontend variables when backend is on Vercel
+
+Set these in the frontend Vercel project:
+
+```env
+VITE_API_BASE_URL=https://your-backend.vercel.app/api
+VITE_MEDIA_BASE_URL=https://your-backend.vercel.app
+VITE_SOCKET_URL=https://your-backend.vercel.app
+```
+
+Realtime chat/call will not behave like the local Socket.IO server on Vercel Functions. For full realtime behavior, use the self-hosted or Render/Railway option below.
 
 ## Recommended option: Vercel + self-hosted backend
 
