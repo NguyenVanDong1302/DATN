@@ -58,7 +58,7 @@ async function ensureDatabase(_req, _res, next) {
     await mongoConnectionPromise;
     next();
   } catch (error) {
-    next(new AppError(error?.message || "Database unavailable", 503, "DATABASE_UNAVAILABLE"));
+    next(new AppError(error?.message || "Database unavailable", 503, error?.code || "DATABASE_UNAVAILABLE"));
   }
 }
 

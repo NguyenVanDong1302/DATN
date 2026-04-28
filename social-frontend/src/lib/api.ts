@@ -1,11 +1,16 @@
 import { useCallback, useMemo } from 'react'
 import { useAppStore } from '../state/store'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').trim() || '/api'
+export const API_BASE_URL = trimTrailingSlash((import.meta.env.VITE_API_BASE_URL || '/api').trim() || '/api')
 const DEFAULT_BACKEND_PORT = (import.meta.env.VITE_BACKEND_PORT || '4000').trim() || '4000'
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, '')
+}
+
+export function buildApiUrl(path: string) {
+  const normalizedPath = String(path || '').startsWith('/') ? path : `/${path}`
+  return `${API_BASE_URL}${normalizedPath}`
 }
 
 function currentOrigin() {
@@ -69,7 +74,7 @@ export function useApi() {
   const request = useCallback(
     async (path: string, init?: RequestInit) => {
       const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData
-      const res = await fetch(`${API_BASE}${path}`, {
+      const res = await fetch(buildApiUrl(path), {
         ...init,
         headers: {
           ...buildHeaders(isFormData),
@@ -101,7 +106,10 @@ export function useApi() {
     () => ({
       get: (p: string) => request(p),
       post: (p: string, body?: any) => request(p, { method: 'POST', body: JSON.stringify(body || {}) }),
-      del: (p: string) => request(p, { method: 'DELETE' }),
+      del: (p: string, body?: any) => request(p, {
+        method: 'DELETE',
+        ...(body === undefined ? {} : { body: JSON.stringify(body || {}) }),
+      }),
       put: (p: string, body?: any) => request(p, { method: 'PUT', body: JSON.stringify(body || {}) }),
       patch: (p: string, body?: any) => request(p, { method: 'PATCH', body: JSON.stringify(body || {}) }),
       postForm: (p: string, body: FormData) => request(p, { method: 'POST', body }),

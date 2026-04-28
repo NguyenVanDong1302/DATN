@@ -16,3 +16,4 @@ yarn-error.log*
 # upload data (quan trọng)
 D:\Data
 uploads
+.vercel

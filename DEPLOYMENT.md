@@ -35,11 +35,14 @@ Required:
 
 ```env
 MONGO_URI=your_mongodb_atlas_connection_string
+MONGODB_SERVER_SELECTION_TIMEOUT_MS=8000
 JWT_SECRET=replace_with_a_long_random_secret
 MEDIA_PUBLIC_BASE_URL=https://social-backend-indol.vercel.app
 CORS_ALLOWED_ORIGINS=https://datn-hx48.vercel.app
 CORS_ALLOW_VERCEL_PREVIEWS=true
 ```
+
+`MONGO_URI` must not be `mongodb://localhost...` or `mongodb://127.0.0.1...` on Vercel. Use MongoDB Atlas or another public MongoDB host, and allow Vercel access in the database network settings.
 
 Optional for admin/moderation demos:
 
@@ -52,7 +55,7 @@ ADULT_MODERATION_PROVIDER_URL=
 After deploy, verify:
 
 ```text
-https://your-backend.vercel.app/api/health
+https://social-backend-indol.vercel.app/api/health
 ```
 
 ### 3. Frontend variables when backend is on Vercel
@@ -60,9 +63,10 @@ https://your-backend.vercel.app/api/health
 Set these in the frontend Vercel project:
 
 ```env
-VITE_API_BASE_URL=https://your-backend.vercel.app/api
-VITE_MEDIA_BASE_URL=https://your-backend.vercel.app
-VITE_SOCKET_URL=https://your-backend.vercel.app
+VITE_API_BASE_URL=https://social-backend-indol.vercel.app/api
+VITE_MEDIA_BASE_URL=https://social-backend-indol.vercel.app
+VITE_SOCKET_URL=https://social-backend-indol.vercel.app
+VITE_SOCKET_ENABLED=false
 ```
 
 Realtime chat/call will not behave like the local Socket.IO server on Vercel Functions. For full realtime behavior, use the self-hosted or Render/Railway option below.

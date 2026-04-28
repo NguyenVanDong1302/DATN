@@ -111,28 +111,8 @@ export function useUsersApi() {
       },
 
       unfollowUser: async (payload: { followingId?: string; username?: string }) => {
-        const body = JSON.stringify(payload || {})
-        const response = await fetch('/api/users/follow', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(localStorage.getItem('x_username') ? { 'X-Username': localStorage.getItem('x_username') || '' } : {}),
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
-          },
-          body,
-        })
-
-        const text = await response.text()
-        let parsed: any = null
-        try {
-          parsed = text ? JSON.parse(text) : null
-        } catch {
-          parsed = null
-        }
-        if (!response.ok) {
-          throw new Error(parsed?.message || `HTTP ${response.status}`)
-        }
-        return parsed?.data as {
+        const res = await api.del('/users/follow', payload)
+        return res?.data as {
           targetUser: UserSummary
           counts: { followers: number; following: number }
           relationship: UserRelationship

@@ -7,6 +7,7 @@ type Ctx = { socket: Socket | null }
 const SocketCtx = createContext<Ctx>({ socket: null })
 
 const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4000')).replace(/\/$/, '')
+const SOCKET_ENABLED = String(import.meta.env.VITE_SOCKET_ENABLED ?? 'true').trim().toLowerCase() !== 'false'
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -14,10 +15,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { state } = useAppStore()
 
   useEffect(() => {
+    if (!SOCKET_ENABLED) return
     if (!state.username) return
 
     const s = io(SOCKET_URL, {
       path: '/socket.io',
+      transports: ['websocket', 'polling'],
       auth: { username: state.username, token: state.token },
     })
     setSocket(s)

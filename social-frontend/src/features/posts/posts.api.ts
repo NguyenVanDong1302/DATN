@@ -1,8 +1,6 @@
 import type { CreatePostPayload, CreatePostResponse } from './posts.types'
 import type { ApiError } from '../../lib/api'
-import { useApi } from '../../lib/api'
-
-const API_BASE = '/api'
+import { buildApiUrl, useApi } from '../../lib/api'
 
 export async function createPostApi(args: {
   payload: CreatePostPayload
@@ -27,7 +25,7 @@ export async function createPostApi(args: {
   if (username) headers['X-Username'] = username
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}/posts`, {
+  const res = await fetch(buildApiUrl('/posts'), {
     method: 'POST',
     headers,
     body: form,
