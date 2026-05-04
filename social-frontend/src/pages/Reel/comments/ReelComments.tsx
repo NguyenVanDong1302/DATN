@@ -75,7 +75,9 @@ export default function ReelComments({ isOpen, postId, reelUsername, comments, o
   const [replyTo, setReplyTo] = useState<ReelComment | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingPreview, setPendingPreview] = useState('')
+  const onCountChangeRef = useRef(onCountChange)
 
+  useEffect(() => { onCountChangeRef.current = onCountChange }, [onCountChange])
   useEffect(() => { setItems(comments || []) }, [comments])
   useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview) }, [pendingPreview])
 
@@ -99,13 +101,14 @@ export default function ReelComments({ isOpen, postId, reelUsername, comments, o
         if (cancelled) return
         const next = Array.isArray(res?.data) ? res.data.map(mapComment) : []
         setItems(next)
-        onCountChange?.(next.length)
+        onCountChangeRef.current?.(next.length)
       } catch (error: any) {
+        if (cancelled) return
         toast.push(error?.message || 'Không tải được bình luận reel')
       }
     })()
     return () => { cancelled = true }
-  }, [api, isOpen, onCountChange, postId, toast])
+  }, [api, isOpen, postId, toast])
 
   const title = useMemo(() => `Comments · ${reelUsername}`, [reelUsername])
   const roots = useMemo(() => items.filter((item) => !item.parentCommentId), [items])

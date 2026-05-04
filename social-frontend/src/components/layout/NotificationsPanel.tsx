@@ -7,9 +7,8 @@ import styles from '../../pages/NotificationsPage.module.css'
 
 const FILTERS = [
   { key: 'all', label: 'Tat ca' },
-  { key: 'activity', label: 'Tuong tac' },
+  { key: 'activity', label: 'Tuong tac bai viet' },
   { key: 'follow', label: 'Theo doi' },
-  { key: 'system', label: 'He thong' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
@@ -27,10 +26,11 @@ function relativeTime(value?: string) {
 }
 
 function matchesFilter(item: NotificationItem, filter: FilterKey) {
+  const isFeedItem = item.type === 'follow' || ((item.type === 'comment' || item.type === 'like') && (item.targetType === 'post' || Boolean(item.postId)))
+  if (!isFeedItem) return false
   if (filter === 'all') return true
   if (filter === 'activity') return item.type === 'comment' || item.type === 'like'
-  if (filter === 'follow') return item.type === 'follow'
-  return item.type === 'moderation'
+  return item.type === 'follow'
 }
 function splitSections(items: NotificationItem[]) {
   const now = Date.now()

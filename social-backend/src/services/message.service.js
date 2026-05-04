@@ -446,27 +446,6 @@ async function createMessageNotification({ recipient, sender, message }) {
 
   const io = getSocketIOOrNull();
   if (io) {
-    const unreadCount = await Notification.countDocuments({ recipientId: String(recipient._id), isRead: false });
-    emitToUser(io, String(recipient._id), recipient.username, "notification:new", {
-      _id: String(doc._id),
-      recipientId: String(recipient._id),
-      type: "message",
-      targetType: "conversation",
-      targetId: String(message._id),
-      postId: "",
-      actors: [String(sender._id)],
-      actorUsernames: [sender.username],
-      totalEvents: 1,
-      previewText: getMessagePreview(message),
-      isRead: false,
-      readAt: null,
-      lastEventAt: doc.lastEventAt,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-      conversationId: message.conversationId,
-      messageId: String(message._id),
-    });
-    emitToUser(io, String(recipient._id), recipient.username, "notification:count", { unreadCount });
     emitToUser(io, String(recipient._id), recipient.username, "notify", {
       id: String(doc._id),
       type: "message",

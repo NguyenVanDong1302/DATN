@@ -2,9 +2,11 @@
   .sidebar,
   .sidebar:hover {
     width: var(--sb-collapsed);
+    transition: none;
   }
 
-  .item {
+  .item,
+  .itemBtn {
     justify-content: center;
     gap: 0;
     padding-inline: 10px;
@@ -15,8 +17,17 @@
     padding-inline: 0;
   }
 
-  .label {
+  .item:hover,
+  .itemBtn:hover {
+    background: transparent;
+  }
+
+  .label,
+  .sidebar:hover .label,
+  :global(.app-sidebar:hover .app-sidebar__label) {
     display: none;
+    opacity: 0;
+    transform: none;
   }
 
   .bottom {

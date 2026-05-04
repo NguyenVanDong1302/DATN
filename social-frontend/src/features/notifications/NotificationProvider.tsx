@@ -16,6 +16,17 @@ type NotificationCtxValue = {
 
 const NotificationCtx = createContext<NotificationCtxValue | null>(null)
 
+function isNotificationFeedItem(item?: Partial<NotificationItem> | null) {
+  const type = String(item?.type || '')
+  const targetType = String(item?.targetType || '')
+  if (type === 'follow') return true
+  return (type === 'like' || type === 'comment') && (targetType === 'post' || Boolean(item?.postId))
+}
+
+function filterNotificationFeedItems(items: NotificationItem[]) {
+  return items.filter((item) => isNotificationFeedItem(item))
+}
+
 function mergeItems(prev: NotificationItem[], incoming: NotificationItem) {
   const next = [incoming, ...prev.filter((item) => item._id !== incoming._id)]
   next.sort(
@@ -40,8 +51,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setLoading(true)
       try {
         const data = await api.list(onlyUnread)
-        setItems(Array.isArray(data.items) ? data.items : [])
-        setUnreadCount(Number(data.unreadCount) || 0)
+        const nextItems = filterNotificationFeedItems(Array.isArray(data.items) ? data.items : [])
+        const serverUnreadCount = Number(data.unreadCount)
+        setItems(nextItems)
+        setUnreadCount(Number.isFinite(serverUnreadCount) ? serverUnreadCount : nextItems.filter((item) => !item.isRead).length)
       } finally {
         setLoading(false)
       }
@@ -74,6 +87,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!socket) return
 
     const onNew = (payload: NotificationItem) => {
+      if (!isNotificationFeedItem(payload)) return
       if (!payload?._id) {
         scheduleRefresh(false, 0)
         return
@@ -89,11 +103,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       })
     }
 
-    const onCount = (payload: { unreadCount?: number }) => {
-      setUnreadCount(Number(payload?.unreadCount) || 0)
+    const onCount = () => {
+      scheduleRefresh(false, 0)
     }
 
-    const onNotify = () => {
+    const onNotify = (payload: Partial<NotificationItem> = {}) => {
+      if (!isNotificationFeedItem(payload)) return
       scheduleRefresh(false, 0)
     }
 

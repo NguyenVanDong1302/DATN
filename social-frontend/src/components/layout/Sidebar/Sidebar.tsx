@@ -109,12 +109,24 @@ export default function Sidebar({
       <span className={cx(styles.label, responsiveStyles.label, 'app-sidebar__label')}>{it.label}</span>
     </NavLink>
   ) : (
-    <button key={it.label} type="button" className={`${styles.itemBtn} ${((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) ? styles.active : ''}`} title={it.label} onClick={it.action}>
-      <span className={styles.iconWrap}>
+    <button
+      key={it.label}
+      type="button"
+      className={cx(
+        styles.itemBtn,
+        responsiveStyles.itemBtn,
+        'app-sidebar__item',
+        ((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) && styles.active,
+        ((it.label === 'Thông báo' && notificationsOpen) || (it.label === 'Tìm kiếm' && searchOpen)) && responsiveStyles.itemActive,
+      )}
+      title={it.label}
+      onClick={it.action}
+    >
+      <span className={cx(styles.iconWrap, responsiveStyles.iconWrap)}>
         {it.icon}
         {it.label === 'Thông báo' && unreadCount > 0 ? <span className={styles.badge}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
       </span>
-      <span className={styles.label}>{it.label}</span>
+      <span className={cx(styles.label, responsiveStyles.label, 'app-sidebar__label')}>{it.label}</span>
     </button>
   )
 ))}
@@ -122,14 +134,14 @@ export default function Sidebar({
       </nav>
 
       <div className={cx(styles.bottom, responsiveStyles.bottom, 'app-sidebar__bottom')}>
-        <button className={styles.itemBtn} type="button" title="Xem thêm">
-          <span className={styles.icon}>≡</span>
-          <span className={styles.label}>Xem thêm</span>
+        <button className={cx(styles.itemBtn, responsiveStyles.itemBtn, 'app-sidebar__item')} type="button" title="Xem thêm">
+          <span className={cx(styles.icon, responsiveStyles.icon)}>≡</span>
+          <span className={cx(styles.label, responsiveStyles.label, 'app-sidebar__label')}>Xem thêm</span>
         </button>
 
-        <button className={styles.itemBtn} type="button" title="Đăng xuất" onClick={handleLogout}>
-          <span className={styles.icon}>↪</span>
-          <span className={styles.label}>Đăng xuất</span>
+        <button className={cx(styles.itemBtn, responsiveStyles.itemBtn, 'app-sidebar__item')} type="button" title="Đăng xuất" onClick={handleLogout}>
+          <span className={cx(styles.icon, responsiveStyles.icon)}>↪</span>
+          <span className={cx(styles.label, responsiveStyles.label, 'app-sidebar__label')}>Đăng xuất</span>
         </button>
       </div>
     </aside>

@@ -38,6 +38,7 @@ function cx(...classNames: Array<string | false | null | undefined>) {
 }
 
 const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
+const TABLET_LAYOUT_QUERY = '(min-width: 561px) and (max-width: 1024px)'
 
 function detectMediaType(item: any): 'image' | 'video' | null {
   const type = String(item?.type || '').toLowerCase()
@@ -191,6 +192,24 @@ export default function Feed() {
   const [followStateReady, setFollowStateReady] = useState(false)
   const [followPendingMap, setFollowPendingMap] = useState<Record<string, boolean>>({})
   const [reportPendingMap, setReportPendingMap] = useState<Record<string, boolean>>({})
+  const [isTabletLayout, setIsTabletLayout] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const query = window.matchMedia(TABLET_LAYOUT_QUERY)
+    const update = (event?: MediaQueryListEvent) => {
+      setIsTabletLayout(event?.matches ?? query.matches)
+    }
+
+    update()
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', update)
+      return () => query.removeEventListener('change', update)
+    }
+
+    query.addListener(update)
+    return () => query.removeListener(update)
+  }, [])
 
   const loadFollowState = useCallback(async () => {
     if (!state.username) {
@@ -412,6 +431,7 @@ export default function Feed() {
       <GlobalPostCard
         key={post._id}
         post={post}
+        layout={isTabletLayout ? 'screen-fit' : 'default'}
         onLike={() => toggleLike(post)}
         onOpenComment={() => openCommentPopup(post)}
         onOpenDetail={() => openDetailPopup(post)}
@@ -433,13 +453,13 @@ export default function Feed() {
   return (
     <div className={cx(styles.feed, responsiveStyles.feed, 'home-feed')}>
       <div className={cx(styles.topbar, responsiveStyles.topbar, 'home-feed__topbar')}>
-        <div>
+        {/* <div>
           <div className={styles.title}>Bai viet moi nhat</div>
           <div className={cx(styles.subtitle, responsiveStyles.subtitle, 'home-feed__subtitle')}>Hien thi toan bo bai viet theo thoi gian gan nhat</div>
-        </div>
-        <button className={cx('btn', responsiveStyles.refresh, 'home-feed__refresh')} type="button" onClick={refresh} disabled={loading}>
+        </div> */}
+        {/* <button className={cx('btn', responsiveStyles.refresh, 'home-feed__refresh')} type="button" onClick={refresh} disabled={loading}>
           {loading ? 'Dang tai...' : 'Lam moi'}
-        </button>
+        </button> */}
       </div>
 
       {loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Dang tai bai viet...</div> : null}

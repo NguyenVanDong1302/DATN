@@ -4,9 +4,35 @@ const User = require('../models/User');
 const { getIO } = require('../realtime/socket');
 
 let indexesEnsured = false;
+const notificationFeedFilter = {
+  $or: [
+    { type: 'follow', targetType: 'user' },
+    { type: { $in: ['like', 'comment'] }, targetType: 'post' },
+  ],
+};
 
 function legacyUserId(username) {
   return crypto.createHash('sha256').update(String(username || '').trim()).digest('hex').slice(0, 16);
+}
+
+function isNotificationFeedItem(notification = {}) {
+  const type = String(notification.type || '');
+  const targetType = String(notification.targetType || '');
+  if (type === 'follow' && targetType === 'user') return true;
+  return (type === 'like' || type === 'comment') && targetType === 'post';
+}
+
+function withNotificationFeedFilter(filter = {}) {
+  return {
+    ...filter,
+    $or: notificationFeedFilter.$or,
+  };
+}
+
+function buildRecipientFilter(recipientIds) {
+  return {
+    recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''),
+  };
 }
 
 async function ensureIndexes() {
@@ -102,18 +128,22 @@ async function emitNotification(recipientId, notification) {
     return;
   }
 
-  const unreadCount = await Notification.countDocuments({ recipientId, isRead: false });
-  await emitToRecipient(io, recipientId, 'notification:new', notification);
+  const unreadCount = await Notification.countDocuments(withNotificationFeedFilter({ recipientId, isRead: false }));
+  if (isNotificationFeedItem(notification)) {
+    await emitToRecipient(io, recipientId, 'notification:new', notification);
+  }
   await emitToRecipient(io, recipientId, 'notification:count', { unreadCount });
-  await emitToRecipient(io, recipientId, 'notify', {
-    id: notification._id,
-    type: notification.type,
-    postId: notification.postId,
-    targetType: notification.targetType,
-    targetId: notification.targetId,
-    message: buildNotifyMessage(notification),
-    createdAt: notification.lastEventAt,
-  });
+  if (isNotificationFeedItem(notification)) {
+    await emitToRecipient(io, recipientId, 'notify', {
+      id: notification._id,
+      type: notification.type,
+      postId: notification.postId,
+      targetType: notification.targetType,
+      targetId: notification.targetId,
+      message: buildNotifyMessage(notification),
+      createdAt: notification.lastEventAt,
+    });
+  }
 }
 
 async function upsertNotification({
@@ -325,12 +355,12 @@ function normalizeRecipientIds(userIds) {
 async function listNotifications({ userIds, userId, onlyUnread = false }) {
   await ensureIndexes();
   const recipientIds = normalizeRecipientIds(userIds || userId);
-  const filter = recipientIds.length > 1 ? { recipientId: { $in: recipientIds } } : { recipientId: recipientIds[0] || '' };
+  const filter = withNotificationFeedFilter(buildRecipientFilter(recipientIds));
   if (onlyUnread) filter.isRead = false;
 
   const [items, unreadCount] = await Promise.all([
     Notification.find(filter).sort({ lastEventAt: -1, createdAt: -1 }).limit(50).lean(),
-    Notification.countDocuments({ recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false }),
+    Notification.countDocuments(withNotificationFeedFilter({ ...buildRecipientFilter(recipientIds), isRead: false })),
   ]);
 
   return { items, unreadCount };
@@ -340,7 +370,7 @@ async function markRead({ userIds, userId, id, isRead }) {
   await ensureIndexes();
   const recipientIds = normalizeRecipientIds(userIds || userId);
   const notification = await Notification.findOneAndUpdate(
-    { _id: id, recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || '') },
+    withNotificationFeedFilter({ _id: id, ...buildRecipientFilter(recipientIds) }),
     {
       $set: {
         isRead: Boolean(isRead),
@@ -361,10 +391,10 @@ async function markAllRead({ userIds, userId }) {
   await ensureIndexes();
   const recipientIds = normalizeRecipientIds(userIds || userId);
   await Notification.updateMany(
-    { recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false },
+    withNotificationFeedFilter({ ...buildRecipientFilter(recipientIds), isRead: false }),
     { $set: { isRead: true, readAt: new Date() } },
   );
-  const unreadCount = await Notification.countDocuments({ recipientId: recipientIds.length > 1 ? { $in: recipientIds } : (recipientIds[0] || ''), isRead: false });
+  const unreadCount = await Notification.countDocuments(withNotificationFeedFilter({ ...buildRecipientFilter(recipientIds), isRead: false }));
   try {
     const io = getIO();
     for (const recipientId of recipientIds) {

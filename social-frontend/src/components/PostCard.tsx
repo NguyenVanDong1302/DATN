@@ -313,11 +313,11 @@ export default function PostCard({
   }
 
   return (
-    <div style={styles.post}>
+    <div style={{ ...styles.post, ...(isScreenFit ? styles.postScreenFit : null) }}>
       <div style={styles.header}>
         <div style={styles.userBlock}>
           <img style={styles.avatarImg} src={getAvatarUrl({ username: post.authorUsername, authorAvatarUrl: (post as any).authorAvatarUrl })} alt={post.authorUsername || 'user'} />
-          <div>
+          <div style={styles.userTextBlock}>
             <div style={styles.usernameRow}>
               <div style={styles.username} onClick={onOpenAuthor}>
                 {post.authorUsername || post.authorId || 'user'}
@@ -452,6 +452,9 @@ export default function PostCard({
 
 const styles: Record<string, React.CSSProperties> = {
   post: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     background: '#fff',
     border: '1px solid #e7e7e7',
     borderRadius: 18,
@@ -459,16 +462,27 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 18,
     boxShadow: '0 8px 30px rgba(0,0,0,0.04)',
   },
+  postScreenFit: {
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    minWidth: 0,
   },
   userBlock: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
+    minWidth: 0,
+    flex: '1 1 auto',
+  },
+  userTextBlock: {
     minWidth: 0,
   },
   avatar: {
@@ -495,15 +509,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     cursor: 'pointer',
     lineHeight: 1.2,
+    minWidth: 0,
+    flex: '1 1 auto',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   usernameRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
+    minWidth: 0,
   },
   verifiedBadge: {
     width: 16,
     height: 16,
+    flexShrink: 0,
     borderRadius: '50%',
     background: '#1d9bf0',
     color: '#fff',
@@ -519,6 +541,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: '#777',
     marginTop: 2,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   headerActions: {
     display: 'flex',
@@ -580,6 +606,7 @@ const styles: Record<string, React.CSSProperties> = {
   content: {
     marginTop: 10,
     whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
     lineHeight: 1.5,
     fontSize: 15,
     color: '#111',
@@ -588,6 +615,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     borderRadius: 16,
     overflow: 'hidden',
+    maxWidth: '100%',
   },
   sliderTrack: {
     display: 'flex',
@@ -596,9 +624,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   slide: {
     flex: '0 0 auto',
+    minWidth: 0,
   },
   mediaFrame: {
     width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     aspectRatio: '4 / 5',
     background: '#0b1220',
     borderRadius: 16,

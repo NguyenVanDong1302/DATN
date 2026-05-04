@@ -6,7 +6,7 @@ import "../../styles/reel-mobile.css";
 import ReelComments, { type ReelComment } from "./comments/ReelComments";
 import { resolveMediaUrl, useApi } from "../../lib/api";
 import { getAvatarUrl } from "../../lib/avatar";
-import type { Post, PostComment } from "../../types";
+import type { Post } from "../../types";
 
 type Reel = {
   id: string;
@@ -63,25 +63,6 @@ function isVideoMedia(post: Post, item: Record<string, unknown> | undefined) {
     Boolean((post as unknown as Record<string, unknown>).isReel) ||
     looksLikeVideoUrl(url)
   );
-}
-
-function mapComment(item: PostComment): ReelComment {
-  return {
-    id: item._id,
-    user: item.authorUsername || "user",
-    avatarUrl: getAvatarUrl({ username: item.authorUsername || "user" }),
-    time: item.createdAt
-      ? new Date(item.createdAt).toLocaleString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          day: "2-digit",
-          month: "2-digit",
-        })
-      : "",
-    text: item.content || "",
-    likes: String((item as unknown as Record<string, unknown>).likesCount || 0),
-    imageUrl: (item as unknown as Record<string, unknown>).mediaUrl as string | undefined,
-  };
 }
 
 function toReel(post: Post): Reel | null {
@@ -345,19 +326,24 @@ export default function Reel() {
     }, 220);
   };
 
-  const openComments = async () => {
-    const active = reels[index];
-    if (!active) return;
+  const openComments = () => {
+    if (!reels[index]) return;
     setCommentsOpen(true);
-    try {
-      const res = await api.get(`/posts/${active.postId}`);
-      const comments = ((res?.data?.comments || []) as PostComment[]).map(mapComment);
-      setReels((prev) => prev.map((item, idx) => (idx !== index ? item : { ...item, commentsList: comments, comments: comments.length })));
-    } catch {}
   };
 
   const active = reels[index];
-  const activeComments = useMemo(() => active?.commentsList || [], [active]);
+  const activeComments = useMemo(() => active?.commentsList || [], [active?.commentsList]);
+  const handleCommentCountChange = useCallback((count: number) => {
+    setReels((prev) => {
+      let changed = false;
+      const next = prev.map((item, idx) => {
+        if (idx !== index || item.comments === count) return item;
+        changed = true;
+        return { ...item, comments: count };
+      });
+      return changed ? next : prev;
+    });
+  }, [index]);
 
   if (loading) return <div className="ig-reels"><div className="ig-reels__empty">Đang tải reels...</div></div>;
   if (!reels.length) return <div className="ig-reels"><div className="ig-reels__empty">Chưa có reel nào.</div></div>;
@@ -460,11 +446,7 @@ export default function Reel() {
           reelUsername={active.username}
           comments={activeComments}
           onClose={() => setCommentsOpen(false)}
-          onCountChange={(count) => {
-            setReels((prev) =>
-              prev.map((item, idx) => (idx !== index ? item : { ...item, comments: count }))
-            )
-          }}
+          onCountChange={handleCommentCountChange}
         />
       </div>
     </div>

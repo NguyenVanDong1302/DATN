@@ -51,6 +51,7 @@ export default function CreatePostPage() {
   const { user } = useAuth()
   const { state } = useAppStore()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const mediaItemsRef = useRef<MediaItem[]>([])
 
   const [step, setStep] = useState<'upload' | 'compose'>('upload')
   const [isDragging, setIsDragging] = useState(false)
@@ -168,8 +169,12 @@ export default function CreatePostPage() {
 
 
   useEffect(() => {
+    mediaItemsRef.current = mediaItems
+  }, [mediaItems])
+
+  useEffect(() => {
     return () => {
-      mediaItems.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+      mediaItemsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
     }
   }, [])
 
@@ -193,6 +198,11 @@ export default function CreatePostPage() {
     if (!files || files.length === 0) return
 
     const newItems = buildMediaItems(files)
+    if (!newItems.length) {
+      setStatus('Chỉ hỗ trợ ảnh hoặc video.')
+      event.target.value = ''
+      return
+    }
 
     setMediaItems((prev) => {
       const next = [...prev, ...newItems]
@@ -214,6 +224,10 @@ export default function CreatePostPage() {
     if (!event.dataTransfer.files?.length) return
 
     const newItems = buildMediaItems(event.dataTransfer.files)
+    if (!newItems.length) {
+      setStatus('Chỉ hỗ trợ ảnh hoặc video.')
+      return
+    }
 
     setMediaItems((prev) => {
       const next = [...prev, ...newItems]
@@ -654,7 +668,7 @@ export default function CreatePostPage() {
                 )}
               </div>
 
-              {status && <div className={styles.statusBox}>{status}</div>}
+              {status && <div className={styles.statusBox} role="status" aria-live="polite">{status}</div>}
             </div>
           </div>
         )}
