@@ -18,6 +18,7 @@ import mobileStyles from './Feed.mobile.module.css'
 type NormalizedMedia = {
   type: 'image' | 'video'
   url: string
+  thumbnailUrl?: string
 }
 
 type DetailModalProps = {
@@ -57,8 +58,9 @@ function getPostMedia(post: Post): NormalizedMedia[] {
     for (const item of post.media) {
       const type = detectMediaType(item)
       const url = resolveMediaUrl(item?.url)
+      const thumbnailUrl = resolveMediaUrl(item?.thumbnailUrl)
       if (!type || !url) continue
-      list.push({ type, url })
+      list.push({ type, url, thumbnailUrl })
     }
   }
 
@@ -131,9 +133,17 @@ function DetailModal({ post, onOpenAuthor, onOpenPostPage, onOpenComment }: Deta
 }
 
 function EditPostModal({ post, onSave, onCancel }: EditModalProps) {
+  const media = useMemo(() => getPostMedia(post), [post])
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0)
   const [content, setContent] = useState(String(post.content || ''))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const currentMedia = media[activeMediaIndex] || null
+  const hasManyMedia = media.length > 1
+
+  useEffect(() => {
+    setActiveMediaIndex(0)
+  }, [post._id])
 
   const handleSave = async () => {
     if (saving) return
@@ -157,19 +167,83 @@ function EditPostModal({ post, onSave, onCancel }: EditModalProps) {
 
   return (
     <div className={styles.editBox}>
-      <div className={styles.editTitle}>Chinh sua bai viet</div>
-      <textarea
-        className={styles.editTextarea}
-        value={content}
-        onChange={(event) => setContent(event.target.value)}
-        placeholder="Nhap noi dung moi"
-      />
-      {error ? <div className={styles.editError}>{error}</div> : null}
-      <div className={styles.editActionRow}>
-        <button type="button" className={styles.editCancelBtn} onClick={onCancel} disabled={saving}>Huy</button>
-        <button type="button" className={styles.editSaveBtn} onClick={handleSave} disabled={saving}>
-          {saving ? 'Dang luu...' : 'Luu thay doi'}
-        </button>
+      <div className={styles.editMediaPanel}>
+        <div className={styles.editMediaHeader}>
+          <div>
+            <div className={styles.editEyebrow}>Media hiện tại</div>
+            <div className={styles.editMediaTitle}>
+              {media.length ? `${activeMediaIndex + 1}/${media.length}` : 'Không có media'}
+            </div>
+          </div>
+          {currentMedia ? <span className={styles.editMediaType}>{currentMedia.type === 'video' ? 'Video' : 'Ảnh'}</span> : null}
+        </div>
+
+        <div className={styles.editMediaStage}>
+          {currentMedia?.type === 'video' ? (
+            <video className={styles.editMediaPreview} src={currentMedia.url} controls playsInline preload="metadata" />
+          ) : currentMedia?.url ? (
+            <img className={styles.editMediaPreview} src={currentMedia.url} alt={post.content || 'Media bài viết'} />
+          ) : (
+            <div className={styles.editMediaEmpty}>
+              <strong>Bài viết không có ảnh hoặc video</strong>
+              <span>Bạn vẫn có thể chỉnh sửa nội dung chữ của bài viết.</span>
+            </div>
+          )}
+        </div>
+
+        {hasManyMedia ? (
+          <div className={styles.editThumbRow}>
+            {media.map((item, index) => (
+              <button
+                key={`${item.url}-${index}`}
+                type="button"
+                className={cx(styles.editThumbBtn, index === activeMediaIndex && styles.editThumbBtnActive)}
+                onClick={() => setActiveMediaIndex(index)}
+                aria-label={`Xem media ${index + 1}`}
+              >
+                {item.type === 'image' ? (
+                  <img src={item.thumbnailUrl || item.url} alt="" />
+                ) : item.thumbnailUrl ? (
+                  <img src={item.thumbnailUrl} alt="" />
+                ) : (
+                  <span>Video</span>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className={styles.editFormPanel}>
+        {/* <div>
+          <div className={styles.editEyebrow}>Chỉnh sửa</div>
+          <div className={styles.editTitle}>Cập nhật bài viết</div>
+          <p className={styles.editHint}>Ảnh và video hiện tại chỉ hiển thị để xem lại. Phần lưu thay đổi cập nhật nội dung bài viết.</p>
+        </div> */}
+
+        <label className={styles.editField}>
+          <span>Nội dung bài viết</span>
+          <textarea
+            className={styles.editTextarea}
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder="Nhập nội dung mới"
+          />
+        </label>
+
+        <div className={styles.editMetaRow}>
+          <span>{content.trim().length} ký tự</span>
+          <span>{post.createdAt ? `Đã đăng ${new Date(post.createdAt).toLocaleString('vi-VN')}` : 'Bài viết mới'}</span>
+        </div>
+
+        {error ? <div className={styles.editError}>{error}</div> : null}
+
+        <div className={styles.editActionRow}>
+          <button type="button" className={styles.editCancelBtn} onClick={onCancel} disabled={saving}>Hủy</button>
+          <button type="button" className={styles.editSaveBtn} onClick={handleSave} disabled={saving}>
+            {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+          </button>
+        </div>
       </div>
     </div>
   )

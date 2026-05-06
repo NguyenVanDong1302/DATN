@@ -78,24 +78,49 @@ const REPORT_DECISION_OPTIONS: Array<{
   help: string
   tone: BadgeTone
 }> = [
-  { value: 'no_violation', label: 'Khong vi pham', help: 'Dong queue va bo report pending.', tone: 'neutral' },
-  { value: 'delete_post', label: 'Xoa bai viet', help: 'Go bai viet khoi he thong cong khai.', tone: 'danger' },
-  { value: 'strike_account', label: 'Cong 1 gay', help: 'Tang diem vi pham cho chu bai viet.', tone: 'warning' },
-  { value: 'lock_account', label: 'Khoa tai khoan', help: 'Khoa tai khoan ngay lap tuc.', tone: 'danger' },
+  { value: 'no_violation', label: 'Không vi phạm', help: 'Đóng báo cáo đang chờ.', tone: 'neutral' },
+  { value: 'delete_post', label: 'Xóa bài viết', help: 'Gỡ bài viết khỏi hệ thống.', tone: 'danger' },
+  { value: 'strike_account', label: 'Cộng 1 lỗi', help: 'Tăng điểm vi phạm cho chủ bài viết.', tone: 'warning' },
+  { value: 'lock_account', label: 'Khóa tài khoản', help: 'Khóa tài khoản ngay lập tức.', tone: 'danger' },
 ]
 
 const ACCOUNT_MODERATION_OPTIONS: Array<{ value: AccountModerationStatus; label: string }> = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'warning', label: 'Warning' },
-  { value: 'violating', label: 'Violating' },
+  { value: 'normal', label: 'Bình thường' },
+  { value: 'warning', label: 'Cảnh báo' },
+  { value: 'violating', label: 'Vi phạm' },
 ]
 
 const POST_MODERATION_OPTIONS: Array<{ value: PostModerationStatus; label: string }> = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'reported', label: 'Reported' },
-  { value: 'pending_review', label: 'Pending review' },
-  { value: 'violating', label: 'Violating' },
+  { value: 'normal', label: 'Bình thường' },
+  { value: 'reported', label: 'Bị báo cáo' },
+  { value: 'pending_review', label: 'Chờ duyệt' },
+  { value: 'violating', label: 'Vi phạm' },
 ]
+
+const ACCOUNT_MODERATION_LABELS: Record<AccountModerationStatus, string> = {
+  normal: 'Bình thường',
+  warning: 'Cảnh báo',
+  violating: 'Vi phạm',
+}
+
+const POST_MODERATION_LABELS: Record<PostModerationStatus, string> = {
+  normal: 'Bình thường',
+  reported: 'Bị báo cáo',
+  pending_review: 'Chờ duyệt',
+  violating: 'Vi phạm',
+}
+
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Đang chờ',
+  reviewed: 'Đã xem xét',
+  accepted: 'Đã xác nhận',
+  rejected: 'Đã bỏ qua',
+}
+
+const REPORT_SOURCE_LABELS: Record<string, string> = {
+  user_report: 'Người dùng báo cáo',
+  auto_nsfw: 'Tự động phát hiện',
+}
 
 const responsiveStyles = combineResponsiveStyles(desktopStyles, tabletStyles, mobileStyles)
 
@@ -110,15 +135,34 @@ function formatNumber(value?: number | null) {
   return new Intl.NumberFormat('vi-VN').format(Number(value) || 0)
 }
 
-function formatMonthLabel(month: string) {
-  const [year, rawMonth] = String(month || '').split('-')
-  if (!year || !rawMonth) return month
-  return `${rawMonth}/${year.slice(-2)}`
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message
   return fallback
+}
+
+function formatAccountStatus(status?: string | null, locked = false) {
+  if (locked) return 'Đã khóa'
+  return ACCOUNT_MODERATION_LABELS[normalizeAccountModerationStatus(status)] || 'Bình thường'
+}
+
+function formatPostStatus(status?: string | null) {
+  return POST_MODERATION_LABELS[normalizePostModerationStatus(status)] || 'Bình thường'
+}
+
+function formatReportStatus(status?: string | null) {
+  return REPORT_STATUS_LABELS[String(status || '')] || status || 'Đang chờ'
+}
+
+function formatReportSource(source?: string | null) {
+  return REPORT_SOURCE_LABELS[String(source || '')] || 'Người dùng báo cáo'
+}
+
+function formatReportDecision(value: ReportDecision) {
+  return REPORT_DECISION_OPTIONS.find((option) => option.value === value)?.label || value
+}
+
+function formatRole(role?: string | null) {
+  return String(role || '').toLowerCase() === 'admin' ? 'Quản trị viên' : 'Người dùng'
 }
 
 function normalizeAccountModerationStatus(value?: string | null): AccountModerationStatus {
@@ -178,14 +222,14 @@ function hasAccountDraftChanged(row: AdminAccountRow, draft: AccountDraft) {
 
 function summarizeAccountRestrictions(draft: AccountDraft) {
   const items = [
-    draft.verified ? 'verified' : '',
-    draft.commentBlocked ? 'chan comment' : '',
-    draft.messagingBlocked ? 'chan message' : '',
-    draft.likeBlocked ? 'chan like' : '',
-    draft.dailyPostLimit > 0 ? `${draft.dailyPostLimit} bai/ngay` : '',
+    draft.verified ? 'đã xác minh' : '',
+    draft.commentBlocked ? 'chặn bình luận' : '',
+    draft.messagingBlocked ? 'chặn nhắn tin' : '',
+    draft.likeBlocked ? 'chặn thích' : '',
+    draft.dailyPostLimit > 0 ? `${draft.dailyPostLimit} bài/ngày` : '',
   ].filter(Boolean)
 
-  return items.length ? items.join(', ') : 'Khong gioi han'
+  return items.length ? items.join(', ') : 'Không giới hạn'
 }
 
 function loadStoredTab(): AdminTab {
@@ -390,11 +434,11 @@ export default function AdminPage() {
 
   const tabs = useMemo(
     () => [
-      { key: 'overview' as const, label: 'Overview', help: 'Tong quan, trend va queue uu tien' },
-      { key: 'accounts' as const, label: 'Tai khoan', help: 'Moderation, gioi han va login' },
-      { key: 'posts' as const, label: 'Bai viet', help: 'Danh sach bai viet va moderation tools' },
-      { key: 'reports' as const, label: 'Reports', help: 'Review queue va xu ly vi pham' },
-      { key: 'violations' as const, label: 'Vi pham', help: 'Tong hop account/post dang bi canh bao' },
+      { key: 'overview' as const, label: 'Tổng quan' },
+      { key: 'accounts' as const, label: 'Tài khoản' },
+      { key: 'posts' as const, label: 'Bài viết' },
+      { key: 'reports' as const, label: 'Báo cáo' },
+      { key: 'violations' as const, label: 'Vi phạm' },
     ],
     [],
   )
@@ -423,7 +467,7 @@ export default function AdminPage() {
       setViolationsData(violations)
       setLastSyncedAt(new Date().toISOString())
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong tai duoc tong quan admin'))
+      setError(getErrorMessage(err, 'Không tải được tổng quan quản trị'))
     } finally {
       if (!silent) setOverviewLoading(false)
     }
@@ -451,7 +495,7 @@ export default function AdminPage() {
       })
       setLastSyncedAt(new Date().toISOString())
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong tai duoc danh sach tai khoan'))
+      setError(getErrorMessage(err, 'Không tải được danh sách tài khoản'))
     } finally {
       if (!silent) setLoading(false)
     }
@@ -470,7 +514,7 @@ export default function AdminPage() {
       setPostsData(posts)
       setLastSyncedAt(new Date().toISOString())
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong tai duoc danh sach bai viet'))
+      setError(getErrorMessage(err, 'Không tải được danh sách bài viết'))
     } finally {
       if (!silent) setLoading(false)
     }
@@ -490,7 +534,7 @@ export default function AdminPage() {
       setReportsData(reports)
       setLastSyncedAt(new Date().toISOString())
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong tai duoc queue report'))
+      setError(getErrorMessage(err, 'Không tải được danh sách báo cáo'))
     } finally {
       if (!silent) setLoading(false)
     }
@@ -503,7 +547,7 @@ export default function AdminPage() {
       setViolationsData(violations)
       setLastSyncedAt(new Date().toISOString())
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong tai duoc danh sach vi pham'))
+      setError(getErrorMessage(err, 'Không tải được danh sách vi phạm'))
     } finally {
       if (!silent) setLoading(false)
     }
@@ -650,10 +694,10 @@ export default function AdminPage() {
     setSuccess('')
     try {
       await persistAccountRow(row)
-      setSuccess(`Da luu thay doi cho @${row.username}`)
+      setSuccess(`Đã lưu thay đổi cho @${row.username}`)
       await Promise.allSettled([loadAccountsData(true), loadOverviewData(true)])
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong cap nhat duoc tai khoan'))
+      setError(getErrorMessage(err, 'Không cập nhật được tài khoản'))
     } finally {
       setAccountSavingMap((previous) => ({ ...previous, [row.id]: false }))
     }
@@ -665,7 +709,7 @@ export default function AdminPage() {
       return hasAccountDraftChanged(row, draft)
     })
     if (!candidates.length) {
-      setSuccess('Khong co thay doi nao can luu trong trang hien tai.')
+      setSuccess('Không có thay đổi nào cần lưu trong trang hiện tại.')
       return
     }
 
@@ -681,9 +725,9 @@ export default function AdminPage() {
       const firstFailure = results.find((item) => item.status === 'rejected') as PromiseRejectedResult | undefined
 
       if (firstFailure) {
-        setError(getErrorMessage(firstFailure.reason, 'Co tai khoan luu that bai'))
+        setError(getErrorMessage(firstFailure.reason, 'Có tài khoản lưu thất bại'))
       }
-      setSuccess(`Da luu ${successCount}/${candidates.length} tai khoan trong trang hien tai.`)
+      setSuccess(`Đã lưu ${successCount}/${candidates.length} tài khoản trong trang hiện tại.`)
       await Promise.allSettled([loadAccountsData(true), loadOverviewData(true)])
     } finally {
       setSavingVisibleAccounts(false)
@@ -730,7 +774,7 @@ export default function AdminPage() {
       })
     } catch (err) {
       setPostDetailOpen(false)
-      setError(getErrorMessage(err, 'Khong tai duoc chi tiet bai viet'))
+      setError(getErrorMessage(err, 'Không tải được chi tiết bài viết'))
     } finally {
       setPostDetailLoading(false)
     }
@@ -762,10 +806,10 @@ export default function AdminPage() {
         status: normalizePostModerationStatus(detail.post.moderationStatus),
         reason: detail.post.moderationReason || postModerationDraft.reason,
       })
-      setSuccess('Da cap nhat moderation cho bai viet.')
+      setSuccess('Đã cập nhật kiểm duyệt cho bài viết.')
       await Promise.allSettled([loadOverviewData(true), loadCurrentTab(true)])
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong cap nhat duoc moderation bai viet'))
+      setError(getErrorMessage(err, 'Không cập nhật được kiểm duyệt bài viết'))
     } finally {
       setPostDetailSaving(false)
     }
@@ -774,7 +818,7 @@ export default function AdminPage() {
   const runPostActionFromDetail = async (action: PostAction) => {
     const postId = postDetailData?.post?.id
     if (!postId) return
-    if (action === 'delete_post' && !window.confirm('Xoa bai viet nay khoi he thong?')) return
+    if (action === 'delete_post' && !window.confirm('Xóa bài viết này khỏi hệ thống?')) return
 
     setPostDetailSaving(true)
     setError('')
@@ -787,11 +831,11 @@ export default function AdminPage() {
       })
       const actionLabel =
         action === 'delete_post'
-          ? 'xoa bai viet'
+          ? 'xóa bài viết'
           : action === 'lock_comments'
-            ? 'khoa comment'
-            : 'mo lai comment'
-      setSuccess(`Da ${actionLabel} thanh cong.`)
+            ? 'khóa bình luận'
+            : 'mở lại bình luận'
+      setSuccess(`Đã ${actionLabel} thành công.`)
       if (action === 'delete_post') {
         closePostDetail(true)
       } else {
@@ -800,14 +844,14 @@ export default function AdminPage() {
       }
       await Promise.allSettled([loadOverviewData(true), loadCurrentTab(true)])
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong ap dung duoc thao tac bai viet'))
+      setError(getErrorMessage(err, 'Không áp dụng được thao tác bài viết'))
     } finally {
       setPostDetailSaving(false)
     }
   }
 
   const runQuickPostAction = async (row: AdminPostRow, action: PostAction) => {
-    if (action === 'delete_post' && !window.confirm('Xoa bai viet nay khoi he thong?')) return
+    if (action === 'delete_post' && !window.confirm('Xóa bài viết này khỏi hệ thống?')) return
 
     setPostActionSavingMap((previous) => ({ ...previous, [row.id]: true }))
     setError('')
@@ -816,14 +860,14 @@ export default function AdminPage() {
       await adminApi.applyPostAction(row.id, { action })
       setSuccess(
         action === 'lock_comments'
-          ? 'Da khoa comment cho bai viet.'
+          ? 'Đã khóa bình luận cho bài viết.'
           : action === 'unlock_comments'
-            ? 'Da mo lai comment cho bai viet.'
-            : 'Da xoa bai viet thanh cong.',
+            ? 'Đã mở lại bình luận cho bài viết.'
+            : 'Đã xóa bài viết thành công.',
       )
       await Promise.allSettled([loadOverviewData(true), loadCurrentTab(true)])
     } catch (err) {
-      setError(getErrorMessage(err, 'Khong ap dung duoc thao tac bai viet'))
+      setError(getErrorMessage(err, 'Không áp dụng được thao tác bài viết'))
     } finally {
       setPostActionSavingMap((previous) => ({ ...previous, [row.id]: false }))
     }
@@ -860,9 +904,9 @@ export default function AdminPage() {
       const successCount = results.filter((item) => item.status === 'fulfilled').length
       const firstFailure = results.find((item) => item.status === 'rejected') as PromiseRejectedResult | undefined
       if (firstFailure) {
-        setError(getErrorMessage(firstFailure.reason, 'Co report xu ly that bai'))
+        setError(getErrorMessage(firstFailure.reason, 'Có báo cáo xử lý thất bại'))
       }
-      setSuccess(`Da xu ly ${successCount}/${reportDecisionTarget.ids.length} item trong queue.`)
+      setSuccess(`Đã xử lý ${successCount}/${reportDecisionTarget.ids.length} mục trong danh sách báo cáo.`)
       setSelectedReportIds((previous) => previous.filter((id) => !reportDecisionTarget.ids.includes(id)))
       setReportDecisionTarget(null)
       if (reportDecisionTarget.source === 'detail') {
@@ -1019,21 +1063,12 @@ export default function AdminPage() {
     return visibleReports.every((row) => selectedReportIds.includes(row.id))
   }, [selectedReportIds, visibleReports])
 
-  const overviewGrowth = useMemo(() => {
-    const monthly = accountStats?.monthly || []
-    const last = monthly[monthly.length - 1]
-    const prev = monthly[monthly.length - 2]
-    const accountDelta = (last?.newAccounts || 0) - (prev?.newAccounts || 0)
-    const loginDelta = (last?.loginCount || 0) - (prev?.loginCount || 0)
-    return { accountDelta, loginDelta }
-  }, [accountStats])
-
   const quickSearchPlaceholder = {
-    overview: 'Tim nhanh card, post, report trong dashboard',
-    accounts: 'Loc nhanh trong tai khoan dang hien thi',
-    posts: 'Loc nhanh trong bai viet dang hien thi',
-    reports: 'Loc nhanh trong queue report dang hien thi',
-    violations: 'Loc nhanh trong danh sach vi pham',
+    overview: 'Tìm nhanh trong tổng quan',
+    accounts: 'Tìm tài khoản đang hiển thị',
+    posts: 'Tìm bài viết đang hiển thị',
+    reports: 'Tìm báo cáo đang hiển thị',
+    violations: 'Tìm nội dung vi phạm',
   }[activeTab]
 
   const headerBusy = loading || overviewLoading || savingVisibleAccounts || reportDecisionSaving || postDetailSaving
@@ -1051,15 +1086,15 @@ export default function AdminPage() {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
     if (activeTab === 'accounts') {
       const rows: Array<Array<unknown>> = [
-        ['Username', 'Email', 'Role', 'Moderation', 'Locked', 'Strikes', 'LoginCount', 'LastLogin', 'DailyPostLimit'],
+        ['Tên người dùng', 'Email', 'Vai trò', 'Kiểm duyệt', 'Đã khóa', 'Lỗi', 'Lượt đăng nhập', 'Đăng nhập cuối', 'Giới hạn bài/ngày'],
         ...visibleAccounts.map((row) => {
           const draft = accountDraftMap[row.id] || toAccountDraft(row)
           return [
             row.username,
             row.email,
-            row.role,
-            draft.moderationStatus,
-            draft.accountLocked ? 'Yes' : 'No',
+            formatRole(row.role),
+            formatAccountStatus(draft.moderationStatus, draft.accountLocked),
+            draft.accountLocked ? 'Có' : 'Không',
             row.strikesCount,
             row.loginCount,
             row.lastLoginAt || '',
@@ -1068,13 +1103,13 @@ export default function AdminPage() {
         }),
       ]
       downloadCsv(`admin-accounts-${timestamp}.csv`, rows)
-      setSuccess(`Da xuat ${visibleAccounts.length} tai khoan ra CSV.`)
+      setSuccess(`Đã xuất ${visibleAccounts.length} tài khoản ra CSV.`)
       return
     }
 
     if (activeTab === 'posts') {
       const rows: Array<Array<unknown>> = [
-        ['Title', 'Author', 'CreatedAt', 'Likes', 'Comments', 'Reports', 'Engagement', 'Moderation', 'CommentsOpen'],
+        ['Tiêu đề', 'Tác giả', 'Ngày tạo', 'Lượt thích', 'Bình luận', 'Báo cáo', 'Tương tác', 'Kiểm duyệt', 'Bình luận'],
         ...visiblePosts.map((row) => [
           row.fullTitle || row.title,
           row.authorUsername,
@@ -1083,18 +1118,18 @@ export default function AdminPage() {
           row.commentsCount,
           row.reportCount || 0,
           row.engagementCount,
-          row.moderationStatus || 'normal',
-          row.allowComments === false ? 'Locked' : 'Open',
+          formatPostStatus(row.moderationStatus),
+          row.allowComments === false ? 'Đã khóa' : 'Đang mở',
         ]),
       ]
       downloadCsv(`admin-posts-${timestamp}.csv`, rows)
-      setSuccess(`Da xuat ${visiblePosts.length} bai viet ra CSV.`)
+      setSuccess(`Đã xuất ${visiblePosts.length} bài viết ra CSV.`)
       return
     }
 
     if (activeTab === 'reports') {
       const rows: Array<Array<unknown>> = [
-        ['Title', 'Author', 'ReportCount', 'PendingCount', 'LatestReason', 'LatestReportedAt', 'Source', 'Moderation'],
+        ['Tiêu đề', 'Tác giả', 'Tổng báo cáo', 'Đang chờ', 'Lý do mới nhất', 'Báo cáo gần nhất', 'Nguồn', 'Kiểm duyệt'],
         ...visibleReports.map((row) => [
           row.fullTitle || row.title,
           row.authorUsername,
@@ -1102,61 +1137,61 @@ export default function AdminPage() {
           row.pendingCount || 0,
           row.latestReason || '',
           row.lastReportedAt || '',
-          row.reportSource || '',
-          row.moderationStatus || 'normal',
+          formatReportSource(row.reportSource),
+          formatPostStatus(row.moderationStatus),
         ]),
       ]
       downloadCsv(`admin-reports-${timestamp}.csv`, rows)
-      setSuccess(`Da xuat ${visibleReports.length} report queue item ra CSV.`)
+      setSuccess(`Đã xuất ${visibleReports.length} báo cáo ra CSV.`)
       return
     }
 
     if (activeTab === 'violations') {
       const rows: Array<Array<unknown>> = [
-        ['Section', 'Primary', 'Secondary', 'Status', 'Reason', 'Metric1', 'Metric2'],
+        ['Nhóm', 'Chính', 'Phụ', 'Trạng thái', 'Lý do', 'Chỉ số 1', 'Chỉ số 2'],
         ...visibleViolationAccounts.map((row) => [
-          'Account',
+          'Tài khoản',
           row.username,
           row.email,
-          row.accountLocked ? 'locked' : row.moderationStatus,
+          formatAccountStatus(row.moderationStatus, row.accountLocked),
           row.accountLocked ? row.accountLockedReason : row.moderationReason,
           row.strikesCount,
           row.loginCount,
         ]),
         ...visibleViolationPosts.map((row) => [
-          'Post',
+          'Bài viết',
           row.title,
           row.authorUsername,
-          row.moderationStatus,
+          formatPostStatus(row.moderationStatus),
           row.moderationReason,
           row.reportCount,
           row.engagementCount,
         ]),
       ]
       downloadCsv(`admin-violations-${timestamp}.csv`, rows)
-      setSuccess('Da xuat danh sach vi pham ra CSV.')
+      setSuccess('Đã xuất danh sách vi phạm ra CSV.')
       return
     }
 
     const rows: Array<Array<unknown>> = [
-      ['Metric', 'Value'],
-      ['Tong tai khoan', accountStats?.summary?.totalAccounts || 0],
-      ['Tong luot dang nhap', accountStats?.summary?.totalLogins || 0],
-      ['Hoat dong 30 ngay', accountStats?.summary?.activeLast30Days || 0],
-      ['Queue pending', overviewPendingTotal],
-      ['Tai khoan vi pham', violationSummary.violatingAccounts],
-      ['Bai viet vi pham', violationSummary.violatingPosts],
+      ['Chỉ số', 'Giá trị'],
+      ['Tổng tài khoản', accountStats?.summary?.totalAccounts || 0],
+      ['Tổng lượt đăng nhập', accountStats?.summary?.totalLogins || 0],
+      ['Hoạt động 30 ngày', accountStats?.summary?.activeLast30Days || 0],
+      ['Báo cáo đang chờ', overviewPendingTotal],
+      ['Tài khoản vi phạm', violationSummary.violatingAccounts],
+      ['Bài viết vi phạm', violationSummary.violatingPosts],
     ]
     downloadCsv(`admin-overview-${timestamp}.csv`, rows)
-    setSuccess('Da xuat tong quan admin ra CSV.')
+    setSuccess('Đã xuất tổng quan quản trị ra CSV.')
   }
 
   if (!isAdmin) {
     return (
       <div className={`${styles.page} ${responsiveStyles.page}`}>
         <div className={styles.unauthorized}>
-          <h2>Khong co quyen truy cap</h2>
-          <p>Tai khoan hien tai khong co role admin nen khong the mo dashboard quan tri.</p>
+          <h2>Không có quyền truy cập</h2>
+          <p>Tài khoản hiện tại không có quyền quản trị.</p>
         </div>
       </div>
     )
@@ -1166,91 +1201,47 @@ export default function AdminPage() {
     <div className={`${styles.page} ${responsiveStyles.page}`}>
       <section className={styles.hero}>
         <div className={styles.heroContent}>
-          <div className={styles.heroEyebrow}>Admin Control Center</div>
-          <h1 className={styles.title}>Nang cap dashboard quan tri de review nhanh hon va an toan hon.</h1>
-          <p className={styles.subtitle}>
-            Giao dien moi uu tien queue report, moderation tools, trend theo thang va thao tac nhanh tren tung bai viet/tai khoan.
-          </p>
+          <div className={styles.heroEyebrow}>Quản trị</div>
+          <h1 className={styles.title}>Bảng điều khiển quản trị</h1>
           <div className={styles.heroMeta}>
-            <Badge tone={headerBusy ? 'warning' : 'success'}>{headerBusy ? 'Dang dong bo du lieu' : 'San sang thao tac'}</Badge>
-            <span>Lan dong bo cuoi: {formatDate(lastSyncedAt)}</span>
-            <span>Auto refresh: {autoRefresh ? 'Bat (60s)' : 'Tat'}</span>
+            <Badge tone={headerBusy ? 'warning' : 'success'}>{headerBusy ? 'Đang đồng bộ' : 'Sẵn sàng'}</Badge>
+            <span>Đồng bộ cuối: {formatDate(lastSyncedAt)}</span>
+            <span>Tự động làm mới: {autoRefresh ? 'Bật (60s)' : 'Tắt'}</span>
           </div>
           <div className={styles.heroActions}>
             <button type="button" className={styles.primaryButton} onClick={() => void refreshDashboard(false)} disabled={headerBusy}>
-              Lam moi dashboard
+              Làm mới
             </button>
             <button type="button" className={styles.secondaryButton} onClick={exportCurrentView}>
-              Export CSV
+              Xuất CSV
             </button>
             <label className={styles.toggleInline}>
               <input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} />
-              <span>Auto refresh</span>
+              <span>Tự động làm mới</span>
             </label>
-          </div>
-        </div>
-
-        <div className={styles.heroAside}>
-          <div className={styles.heroPanel}>
-            <div className={styles.heroPanelHeader}>
-              <div>
-                <div className={styles.sectionEyebrow}>Trend {months} thang</div>
-                <h2 className={styles.sectionTitle}>Tai khoan moi va dang nhap</h2>
-              </div>
-              <label className={styles.inlineField}>
-                <span>Khoang thang</span>
-                <select value={months} onChange={(event) => setMonths(Number(event.target.value) || 12)}>
-                  <option value={6}>6 thang</option>
-                  <option value={12}>12 thang</option>
-                  <option value={18}>18 thang</option>
-                  <option value={24}>24 thang</option>
-                </select>
-              </label>
-            </div>
-            <div className={styles.chartLegend}>
-              <Badge tone="info">Tai khoan moi {overviewGrowth.accountDelta >= 0 ? `+${overviewGrowth.accountDelta}` : overviewGrowth.accountDelta}</Badge>
-              <Badge tone="neutral">Dang nhap {overviewGrowth.loginDelta >= 0 ? `+${overviewGrowth.loginDelta}` : overviewGrowth.loginDelta}</Badge>
-            </div>
-            <div className={styles.trendChart}>
-              {(accountStats?.monthly || []).length ? (
-                (() => {
-                  const maxValue = Math.max(
-                    1,
-                    ...(accountStats?.monthly || []).flatMap((item) => [item.newAccounts || 0, item.loginCount || 0]),
-                  )
-                  return (accountStats?.monthly || []).map((item) => (
-                    <div key={item.month} className={styles.trendColumn}>
-                      <div className={styles.trendBars}>
-                        <span
-                          className={`${styles.trendBar} ${styles.trendBarInfo}`}
-                          style={{ height: `${((item.newAccounts || 0) / maxValue) * 100}%` }}
-                          title={`Tai khoan moi: ${item.newAccounts}`}
-                        />
-                        <span
-                          className={`${styles.trendBar} ${styles.trendBarNeutral}`}
-                          style={{ height: `${((item.loginCount || 0) / maxValue) * 100}%` }}
-                          title={`Dang nhap: ${item.loginCount}`}
-                        />
-                      </div>
-                      <div className={styles.trendLabel}>{formatMonthLabel(item.month)}</div>
-                    </div>
-                  ))
-                })()
-              ) : (
-                <div className={styles.chartEmpty}>Chua co du lieu trend.</div>
-              )}
-            </div>
+            <label className={styles.inlineFieldCompact}>
+              <span>Khoảng thống kê</span>
+              <select className={styles.compactSelect} value={months} onChange={(event) => setMonths(Number(event.target.value) || 12)}>
+                <option value={6}>6 tháng</option>
+                <option value={12}>12 tháng</option>
+                <option value={18}>18 tháng</option>
+                <option value={24}>24 tháng</option>
+              </select>
+            </label>
           </div>
         </div>
       </section>
 
       <div className={styles.metricGrid}>
-        <MetricCard label="Tong tai khoan" value={formatNumber(accountStats?.summary?.totalAccounts)} help="Tong so user tren he thong" tone="info" />
-        <MetricCard label="Tong dang nhap" value={formatNumber(accountStats?.summary?.totalLogins)} help="Tong login ghi nhan duoc" tone="neutral" />
-        <MetricCard label="Hoat dong 30 ngay" value={formatNumber(accountStats?.summary?.activeLast30Days)} help="Tai khoan co login 30 ngay gan nhat" tone="success" />
-        <MetricCard label="Queue dang cho" value={formatNumber(overviewPendingTotal)} help="Bai viet dang co report pending" tone="warning" />
-        <MetricCard label="Tai khoan can xu ly" value={formatNumber(violationSummary.violatingAccounts)} help="Warning/violating/locked/strike" tone="danger" />
-        <MetricCard label="Bai viet vi pham" value={formatNumber(violationSummary.violatingPosts)} help="Bai viet moderationStatus = violating" tone="danger" />
+        <MetricCard label="Tổng tài khoản" value={formatNumber(accountStats?.summary?.totalAccounts)} help="Tất cả người dùng" tone="info" />
+        <MetricCard label="Hoạt động 30 ngày" value={formatNumber(accountStats?.summary?.activeLast30Days)} help="Tài khoản có đăng nhập gần đây" tone="success" />
+        <MetricCard label="Báo cáo chờ xử lý" value={formatNumber(overviewPendingTotal)} help="Bài viết đang chờ xem xét" tone="warning" />
+        <MetricCard
+          label="Vi phạm"
+          value={`${formatNumber(violationSummary.violatingAccounts)} tài khoản / ${formatNumber(violationSummary.violatingPosts)} bài`}
+          help="Tài khoản và bài viết cần xử lý"
+          tone="danger"
+        />
       </div>
 
       <section className={styles.toolbar}>
@@ -1263,33 +1254,32 @@ export default function AdminPage() {
               onClick={() => startTransition(() => setActiveTab(tab.key))}
             >
               <span>{tab.label}</span>
-              <small>{tab.help}</small>
             </button>
           ))}
         </div>
 
         <div className={styles.toolbarControls}>
-          {showInlineSync ? <span className={styles.syncBadge}>Dang cap nhat...</span> : null}
+          {showInlineSync ? <span className={styles.syncBadge}>Đang cập nhật...</span> : null}
           <label className={styles.searchBox}>
-            <span>Tim nhanh</span>
+            <span>Tìm nhanh</span>
             <input value={pageSearch} onChange={(event) => setPageSearch(event.target.value)} placeholder={quickSearchPlaceholder} />
           </label>
-          <button type="button" className={styles.secondaryButton} onClick={() => void loadCurrentTab(false)} disabled={headerBusy}>
-            Lam moi tab
-          </button>
+          {/* <button type="button" className={styles.secondaryButton} onClick={() => void loadCurrentTab(false)} disabled={headerBusy}>
+            Làm mới tab
+          </button> */}
         </div>
       </section>
 
       {error ? <div className={styles.error}>{error}</div> : null}
       {success ? <div className={styles.success}>{success}</div> : null}
-      {showPageLoading ? <div className={styles.loading}>Dang tai du lieu...</div> : null}
+      {showPageLoading ? <div className={styles.loading}>Đang tải dữ liệu...</div> : null}
 
       {activeTab === 'overview' ? (
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionEyebrow}>Tong quan he thong</div>
-              <h2 className={styles.sectionTitle}>Cac queue va diem nong can admin uu tien</h2>
+              <div className={styles.sectionEyebrow}>Tổng quan</div>
+              <h2 className={styles.sectionTitle}>Những mục cần theo dõi</h2>
             </div>
           </div>
 
@@ -1297,11 +1287,11 @@ export default function AdminPage() {
             <div className={styles.surfaceCard}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Top login users</div>
-                  <div className={styles.cardSubtitle}>User dang hoat dong nhieu nhat gan day</div>
+                  <div className={styles.cardTitle}>Đăng nhập nhiều</div>
+                  <div className={styles.cardSubtitle}>Người dùng hoạt động gần đây</div>
                 </div>
                 <button type="button" className={styles.inlineLink} onClick={() => startTransition(() => setActiveTab('accounts'))}>
-                  Mo tab tai khoan
+                  Mở tài khoản
                 </button>
               </div>
               {(accountStats?.topLoginUsers || []).length ? (
@@ -1311,27 +1301,27 @@ export default function AdminPage() {
                       <div>
                         <div className={styles.miniListTitle}>@{user.username}</div>
                         <div className={styles.miniListMeta}>
-                          <Badge tone={user.role === 'admin' ? 'info' : 'neutral'}>{user.role}</Badge>
+                          <Badge tone={user.role === 'admin' ? 'info' : 'neutral'}>{formatRole(user.role)}</Badge>
                           <span>{formatDate(user.lastLoginAt)}</span>
                         </div>
                       </div>
-                      <strong>{formatNumber(user.loginCount)} login</strong>
+                      <strong>{formatNumber(user.loginCount)} lượt</strong>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Chua co du lieu login" text="Khi co login activity, khu vuc nay se hien top user." />
+                <EmptyState title="Chưa có dữ liệu đăng nhập" text="Khi có hoạt động, danh sách sẽ hiển thị tại đây." />
               )}
             </div>
 
             <div className={styles.surfaceCard}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Risky accounts</div>
-                  <div className={styles.cardSubtitle}>Tai khoan khoa, co strike, hoac dang warning</div>
+                  <div className={styles.cardTitle}>Tài khoản rủi ro</div>
+                  <div className={styles.cardSubtitle}>Tài khoản bị khóa, cảnh báo hoặc có lỗi</div>
                 </div>
                 <button type="button" className={styles.inlineLink} onClick={() => startTransition(() => setActiveTab('violations'))}>
-                  Mo tab vi pham
+                  Mở vi phạm
                 </button>
               </div>
               {riskAccounts.length ? (
@@ -1342,28 +1332,28 @@ export default function AdminPage() {
                         <div className={styles.miniListTitle}>@{row.username}</div>
                         <div className={styles.miniListMeta}>
                           <Badge tone={badgeToneForAccount(row.moderationStatus, row.accountLocked)}>
-                            {row.accountLocked ? 'locked' : row.moderationStatus}
+                            {formatAccountStatus(row.moderationStatus, row.accountLocked)}
                           </Badge>
-                          <span>{row.accountLocked ? row.accountLockedReason || 'Khoa boi admin' : row.moderationReason || '--'}</span>
+                          <span>{row.accountLocked ? row.accountLockedReason || 'Khóa bởi quản trị viên' : row.moderationReason || '--'}</span>
                         </div>
                       </div>
-                      <strong>{row.strikesCount} gay</strong>
+                      <strong>{row.strikesCount} lỗi</strong>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Chua co risk account" text="He thong dang o trang thai on dinh." />
+                <EmptyState title="Chưa có tài khoản rủi ro" text="Hệ thống chưa ghi nhận tài khoản cần xử lý." />
               )}
             </div>
 
             <div className={styles.surfaceCard}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Pending report queue</div>
-                  <div className={styles.cardSubtitle}>Uu tien review bai viet dang cho xu ly</div>
+                  <div className={styles.cardTitle}>Báo cáo chờ xử lý</div>
+                  <div className={styles.cardSubtitle}>Bài viết cần quản trị viên xem xét</div>
                 </div>
                 <button type="button" className={styles.inlineLink} onClick={() => startTransition(() => setActiveTab('reports'))}>
-                  Mo queue
+                  Mở báo cáo
                 </button>
               </div>
               {(overviewQueue?.items || []).length ? (
@@ -1373,7 +1363,7 @@ export default function AdminPage() {
                       <div>
                         <div className={styles.miniListTitle}>{row.title}</div>
                         <div className={styles.miniListMeta}>
-                          <Badge tone="warning">{row.pendingCount || 0} pending</Badge>
+                          <Badge tone="warning">{row.pendingCount || 0} chờ</Badge>
                           <span>@{row.authorUsername}</span>
                         </div>
                       </div>
@@ -1385,24 +1375,24 @@ export default function AdminPage() {
                           void openPostDetail(row.id, 'reports')
                         }}
                       >
-                        Review
+                        Xem xét
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Queue rong" text="Khong co bai viet nao dang pending report." />
+                <EmptyState title="Không có báo cáo chờ" text="Hiện chưa có bài viết cần xem xét." />
               )}
             </div>
 
             <div className={`${styles.surfaceCard} ${styles.surfaceCardWide}`}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Popular posts snapshot</div>
-                  <div className={styles.cardSubtitle}>Nhanh tay vao post co tuong tac cao va de phat sinh moderation</div>
+                  <div className={styles.cardTitle}>Bài viết nổi bật</div>
+                  <div className={styles.cardSubtitle}>Các bài viết có tương tác cao</div>
                 </div>
                 <button type="button" className={styles.inlineLink} onClick={() => startTransition(() => setActiveTab('posts'))}>
-                  Mo danh sach bai viet
+                  Mở bài viết
                 </button>
               </div>
               {(overviewTopPosts?.items || []).length ? (
@@ -1418,21 +1408,21 @@ export default function AdminPage() {
                             <img className={styles.snapshotMedia} src={previewUrl} alt={row.title} />
                           )
                         ) : (
-                          <div className={styles.snapshotFallback}>No media</div>
+                          <div className={styles.snapshotFallback}>Không có media</div>
                         )}
                         <div className={styles.snapshotBody}>
                           <h3>{row.title}</h3>
                           <p>@{row.authorUsername}</p>
                           <div className={styles.snapshotStats}>
-                            <Badge tone="info">{formatNumber(row.engagementCount)} engagement</Badge>
-                            <Badge tone={row.reportCount ? 'warning' : 'neutral'}>{formatNumber(row.reportCount || 0)} report</Badge>
+                            <Badge tone="info">{formatNumber(row.engagementCount)} tương tác</Badge>
+                            <Badge tone={row.reportCount ? 'warning' : 'neutral'}>{formatNumber(row.reportCount || 0)} báo cáo</Badge>
                           </div>
                           <div className={styles.inlineActions}>
                             <button type="button" className={styles.ghostButton} onClick={() => void openPostDetail(row.id, 'posts')}>
-                              Xem chi tiet
+                              Xem chi tiết
                             </button>
                             <a className={styles.inlineLink} href={`/post/${encodeURIComponent(row.id)}`} target="_blank" rel="noreferrer">
-                              Mo bai viet
+                              Mở bài viết
                             </a>
                           </div>
                         </div>
@@ -1441,7 +1431,7 @@ export default function AdminPage() {
                   })}
                 </div>
               ) : (
-                <EmptyState title="Chua co snapshot" text="Khi co bai viet, khu vuc nay se hien danh sach engagement cao." />
+                <EmptyState title="Chưa có bài viết" text="Khi có dữ liệu, bài viết nổi bật sẽ hiển thị tại đây." />
               )}
             </div>
           </div>
@@ -1452,8 +1442,8 @@ export default function AdminPage() {
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionEyebrow}>User moderation</div>
-              <h2 className={styles.sectionTitle}>Quan ly tai khoan, login va gioi han tu dashboard moi</h2>
+              <div className={styles.sectionEyebrow}>Tài khoản</div>
+              <h2 className={styles.sectionTitle}>Quản lý tài khoản</h2>
             </div>
             <div className={styles.inlineActions}>
               <button type="button" className={styles.secondaryButton} onClick={() => {
@@ -1461,7 +1451,7 @@ export default function AdminPage() {
                 setAccountDraftFilters(DEFAULT_ACCOUNT_FILTERS)
                 startTransition(() => setAccountFilters(DEFAULT_ACCOUNT_FILTERS))
               }}>
-                Reset bo loc
+                Đặt lại bộ lọc
               </button>
               <button
                 type="button"
@@ -1469,22 +1459,22 @@ export default function AdminPage() {
                 onClick={() => void saveVisibleAccountChanges()}
                 disabled={savingVisibleAccounts || accountSummary.changed === 0}
               >
-                {savingVisibleAccounts ? 'Dang luu...' : `Luu ${accountSummary.changed} thay doi`}
+                {savingVisibleAccounts ? 'Đang lưu...' : `Lưu ${accountSummary.changed} thay đổi`}
               </button>
             </div>
           </div>
 
           <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
-              <span>Tim tai khoan</span>
+              <span>Tìm tài khoản</span>
               <input
                 value={accountDraftFilters.keyword}
                 onChange={(event) => setAccountDraftFilters((previous) => ({ ...previous, keyword: event.target.value }))}
-                placeholder="username/email"
+                placeholder="Tên người dùng hoặc email"
               />
             </label>
             <label className={styles.inlineField}>
-              <span>Trang thai</span>
+              <span>Trạng thái</span>
               <select
                 value={accountDraftFilters.status}
                 onChange={(event) =>
@@ -1494,9 +1484,9 @@ export default function AdminPage() {
                   }))
                 }
               >
-                <option value="all">Tat ca</option>
-                <option value="active">Dang hoat dong</option>
-                <option value="locked">Da khoa</option>
+                <option value="all">Tất cả</option>
+                <option value="active">Đang hoạt động</option>
+                <option value="locked">Đã khóa</option>
               </select>
             </label>
             <button
@@ -1507,53 +1497,31 @@ export default function AdminPage() {
                 startTransition(() => setAccountFilters({ ...accountDraftFilters }))
               }}
             >
-              Loc
+              Lọc
             </button>
           </div>
 
           <div className={styles.metricGridCompact}>
-            <MetricCard label="Dang hien thi" value={formatNumber(visibleAccounts.length)} help="So row sau quick search" tone="info" />
-            <MetricCard label="Da khoa" value={formatNumber(accountSummary.locked)} help="Tai khoan dang bi khoa" tone="danger" />
-            <MetricCard label="Warning" value={formatNumber(accountSummary.warning)} help="Can admin theo doi" tone="warning" />
-            <MetricCard label="Violating" value={formatNumber(accountSummary.violating)} help="Dang o muc vi pham" tone="danger" />
-          </div>
-
-          <div className={styles.surfaceCard}>
-            <div className={styles.surfaceHeader}>
-              <div>
-                <div className={styles.cardTitle}>Top login trong giai doan da chon</div>
-                <div className={styles.cardSubtitle}>Huu ich khi can so sanh activity voi restriction/moderation</div>
-              </div>
-            </div>
-            {(accountStats?.topLoginUsers || []).length ? (
-              <div className={styles.loginStrip}>
-                {(accountStats?.topLoginUsers || []).slice(0, 6).map((user) => (
-                  <div key={user.id} className={styles.loginStripCard}>
-                    <strong>@{user.username}</strong>
-                    <span>{formatNumber(user.loginCount)} login</span>
-                    <small>{formatDate(user.lastLoginAt)}</small>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Chua co du lieu" text="Top login se hien o day khi backend tra ve activity." />
-            )}
+            <MetricCard label="Đang hiển thị" value={formatNumber(visibleAccounts.length)} help="Sau tìm kiếm nhanh" tone="info" />
+            <MetricCard label="Đã khóa" value={formatNumber(accountSummary.locked)} help="Tài khoản đang bị khóa" tone="danger" />
+            <MetricCard label="Cảnh báo" value={formatNumber(accountSummary.warning)} help="Cần theo dõi" tone="warning" />
+            <MetricCard label="Vi phạm" value={formatNumber(accountSummary.violating)} help="Cần xử lý" tone="danger" />
           </div>
 
           <div className={styles.tableCard}>
             {!accountsData && loading ? (
-              <div className={styles.loading}>Dang tai danh sach tai khoan...</div>
+              <div className={styles.loading}>Đang tải danh sách tài khoản...</div>
             ) : visibleAccounts.length ? (
               <>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Tai khoan</th>
-                        <th>Hoat dong</th>
-                        <th>Trang thai</th>
-                        <th>Gioi han</th>
-                        <th>Hanh dong</th>
+                        <th>Tài khoản</th>
+                        <th>Hoạt động</th>
+                        <th>Trạng thái</th>
+                        <th>Giới hạn</th>
+                        <th>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1570,29 +1538,29 @@ export default function AdminPage() {
                                 <strong>@{row.username}</strong>
                                 <span>{row.email}</span>
                                 <div className={styles.badgeGroup}>
-                                  <Badge tone={row.role === 'admin' ? 'info' : 'neutral'}>{row.role}</Badge>
-                                  {draft.verified ? <Badge tone="success">verified</Badge> : null}
+                                  <Badge tone={row.role === 'admin' ? 'info' : 'neutral'}>{formatRole(row.role)}</Badge>
+                                  {draft.verified ? <Badge tone="success">Đã xác minh</Badge> : null}
                                   <Badge tone={badgeToneForAccount(draft.moderationStatus, draft.accountLocked)}>
-                                    {draft.accountLocked ? 'locked' : draft.moderationStatus}
+                                    {formatAccountStatus(draft.moderationStatus, draft.accountLocked)}
                                   </Badge>
-                                  {row.strikesCount > 0 ? <Badge tone="warning">{row.strikesCount} gay</Badge> : null}
+                                  {row.strikesCount > 0 ? <Badge tone="warning">{row.strikesCount} lỗi</Badge> : null}
                                 </div>
                               </div>
                             </td>
                             <td>
                               <div className={styles.cellStack}>
-                                <strong>{formatNumber(row.loginCount)} login</strong>
-                                <span>Lan cuoi: {formatDate(row.lastLoginAt)}</span>
-                                <span>Tao luc: {formatDate(row.createdAt)}</span>
+                                <strong>{formatNumber(row.loginCount)} lượt đăng nhập</strong>
+                                <span>Lần cuối: {formatDate(row.lastLoginAt)}</span>
+                                <span>Tạo lúc: {formatDate(row.createdAt)}</span>
                               </div>
                             </td>
                             <td>
                               <div className={styles.cellStack}>
                                 <div className={styles.badgeGroup}>
                                   <Badge tone={badgeToneForAccount(draft.moderationStatus, draft.accountLocked)}>
-                                    {draft.accountLocked ? 'locked' : draft.moderationStatus}
+                                    {formatAccountStatus(draft.moderationStatus, draft.accountLocked)}
                                   </Badge>
-                                  {changed ? <Badge tone="warning">co thay doi</Badge> : null}
+                                  {changed ? <Badge tone="warning">Có thay đổi</Badge> : null}
                                 </div>
                                 <span>{moderationNote}</span>
                               </div>
@@ -1600,7 +1568,7 @@ export default function AdminPage() {
                             <td>
                               <div className={styles.cellStack}>
                                 <span>{summarizeAccountRestrictions(draft)}</span>
-                                <span>{draft.accountLocked ? `Khoa tu: ${formatDate(row.accountLockedAt)}` : 'Tai khoan dang mo'}</span>
+                                <span>{draft.accountLocked ? `Khóa từ: ${formatDate(row.accountLockedAt)}` : 'Tài khoản đang mở'}</span>
                               </div>
                             </td>
                             <td>
@@ -1610,7 +1578,7 @@ export default function AdminPage() {
                                   className={styles.primaryButton}
                                   onClick={() => openAccountDetail(row)}
                                 >
-                                  Chi tiet
+                                  Chi tiết
                                 </button>
                               </div>
                             </td>
@@ -1622,9 +1590,9 @@ export default function AdminPage() {
                 </div>
                 <div className={styles.pagination}>
                   <button type="button" onClick={() => setAccountsPage((previous) => Math.max(previous - 1, 1))} disabled={accountsPage <= 1}>
-                    Truoc
+                    Trước
                   </button>
-                  <span>Trang {accountsData?.page}/{accountsData?.totalPages} • {formatNumber(accountsData?.total)} tai khoan</span>
+                  <span>Trang {accountsData?.page}/{accountsData?.totalPages} • {formatNumber(accountsData?.total)} tài khoản</span>
                   <button
                     type="button"
                     onClick={() => setAccountsPage((previous) => Math.min(previous + 1, accountsData?.totalPages || 1))}
@@ -1635,7 +1603,7 @@ export default function AdminPage() {
                 </div>
               </>
             ) : (
-              <EmptyState title="Khong co tai khoan phu hop" text="Thu doi bo loc server hoac bo quick search." />
+              <EmptyState title="Không có tài khoản phù hợp" text="Thử đổi bộ lọc hoặc xóa tìm kiếm nhanh." />
             )}
           </div>
         </section>
@@ -1645,14 +1613,14 @@ export default function AdminPage() {
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionEyebrow}>Content moderation</div>
-              <h2 className={styles.sectionTitle}>Giam bot so cot, tang quick action cho bai viet</h2>
+              <div className={styles.sectionEyebrow}>Bài viết</div>
+              <h2 className={styles.sectionTitle}>Quản lý bài viết</h2>
             </div>
           </div>
 
           <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
-              <span>Tu ngay</span>
+              <span>Từ ngày</span>
               <input
                 type="date"
                 value={postDraftFilters.startDate}
@@ -1660,7 +1628,7 @@ export default function AdminPage() {
               />
             </label>
             <label className={styles.inlineField}>
-              <span>Den ngay</span>
+              <span>Đến ngày</span>
               <input
                 type="date"
                 value={postDraftFilters.endDate}
@@ -1668,7 +1636,7 @@ export default function AdminPage() {
               />
             </label>
             <label className={styles.inlineField}>
-              <span>Sap xep engagement</span>
+              <span>Sắp xếp tương tác</span>
               <select
                 value={postDraftFilters.sort}
                 onChange={(event) =>
@@ -1678,8 +1646,8 @@ export default function AdminPage() {
                   }))
                 }
               >
-                <option value="engagement_desc">Giam dan</option>
-                <option value="engagement_asc">Tang dan</option>
+                <option value="engagement_desc">Giảm dần</option>
+                <option value="engagement_asc">Tăng dần</option>
               </select>
             </label>
             <button
@@ -1690,7 +1658,7 @@ export default function AdminPage() {
                 startTransition(() => setPostFilters({ ...postDraftFilters }))
               }}
             >
-              Loc
+              Lọc
             </button>
             <button
               type="button"
@@ -1701,31 +1669,31 @@ export default function AdminPage() {
                 startTransition(() => setPostFilters(DEFAULT_POST_FILTERS))
               }}
             >
-              Reset
+              Đặt lại
             </button>
           </div>
 
           <div className={styles.metricGridCompact}>
-            <MetricCard label="Dang hien thi" value={formatNumber(visiblePosts.length)} help="So bai viet sau quick search" tone="info" />
-            <MetricCard label="Tong engagement" value={formatNumber(postSummary.totalEngagement)} help="Like + comment tren rows dang hien thi" tone="success" />
-            <MetricCard label="Tong report" value={formatNumber(postSummary.totalReports)} help="Dau hieu can moderation" tone="warning" />
-            <MetricCard label="Comment dang khoa" value={formatNumber(postSummary.lockedComments)} help="Co the mo lai ngay trong bang" tone="neutral" />
+            <MetricCard label="Đang hiển thị" value={formatNumber(visiblePosts.length)} help="Sau tìm kiếm nhanh" tone="info" />
+            <MetricCard label="Tổng tương tác" value={formatNumber(postSummary.totalEngagement)} help="Lượt thích và bình luận" tone="success" />
+            <MetricCard label="Tổng báo cáo" value={formatNumber(postSummary.totalReports)} help="Cần theo dõi" tone="warning" />
+            <MetricCard label="Bình luận bị khóa" value={formatNumber(postSummary.lockedComments)} help="Có thể mở lại trong bảng" tone="neutral" />
           </div>
 
           <div className={styles.tableCard}>
             {!postsData && loading ? (
-              <div className={styles.loading}>Dang tai danh sach bai viet...</div>
+              <div className={styles.loading}>Đang tải danh sách bài viết...</div>
             ) : visiblePosts.length ? (
               <>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Bai viet</th>
-                        <th>Metrics</th>
-                        <th>Trang thai</th>
-                        <th>Thoi gian</th>
-                        <th>Hanh dong</th>
+                        <th>Bài viết</th>
+                        <th>Chỉ số</th>
+                        <th>Trạng thái</th>
+                        <th>Thời gian</th>
+                        <th>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1743,15 +1711,15 @@ export default function AdminPage() {
                                     <img className={styles.tableThumb} src={previewUrl} alt={row.title} />
                                   )
                                 ) : (
-                                  <div className={styles.tableThumbFallback}>No media</div>
+                                  <div className={styles.tableThumbFallback}>Không có media</div>
                                 )}
                                 <div className={styles.cellStack}>
                                   <strong>{row.title}</strong>
                                   <span>@{row.authorUsername}</span>
                                   <div className={styles.badgeGroup}>
-                                    <Badge tone={badgeToneForPost(row.moderationStatus)}>{row.moderationStatus || 'normal'}</Badge>
+                                    <Badge tone={badgeToneForPost(row.moderationStatus)}>{formatPostStatus(row.moderationStatus)}</Badge>
                                     <Badge tone={row.allowComments === false ? 'warning' : 'success'}>
-                                      {row.allowComments === false ? 'comments locked' : 'comments open'}
+                                      {row.allowComments === false ? 'Đã khóa bình luận' : 'Đang mở bình luận'}
                                     </Badge>
                                   </div>
                                 </div>
@@ -1759,28 +1727,28 @@ export default function AdminPage() {
                             </td>
                             <td>
                               <div className={styles.metricList}>
-                                <span>Like: <strong>{formatNumber(row.likesCount)}</strong></span>
-                                <span>Comment: <strong>{formatNumber(row.commentsCount)}</strong></span>
-                                <span>Report: <strong>{formatNumber(row.reportCount || 0)}</strong></span>
-                                <span>Engagement: <strong>{formatNumber(row.engagementCount)}</strong></span>
+                                <span>Thích: <strong>{formatNumber(row.likesCount)}</strong></span>
+                                <span>Bình luận: <strong>{formatNumber(row.commentsCount)}</strong></span>
+                                <span>Báo cáo: <strong>{formatNumber(row.reportCount || 0)}</strong></span>
+                                <span>Tương tác: <strong>{formatNumber(row.engagementCount)}</strong></span>
                               </div>
                             </td>
                             <td>
                               <div className={styles.cellStack}>
-                                {row.moderationReason ? <span>{row.moderationReason}</span> : <span>Chua co ly do moderation</span>}
-                                {row.reportCount ? <Badge tone="warning">Can review report</Badge> : null}
+                                {row.moderationReason ? <span>{row.moderationReason}</span> : <span>Chưa có lý do kiểm duyệt</span>}
+                                {row.reportCount ? <Badge tone="warning">Cần xem báo cáo</Badge> : null}
                               </div>
                             </td>
                             <td>
                               <div className={styles.cellStack}>
                                 <strong>{formatDate(row.createdAt)}</strong>
-                                <span>TB engagement: {formatNumber(postSummary.averageEngagement)}</span>
+                                <span>TB tương tác: {formatNumber(postSummary.averageEngagement)}</span>
                               </div>
                             </td>
                             <td>
                               <div className={styles.actionColumn}>
                                 <button type="button" className={styles.primaryButton} onClick={() => void openPostDetail(row.id, 'posts')}>
-                                  Xem chi tiet
+                                  Xem chi tiết
                                 </button>
                                 <button
                                   type="button"
@@ -1788,10 +1756,10 @@ export default function AdminPage() {
                                   disabled={saving}
                                   onClick={() => void runQuickPostAction(row, row.allowComments === false ? 'unlock_comments' : 'lock_comments')}
                                 >
-                                  {saving ? 'Dang xu ly...' : row.allowComments === false ? 'Mo comment' : 'Khoa comment'}
+                                  {saving ? 'Đang xử lý...' : row.allowComments === false ? 'Mở bình luận' : 'Khóa bình luận'}
                                 </button>
                                 <a className={styles.inlineLink} href={`/post/${encodeURIComponent(row.id)}`} target="_blank" rel="noreferrer">
-                                  Mo bai viet
+                                  Mở bài viết
                                 </a>
                               </div>
                             </td>
@@ -1803,9 +1771,9 @@ export default function AdminPage() {
                 </div>
                 <div className={styles.pagination}>
                   <button type="button" onClick={() => setPostsPage((previous) => Math.max(previous - 1, 1))} disabled={postsPage <= 1}>
-                    Truoc
+                    Trước
                   </button>
-                  <span>Trang {postsData?.page}/{postsData?.totalPages} • {formatNumber(postsData?.total)} bai viet</span>
+                  <span>Trang {postsData?.page}/{postsData?.totalPages} • {formatNumber(postsData?.total)} bài viết</span>
                   <button
                     type="button"
                     onClick={() => setPostsPage((previous) => Math.min(previous + 1, postsData?.totalPages || 1))}
@@ -1816,7 +1784,7 @@ export default function AdminPage() {
                 </div>
               </>
             ) : (
-              <EmptyState title="Khong co bai viet phu hop" text="Thu doi bo loc thoi gian hoac xoa quick search." />
+              <EmptyState title="Không có bài viết phù hợp" text="Thử đổi bộ lọc thời gian hoặc xóa tìm kiếm nhanh." />
             )}
           </div>
         </section>
@@ -1826,26 +1794,26 @@ export default function AdminPage() {
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionEyebrow}>Report queue</div>
-              <h2 className={styles.sectionTitle}>Them review flow day du: bo qua, xoa bai, cong gay, khoa tai khoan</h2>
+              <div className={styles.sectionEyebrow}>Báo cáo</div>
+              <h2 className={styles.sectionTitle}>Xử lý báo cáo bài viết</h2>
             </div>
             {selectedReportRows.length ? (
               <div className={styles.bulkBanner}>
-                <span>Dang chon {selectedReportRows.length} item</span>
+                <span>Đang chọn {selectedReportRows.length} mục</span>
                 <div className={styles.inlineActions}>
                   <button
                     type="button"
                     className={styles.secondaryButton}
-                    onClick={() => openReportDecisionModal(selectedReportIds, `${selectedReportRows.length} report item`, ['no_violation'])}
+                    onClick={() => openReportDecisionModal(selectedReportIds, `${selectedReportRows.length} báo cáo`, ['no_violation'])}
                   >
-                    Bo qua queue
+                    Bỏ qua báo cáo
                   </button>
                   <button
                     type="button"
                     className={styles.primaryButton}
-                    onClick={() => openReportDecisionModal(selectedReportIds, `${selectedReportRows.length} report item`, ['delete_post'])}
+                    onClick={() => openReportDecisionModal(selectedReportIds, `${selectedReportRows.length} báo cáo`, ['delete_post'])}
                   >
-                    Xu phat hang loat
+                    Xử lý hàng loạt
                   </button>
                 </div>
               </div>
@@ -1854,7 +1822,7 @@ export default function AdminPage() {
 
           <div className={`${styles.filters} ${responsiveStyles.filters}`}>
             <label className={styles.inlineField}>
-              <span>Tu ngay</span>
+              <span>Từ ngày</span>
               <input
                 type="date"
                 value={reportDraftFilters.startDate}
@@ -1862,7 +1830,7 @@ export default function AdminPage() {
               />
             </label>
             <label className={styles.inlineField}>
-              <span>Den ngay</span>
+              <span>Đến ngày</span>
               <input
                 type="date"
                 value={reportDraftFilters.endDate}
@@ -1870,7 +1838,7 @@ export default function AdminPage() {
               />
             </label>
             <label className={styles.inlineField}>
-              <span>Trang thai</span>
+              <span>Trạng thái</span>
               <select
                 value={reportDraftFilters.status}
                 onChange={(event) =>
@@ -1880,15 +1848,15 @@ export default function AdminPage() {
                   }))
                 }
               >
-                <option value="all">Tat ca</option>
-                <option value="pending">Pending</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="accepted">Accepted</option>
-                <option value="rejected">Rejected</option>
+                <option value="all">Tất cả</option>
+                <option value="pending">Đang chờ</option>
+                <option value="reviewed">Đã xem xét</option>
+                <option value="accepted">Đã xác nhận</option>
+                <option value="rejected">Đã bỏ qua</option>
               </select>
             </label>
             <label className={styles.inlineField}>
-              <span>Nguon report</span>
+              <span>Nguồn báo cáo</span>
               <select
                 value={reportDraftFilters.source}
                 onChange={(event) =>
@@ -1898,9 +1866,9 @@ export default function AdminPage() {
                   }))
                 }
               >
-                <option value="all">Tat ca</option>
-                <option value="user_report">Nguoi dung</option>
-                <option value="auto_nsfw">Auto NSFW</option>
+                <option value="all">Tất cả</option>
+                <option value="user_report">Người dùng</option>
+                <option value="auto_nsfw">Tự động phát hiện</option>
               </select>
             </label>
             <button
@@ -1911,7 +1879,7 @@ export default function AdminPage() {
                 startTransition(() => setReportFilters({ ...reportDraftFilters }))
               }}
             >
-              Loc
+              Lọc
             </button>
             <button
               type="button"
@@ -1922,20 +1890,20 @@ export default function AdminPage() {
                 startTransition(() => setReportFilters(DEFAULT_REPORT_FILTERS))
               }}
             >
-              Reset
+              Đặt lại
             </button>
           </div>
 
           <div className={styles.metricGridCompact}>
-            <MetricCard label="Pending" value={formatNumber(reportSummary.pending)} help="Tong pending trong rows dang hien thi" tone="warning" />
-            <MetricCard label="Auto flag" value={formatNumber(reportSummary.autoFlagged)} help="Hang doi do he thong goi len" tone="info" />
-            <MetricCard label="Post da xoa" value={formatNumber(reportSummary.deletedSnapshots)} help="Van con snapshot de admin review" tone="neutral" />
-            <MetricCard label="Dang chon" value={formatNumber(reportSummary.selected)} help="Bulk review nhanh hon" tone="success" />
+            <MetricCard label="Đang chờ" value={formatNumber(reportSummary.pending)} help="Trong danh sách hiện tại" tone="warning" />
+            <MetricCard label="Tự động phát hiện" value={formatNumber(reportSummary.autoFlagged)} help="Do hệ thống gửi lên" tone="info" />
+            <MetricCard label="Bài đã xóa" value={formatNumber(reportSummary.deletedSnapshots)} help="Còn bản ghi để xem lại" tone="neutral" />
+            <MetricCard label="Đang chọn" value={formatNumber(reportSummary.selected)} help="Dùng cho xử lý hàng loạt" tone="success" />
           </div>
 
           <div className={styles.tableCard}>
             {!reportsData && loading ? (
-              <div className={styles.loading}>Dang tai report queue...</div>
+              <div className={styles.loading}>Đang tải danh sách báo cáo...</div>
             ) : visibleReports.length ? (
               <>
                 <div className={styles.tableWrap}>
@@ -1955,11 +1923,11 @@ export default function AdminPage() {
                             }
                           />
                         </th>
-                        <th>Bai viet</th>
-                        <th>Chi tiet report</th>
-                        <th>Trang thai</th>
-                        <th>Thoi gian</th>
-                        <th>Hanh dong</th>
+                        <th>Bài viết</th>
+                        <th>Chi tiết báo cáo</th>
+                        <th>Trạng thái</th>
+                        <th>Thời gian</th>
+                        <th>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1984,17 +1952,17 @@ export default function AdminPage() {
                               <span>@{row.authorUsername}</span>
                               <div className={styles.badgeGroup}>
                                 <Badge tone={row.reportSource === 'auto_nsfw' ? 'info' : 'neutral'}>
-                                  {row.reportSource === 'auto_nsfw' ? 'auto_nsfw' : 'user_report'}
+                                  {formatReportSource(row.reportSource)}
                                 </Badge>
-                                {row.postExists === false ? <Badge tone="warning">snapshot only</Badge> : null}
+                                {row.postExists === false ? <Badge tone="warning">Chỉ còn bản ghi</Badge> : null}
                               </div>
                             </div>
                           </td>
                           <td>
                             <div className={styles.metricList}>
-                              <span>Report: <strong>{formatNumber(row.reportCount || 0)}</strong></span>
-                              <span>Pending: <strong>{formatNumber(row.pendingCount || 0)}</strong></span>
-                              <span>Ly do moi nhat: <strong>{row.latestReason || '--'}</strong></span>
+                              <span>Báo cáo: <strong>{formatNumber(row.reportCount || 0)}</strong></span>
+                              <span>Đang chờ: <strong>{formatNumber(row.pendingCount || 0)}</strong></span>
+                              <span>Lý do mới nhất: <strong>{row.latestReason || '--'}</strong></span>
                             </div>
                           </td>
                           <td>
@@ -2003,13 +1971,13 @@ export default function AdminPage() {
                                 {(row.statuses || []).length ? (
                                   row.statuses?.map((status) => (
                                     <Badge key={status} tone={badgeToneForReport(status)}>
-                                      {status}
+                                      {formatReportStatus(status)}
                                     </Badge>
                                   ))
                                 ) : (
-                                  <Badge tone="warning">pending</Badge>
+                                  <Badge tone="warning">Đang chờ</Badge>
                                 )}
-                                <Badge tone={badgeToneForPost(row.moderationStatus)}>{row.moderationStatus || 'normal'}</Badge>
+                                <Badge tone={badgeToneForPost(row.moderationStatus)}>{formatPostStatus(row.moderationStatus)}</Badge>
                               </div>
                               {row.moderationReason ? <span>{row.moderationReason}</span> : null}
                             </div>
@@ -2017,23 +1985,23 @@ export default function AdminPage() {
                           <td>
                             <div className={styles.cellStack}>
                               <strong>{formatDate(row.lastReportedAt)}</strong>
-                              <span>Tao bai: {formatDate(row.createdAt)}</span>
+                              <span>Tạo bài: {formatDate(row.createdAt)}</span>
                             </div>
                           </td>
                           <td>
                             <div className={styles.actionColumn}>
                               <button type="button" className={styles.primaryButton} onClick={() => void openPostDetail(row.id, 'reports')}>
-                                Review
+                                Xem xét
                               </button>
                               <button
                                 type="button"
                                 className={styles.secondaryButton}
                                 onClick={() => openReportDecisionModal([row.id], row.title || row.id, ['no_violation'])}
                               >
-                                Bo qua
+                                Bỏ qua
                               </button>
                               <a className={styles.inlineLink} href={`/post/${encodeURIComponent(row.id)}`} target="_blank" rel="noreferrer">
-                                Mo bai viet
+                                Mở bài viết
                               </a>
                             </div>
                           </td>
@@ -2044,9 +2012,9 @@ export default function AdminPage() {
                 </div>
                 <div className={styles.pagination}>
                   <button type="button" onClick={() => setReportsPage((previous) => Math.max(previous - 1, 1))} disabled={reportsPage <= 1}>
-                    Truoc
+                    Trước
                   </button>
-                  <span>Trang {reportsData?.page}/{reportsData?.totalPages} • {formatNumber(reportsData?.total)} post bi report</span>
+                  <span>Trang {reportsData?.page}/{reportsData?.totalPages} • {formatNumber(reportsData?.total)} bài bị báo cáo</span>
                   <button
                     type="button"
                     onClick={() => setReportsPage((previous) => Math.min(previous + 1, reportsData?.totalPages || 1))}
@@ -2057,7 +2025,7 @@ export default function AdminPage() {
                 </div>
               </>
             ) : (
-              <EmptyState title="Khong co report phu hop" text="Queue hien tai rong hoac dang bi bo loc qua hep." />
+              <EmptyState title="Không có báo cáo phù hợp" text="Danh sách hiện trống hoặc bộ lọc quá hẹp." />
             )}
           </div>
         </section>
@@ -2067,24 +2035,24 @@ export default function AdminPage() {
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionEyebrow}>Violation center</div>
-              <h2 className={styles.sectionTitle}>Tong hop account va post dang o trang thai can admin can thiep</h2>
+              <div className={styles.sectionEyebrow}>Vi phạm</div>
+              <h2 className={styles.sectionTitle}>Nội dung cần xử lý</h2>
             </div>
           </div>
 
           <div className={styles.metricGridCompact}>
-            <MetricCard label="Tai khoan vi pham" value={formatNumber(violationSummary.violatingAccounts)} help="Tinh ca warning, strike, locked" tone="danger" />
-            <MetricCard label="Post vi pham" value={formatNumber(violationSummary.violatingPosts)} help="Dang co moderationStatus violating" tone="danger" />
-            <MetricCard label="Tai khoan dang hien thi" value={formatNumber(visibleViolationAccounts.length)} help="Sau quick search" tone="warning" />
-            <MetricCard label="Post dang hien thi" value={formatNumber(visibleViolationPosts.length)} help="Sau quick search" tone="warning" />
+            <MetricCard label="Tài khoản vi phạm" value={formatNumber(violationSummary.violatingAccounts)} help="Cảnh báo, khóa hoặc có lỗi" tone="danger" />
+            <MetricCard label="Bài viết vi phạm" value={formatNumber(violationSummary.violatingPosts)} help="Đang ở trạng thái vi phạm" tone="danger" />
+            <MetricCard label="Tài khoản hiển thị" value={formatNumber(visibleViolationAccounts.length)} help="Sau tìm kiếm nhanh" tone="warning" />
+            <MetricCard label="Bài viết hiển thị" value={formatNumber(visibleViolationPosts.length)} help="Sau tìm kiếm nhanh" tone="warning" />
           </div>
 
           <div className={styles.dualPane}>
             <div className={styles.tableCard}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Tai khoan can xu ly</div>
-                  <div className={styles.cardSubtitle}>Lock, warning, strike hoac violating</div>
+                  <div className={styles.cardTitle}>Tài khoản cần xử lý</div>
+                  <div className={styles.cardSubtitle}>Đã khóa, cảnh báo hoặc có lỗi</div>
                 </div>
               </div>
               {visibleViolationAccounts.length ? (
@@ -2095,32 +2063,32 @@ export default function AdminPage() {
                         <div className={styles.stackItemTitle}>@{row.username}</div>
                         <div className={styles.badgeGroup}>
                           <Badge tone={badgeToneForAccount(row.moderationStatus, row.accountLocked)}>
-                            {row.accountLocked ? 'locked' : row.moderationStatus}
+                            {formatAccountStatus(row.moderationStatus, row.accountLocked)}
                           </Badge>
-                          {row.strikesCount ? <Badge tone="warning">{row.strikesCount} gay</Badge> : null}
+                          {row.strikesCount ? <Badge tone="warning">{row.strikesCount} lỗi</Badge> : null}
                         </div>
                         <p>{row.accountLocked ? row.accountLockedReason || '--' : row.moderationReason || '--'}</p>
                       </div>
                       <div className={styles.stackItemMeta}>
                         <span>{row.email}</span>
-                        <span>{formatNumber(row.loginCount)} login</span>
+                        <span>{formatNumber(row.loginCount)} lượt đăng nhập</span>
                         <a className={styles.inlineLink} href={`/profile/${encodeURIComponent(row.username)}`} target="_blank" rel="noreferrer">
-                          Mo profile
+                          Mở hồ sơ
                         </a>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Khong co tai khoan phu hop" text="Quick search hien tai khong khop voi danh sach vi pham." />
+                <EmptyState title="Không có tài khoản phù hợp" text="Từ khóa hiện tại không khớp với danh sách vi phạm." />
               )}
             </div>
 
             <div className={styles.tableCard}>
               <div className={styles.surfaceHeader}>
                 <div>
-                  <div className={styles.cardTitle}>Bai viet vi pham</div>
-                  <div className={styles.cardSubtitle}>Tap trung vao moderation reason va muc do report</div>
+                  <div className={styles.cardTitle}>Bài viết vi phạm</div>
+                  <div className={styles.cardSubtitle}>Lý do kiểm duyệt và mức độ báo cáo</div>
                 </div>
               </div>
               {visibleViolationPosts.length ? (
@@ -2130,23 +2098,23 @@ export default function AdminPage() {
                       <div className={styles.stackItemMain}>
                         <div className={styles.stackItemTitle}>{row.title}</div>
                         <div className={styles.badgeGroup}>
-                          <Badge tone={badgeToneForPost(row.moderationStatus)}>{row.moderationStatus}</Badge>
-                          <Badge tone="warning">{formatNumber(row.reportCount)} report</Badge>
+                          <Badge tone={badgeToneForPost(row.moderationStatus)}>{formatPostStatus(row.moderationStatus)}</Badge>
+                          <Badge tone="warning">{formatNumber(row.reportCount)} báo cáo</Badge>
                         </div>
                         <p>{row.moderationReason || '--'}</p>
                       </div>
                       <div className={styles.stackItemMeta}>
                         <span>@{row.authorUsername}</span>
-                        <span>{formatNumber(row.engagementCount)} engagement</span>
+                        <span>{formatNumber(row.engagementCount)} tương tác</span>
                         <button type="button" className={styles.inlineLinkButton} onClick={() => void openPostDetail(row.id, 'posts')}>
-                          Xem chi tiet
+                          Xem chi tiết
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Khong co bai viet phu hop" text="Quick search hien tai khong khop voi danh sach bai viet vi pham." />
+                <EmptyState title="Không có bài viết phù hợp" text="Từ khóa hiện tại không khớp với danh sách vi phạm." />
               )}
             </div>
           </div>
@@ -2158,13 +2126,13 @@ export default function AdminPage() {
           <div className={`${styles.accountModalCard} ${responsiveStyles.accountModalCard}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div>
-                <h3 className={styles.modalTitle}>Chi tiet tai khoan @{selectedAccountRow.username}</h3>
+                <h3 className={styles.modalTitle}>Chi tiết tài khoản @{selectedAccountRow.username}</h3>
                 <div className={styles.modalSubtitle}>
-                  {selectedAccountRow.email} • {formatNumber(selectedAccountRow.loginCount)} login
+                  {selectedAccountRow.email} • {formatNumber(selectedAccountRow.loginCount)} lượt đăng nhập
                 </div>
               </div>
               <button type="button" className={styles.closeModalBtn} onClick={() => closeAccountDetail()} disabled={selectedAccountSaving}>
-                Dong
+                Đóng
               </button>
             </div>
 
@@ -2173,53 +2141,53 @@ export default function AdminPage() {
                 <div className={styles.modalPostHeader}>
                   <div>
                     <strong>@{selectedAccountRow.username}</strong>
-                    <div className={styles.muted}>Tao luc: {formatDate(selectedAccountRow.createdAt)}</div>
+                    <div className={styles.muted}>Tạo lúc: {formatDate(selectedAccountRow.createdAt)}</div>
                   </div>
                   <div className={styles.badgeGroup}>
-                    <Badge tone={selectedAccountRow.role === 'admin' ? 'info' : 'neutral'}>{selectedAccountRow.role}</Badge>
-                    {selectedAccountDraft.verified ? <Badge tone="success">verified</Badge> : null}
+                    <Badge tone={selectedAccountRow.role === 'admin' ? 'info' : 'neutral'}>{formatRole(selectedAccountRow.role)}</Badge>
+                    {selectedAccountDraft.verified ? <Badge tone="success">Đã xác minh</Badge> : null}
                     <Badge tone={badgeToneForAccount(selectedAccountDraft.moderationStatus, selectedAccountDraft.accountLocked)}>
-                      {selectedAccountDraft.accountLocked ? 'locked' : selectedAccountDraft.moderationStatus}
+                      {formatAccountStatus(selectedAccountDraft.moderationStatus, selectedAccountDraft.accountLocked)}
                     </Badge>
-                    {selectedAccountChanged ? <Badge tone="warning">draft chua luu</Badge> : null}
+                    {selectedAccountChanged ? <Badge tone="warning">Chưa lưu</Badge> : null}
                   </div>
                 </div>
 
                 <div className={styles.accountInfoGrid}>
                   <div>
-                    <span>Lan dang nhap cuoi</span>
+                    <span>Lần đăng nhập cuối</span>
                     <strong>{formatDate(selectedAccountRow.lastLoginAt)}</strong>
                   </div>
                   <div>
-                    <span>So gay</span>
+                    <span>Số lỗi</span>
                     <strong>{formatNumber(selectedAccountRow.strikesCount)}</strong>
                   </div>
                   <div>
-                    <span>Gioi han hien tai</span>
+                    <span>Giới hạn hiện tại</span>
                     <strong>{summarizeAccountRestrictions(selectedAccountDraft)}</strong>
                   </div>
                   <div>
-                    <span>Cap nhat gan nhat</span>
+                    <span>Cập nhật gần nhất</span>
                     <strong>{formatDate(selectedAccountRow.updatedAt)}</strong>
                   </div>
                 </div>
 
                 <div className={styles.surfaceBlock}>
-                  <div className={styles.cardTitle}>Ghi chu trang thai</div>
+                  <div className={styles.cardTitle}>Ghi chú trạng thái</div>
                   <div className={styles.cardSubtitle}>
                     {selectedAccountDraft.accountLocked
-                      ? selectedAccountDraft.lockReason || selectedAccountRow.accountLockedReason || 'Tai khoan dang bi khoa nhung chua co ly do.'
-                      : selectedAccountDraft.moderationReason || selectedAccountRow.moderationReason || 'Chua co ghi chu moderation.'}
+                      ? selectedAccountDraft.lockReason || selectedAccountRow.accountLockedReason || 'Tài khoản đang bị khóa nhưng chưa có lý do.'
+                      : selectedAccountDraft.moderationReason || selectedAccountRow.moderationReason || 'Chưa có ghi chú kiểm duyệt.'}
                   </div>
                   <a className={styles.inlineLink} href={`/profile/${encodeURIComponent(selectedAccountRow.username)}`} target="_blank" rel="noreferrer">
-                    Mo profile nguoi dung
+                    Mở hồ sơ người dùng
                   </a>
                 </div>
               </div>
 
               <div className={styles.modalSide}>
                 <div className={styles.surfaceBlock}>
-                  <div className={styles.cardTitle}>Moderation</div>
+                  <div className={styles.cardTitle}>Kiểm duyệt</div>
                   <div className={styles.controlGroup}>
                     <select
                       className={styles.fullInput}
@@ -2243,21 +2211,21 @@ export default function AdminPage() {
                       value={selectedAccountDraft.moderationReason}
                       disabled={selectedAccountSaving}
                       onChange={(event) => updateAccountDraft(selectedAccountRow.id, { moderationReason: event.target.value })}
-                      placeholder="Ly do moderation / ghi chu noi bo"
+                      placeholder="Lý do kiểm duyệt hoặc ghi chú nội bộ"
                     />
                   </div>
                 </div>
 
                 <div className={styles.surfaceBlock}>
-                  <div className={styles.cardTitle}>Restrictions</div>
+                  <div className={styles.cardTitle}>Giới hạn</div>
                   <div className={styles.accountControlGrid}>
-                    <Toggle checked={selectedAccountDraft.verified} label="Tick xanh" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { verified: next })} />
-                    <Toggle checked={selectedAccountDraft.commentBlocked} label="Chan comment" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { commentBlocked: next })} />
-                    <Toggle checked={selectedAccountDraft.messagingBlocked} label="Chan message" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { messagingBlocked: next })} />
-                    <Toggle checked={selectedAccountDraft.likeBlocked} label="Chan like" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { likeBlocked: next })} />
+                    <Toggle checked={selectedAccountDraft.verified} label="Xác minh" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { verified: next })} />
+                    <Toggle checked={selectedAccountDraft.commentBlocked} label="Chặn bình luận" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { commentBlocked: next })} />
+                    <Toggle checked={selectedAccountDraft.messagingBlocked} label="Chặn nhắn tin" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { messagingBlocked: next })} />
+                    <Toggle checked={selectedAccountDraft.likeBlocked} label="Chặn thích" disabled={selectedAccountSaving} onChange={(next) => updateAccountDraft(selectedAccountRow.id, { likeBlocked: next })} />
                   </div>
                   <label className={styles.inlineFieldCompact}>
-                    <span>Gioi han bai/ngay</span>
+                    <span>Giới hạn bài/ngày</span>
                     <input
                       className={styles.fullInput}
                       type="number"
@@ -2274,10 +2242,10 @@ export default function AdminPage() {
                 </div>
 
                 <div className={styles.surfaceBlock}>
-                  <div className={styles.cardTitle}>Khoa tai khoan</div>
+                  <div className={styles.cardTitle}>Khóa tài khoản</div>
                   <Toggle
                     checked={selectedAccountDraft.accountLocked}
-                    label={selectedAccountDraft.accountLocked ? 'Dang khoa' : 'Dang mo'}
+                    label={selectedAccountDraft.accountLocked ? 'Đang khóa' : 'Đang mở'}
                     disabled={selectedAccountSaving}
                     onChange={(next) => updateAccountDraft(selectedAccountRow.id, { accountLocked: next })}
                   />
@@ -2287,7 +2255,7 @@ export default function AdminPage() {
                     value={selectedAccountDraft.lockReason}
                     disabled={selectedAccountSaving}
                     onChange={(event) => updateAccountDraft(selectedAccountRow.id, { lockReason: event.target.value })}
-                    placeholder="Ly do khoa tai khoan"
+                    placeholder="Lý do khóa tài khoản"
                   />
                 </div>
 
@@ -2298,7 +2266,7 @@ export default function AdminPage() {
                     onClick={() => resetAccountRow(selectedAccountRow)}
                     disabled={selectedAccountSaving || !selectedAccountChanged}
                   >
-                    Reset draft
+                    Đặt lại
                   </button>
                   <button
                     type="button"
@@ -2306,7 +2274,7 @@ export default function AdminPage() {
                     onClick={() => void saveAccountRow(selectedAccountRow)}
                     disabled={selectedAccountSaving || !selectedAccountChanged}
                   >
-                    {selectedAccountSaving ? 'Dang luu...' : 'Luu thay doi'}
+                    {selectedAccountSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
                 </div>
               </div>
@@ -2320,17 +2288,17 @@ export default function AdminPage() {
           <div className={`${styles.modalCard} ${responsiveStyles.modalCard}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div>
-                <h3 className={styles.modalTitle}>Chi tiet bai viet</h3>
+                <h3 className={styles.modalTitle}>Chi tiết bài viết</h3>
                 <div className={styles.modalSubtitle}>
-                  Nguon: {postDetailSource === 'reports' ? 'Report queue' : 'Danh sach bai viet'}
+                  Nguồn: {postDetailSource === 'reports' ? 'Báo cáo' : 'Danh sách bài viết'}
                 </div>
               </div>
               <button type="button" className={styles.closeModalBtn} onClick={closePostDetail} disabled={postDetailSaving}>
-                Dong
+                Đóng
               </button>
             </div>
 
-            {postDetailLoading ? <div className={styles.loading}>Dang tai chi tiet...</div> : null}
+            {postDetailLoading ? <div className={styles.loading}>Đang tải chi tiết...</div> : null}
 
             {!postDetailLoading && postDetailData?.post ? (
               <div className={`${styles.modalContent} ${responsiveStyles.modalContent}`}>
@@ -2341,9 +2309,9 @@ export default function AdminPage() {
                       <div className={styles.muted}>{formatDate(postDetailData.post.createdAt)}</div>
                     </div>
                     <div className={styles.badgeGroup}>
-                      <Badge tone={badgeToneForPost(postDetailData.post.moderationStatus)}>{postDetailData.post.moderationStatus || 'normal'}</Badge>
+                      <Badge tone={badgeToneForPost(postDetailData.post.moderationStatus)}>{formatPostStatus(postDetailData.post.moderationStatus)}</Badge>
                       <Badge tone={postDetailData.post.allowComments ? 'success' : 'warning'}>
-                        {postDetailData.post.allowComments ? 'comments open' : 'comments locked'}
+                        {postDetailData.post.allowComments ? 'Đang mở bình luận' : 'Đã khóa bình luận'}
                       </Badge>
                     </div>
                   </div>
@@ -2352,7 +2320,7 @@ export default function AdminPage() {
                     const previewUrl = resolveMediaUrl(
                       postDetailData.post.thumbnailUrl || postDetailData.post.media?.[0]?.url || postDetailData.post.imageUrl || '',
                     )
-                    if (!previewUrl) return <div className={styles.snapshotFallback}>Khong co media preview</div>
+                    if (!previewUrl) return <div className={styles.snapshotFallback}>Không có media xem trước</div>
                     if (isVideoPreview(postDetailData.post.mediaType, previewUrl)) {
                       return <video className={styles.modalPreview} src={previewUrl} controls playsInline preload="metadata" />
                     }
@@ -2362,25 +2330,24 @@ export default function AdminPage() {
                   {postDetailData.post.content ? <div className={styles.modalCaption}>{postDetailData.post.content}</div> : null}
 
                   <div className={styles.modalStats}>
-                    <span>Like: {formatNumber(postDetailData.post.likesCount)}</span>
-                    <span>Comment: {formatNumber(postDetailData.post.commentsCount)}</span>
-                    <span>Report: {formatNumber(postDetailData.post.reportCount)}</span>
-                    <span>Created: {formatDate(postDetailData.post.createdAt)}</span>
+                    <span>Thích: {formatNumber(postDetailData.post.likesCount)}</span>
+                    <span>Bình luận: {formatNumber(postDetailData.post.commentsCount)}</span>
+                    <span>Báo cáo: {formatNumber(postDetailData.post.reportCount)}</span>
+                    <span>Ngày tạo: {formatDate(postDetailData.post.createdAt)}</span>
                   </div>
                 </div>
 
                 <div className={styles.modalSide}>
                   <div className={styles.modalInfoGrid}>
                     <div><b>ID:</b> {postDetailData.post.id}</div>
-                    <div><b>Author:</b> @{postDetailData.post.authorUsername}</div>
-                    <div><b>Nguon report:</b> {postDetailData.post.reportSource || 'user_report'}</div>
-                    <div><b>Lan report gan nhat:</b> {formatDate(postDetailData.post.lastReportedAt)}</div>
-                    <div><b>Post ton tai:</b> {postDetailData.post.postExists === false ? 'Khong' : 'Co'}</div>
+                    <div><b>Tác giả:</b> @{postDetailData.post.authorUsername}</div>
+                    <div><b>Nguồn báo cáo:</b> {formatReportSource(postDetailData.post.reportSource)}</div>
+                    <div><b>Báo cáo gần nhất:</b> {formatDate(postDetailData.post.lastReportedAt)}</div>
+                    <div><b>Bài viết còn tồn tại:</b> {postDetailData.post.postExists === false ? 'Không' : 'Có'}</div>
                   </div>
 
                   <div className={styles.surfaceBlock}>
-                    <div className={styles.cardTitle}>Moderation draft</div>
-                    <div className={styles.cardSubtitle}>Cap nhat trang thai moderation va dung chung note cho quick actions</div>
+                    <div className={styles.cardTitle}>Kiểm duyệt</div>
                     <div className={styles.controlGroup}>
                       <select
                         className={styles.fullInput}
@@ -2408,16 +2375,16 @@ export default function AdminPage() {
                             reason: event.target.value,
                           }))
                         }
-                        placeholder="Ly do moderation / ghi chu gui cho user"
+                        placeholder="Lý do kiểm duyệt hoặc ghi chú gửi người dùng"
                       />
                       <button type="button" className={styles.primaryButton} onClick={() => void savePostModeration()} disabled={postDetailSaving}>
-                        {postDetailSaving ? 'Dang luu...' : 'Luu moderation'}
+                        {postDetailSaving ? 'Đang lưu...' : 'Lưu kiểm duyệt'}
                       </button>
                     </div>
                   </div>
 
                   <div className={styles.surfaceBlock}>
-                    <div className={styles.cardTitle}>Quick actions</div>
+                    <div className={styles.cardTitle}>Thao tác nhanh</div>
                     <div className={styles.inlineActions}>
                       <button
                         type="button"
@@ -2425,7 +2392,7 @@ export default function AdminPage() {
                         onClick={() => void runPostActionFromDetail(postDetailData.post.allowComments ? 'lock_comments' : 'unlock_comments')}
                         disabled={postDetailSaving}
                       >
-                        {postDetailData.post.allowComments ? 'Khoa comment' : 'Mo comment'}
+                        {postDetailData.post.allowComments ? 'Khóa bình luận' : 'Mở bình luận'}
                       </button>
                       {postDetailData.reports.length ? (
                         <button
@@ -2434,37 +2401,37 @@ export default function AdminPage() {
                           onClick={() => openReportDecisionModal([postDetailData.post.id], postDetailData.post.title || postDetailData.post.id, ['no_violation'], 'detail')}
                           disabled={postDetailSaving}
                         >
-                          Xu ly report
+                          Xử lý báo cáo
                         </button>
                       ) : null}
                       <button type="button" className={styles.dangerButton} onClick={() => void runPostActionFromDetail('delete_post')} disabled={postDetailSaving}>
-                        Xoa bai viet
+                        Xóa bài viết
                       </button>
                     </div>
                     <a className={styles.inlineLink} href={postDetailData.post.postPath || `/post/${postDetailData.post.id}`} target="_blank" rel="noreferrer">
-                      Mo bai viet tren giao dien nguoi dung
+                      Mở bài viết trên giao diện người dùng
                     </a>
                   </div>
 
                   <div className={styles.reportList}>
-                    <div className={styles.reportListTitle}>Lich su report</div>
+                    <div className={styles.reportListTitle}>Lịch sử báo cáo</div>
                     {postDetailData.reports.length ? (
                       postDetailData.reports.map((item) => (
                         <div key={item.id} className={styles.reportItem}>
                           <div className={styles.badgeGroup}>
-                            <Badge tone={badgeToneForReport(item.status)}>{item.status}</Badge>
+                            <Badge tone={badgeToneForReport(item.status)}>{formatReportStatus(item.status)}</Badge>
                             <Badge tone={item.source === 'auto_nsfw' ? 'info' : 'neutral'}>
-                              {item.source === 'auto_nsfw' ? 'auto_nsfw' : 'user_report'}
+                              {formatReportSource(item.source)}
                             </Badge>
                           </div>
-                          <div><b>@{item.reporterUsername || 'unknown'}</b></div>
+                          <div><b>@{item.reporterUsername || 'không rõ'}</b></div>
                           {item.reason ? <div>{item.reason}</div> : null}
-                          {item.detectionSignals?.length ? <div className={styles.muted}>Signals: {item.detectionSignals.join(', ')}</div> : null}
+                          {item.detectionSignals?.length ? <div className={styles.muted}>Tín hiệu: {item.detectionSignals.join(', ')}</div> : null}
                           <div className={styles.muted}>{formatDate(item.createdAt)}</div>
                         </div>
                       ))
                     ) : (
-                      <div className={styles.reportItem}>Bai viet nay chua co lich su report.</div>
+                      <div className={styles.reportItem}>Bài viết này chưa có lịch sử báo cáo.</div>
                     )}
                   </div>
                 </div>
@@ -2479,11 +2446,11 @@ export default function AdminPage() {
           <div className={`${styles.penaltyModalCard} ${responsiveStyles.penaltyModalCard}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div>
-                <h3 className={styles.modalTitle}>Xu ly report queue</h3>
-                <div className={styles.modalSubtitle}>Target: {reportDecisionTarget.label}</div>
+                <h3 className={styles.modalTitle}>Xử lý báo cáo</h3>
+                <div className={styles.modalSubtitle}>Mục tiêu: {reportDecisionTarget.label}</div>
               </div>
               <button type="button" className={styles.closeModalBtn} onClick={() => setReportDecisionTarget(null)} disabled={reportDecisionSaving}>
-                Dong
+                Đóng
               </button>
             </div>
 
@@ -2509,15 +2476,15 @@ export default function AdminPage() {
                 className={styles.penaltyReasonInput}
                 value={reportDecisionReason}
                 onChange={(event) => setReportDecisionReason(event.target.value)}
-                placeholder="Ly do xu ly / ghi chu moderation"
+                placeholder="Lý do xử lý hoặc ghi chú kiểm duyệt"
                 rows={4}
                 disabled={reportDecisionSaving}
               />
 
               <div className={styles.inlineActions}>
-                <Badge tone="info">Dang chon: {sanitizeReportActions(reportDecisionActions).join(', ')}</Badge>
+                <Badge tone="info">Đang chọn: {sanitizeReportActions(reportDecisionActions).map(formatReportDecision).join(', ')}</Badge>
                 <button type="button" className={styles.secondaryButton} onClick={() => setReportDecisionTarget(null)} disabled={reportDecisionSaving}>
-                  Huy
+                  Hủy
                 </button>
                 <button
                   type="button"
@@ -2525,7 +2492,7 @@ export default function AdminPage() {
                   onClick={() => void saveReportDecision()}
                   disabled={reportDecisionSaving || !sanitizeReportActions(reportDecisionActions).length}
                 >
-                  {reportDecisionSaving ? 'Dang luu...' : 'Luu quyet dinh'}
+                  {reportDecisionSaving ? 'Đang lưu...' : 'Lưu quyết định'}
                 </button>
               </div>
             </div>

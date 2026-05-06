@@ -1,9 +1,9 @@
 .page {
-  --admin-bg: #f4efe8;
-  --admin-surface: rgba(255, 255, 255, 0.94);
-  --admin-surface-strong: #fffdf9;
-  --admin-border: rgba(80, 52, 32, 0.14);
-  --admin-border-strong: rgba(80, 52, 32, 0.22);
+  --admin-bg: #f7f5f2;
+  --admin-surface: #ffffff;
+  --admin-surface-strong: #ffffff;
+  --admin-border: rgba(36, 25, 17, 0.1);
+  --admin-border-strong: rgba(36, 25, 17, 0.18);
   --admin-text: #241911;
   --admin-muted: #6f5b4d;
   --admin-primary: #b55233;
@@ -12,21 +12,24 @@
   --admin-warning: #a96a14;
   --admin-danger: #b42318;
   --admin-info: #1d5b8f;
+  --admin-control-height: 42px;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px 28px 48px;
+  padding: 20px 24px 40px;
   color: var(--admin-text);
-  background:
-    radial-gradient(circle at top left, rgba(255, 216, 192, 0.7), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(255, 227, 190, 0.52), transparent 22%),
-    linear-gradient(180deg, #fcfaf7 0%, var(--admin-bg) 100%);
+  background: var(--admin-bg);
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
 }
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 18px;
-  margin-bottom: 18px;
+  grid-template-columns: 1fr;
+  margin-bottom: 14px;
 }
 
 .heroContent,
@@ -35,17 +38,13 @@
 .tableCard,
 .panel {
   border: 1px solid var(--admin-border);
-  border-radius: 28px;
+  border-radius: 20px;
   background: var(--admin-surface);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 18px 48px rgba(64, 35, 13, 0.08);
+  box-shadow: 0 10px 28px rgba(36, 25, 17, 0.06);
 }
 
 .heroContent {
-  padding: 30px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 245, 236, 0.92)),
-    radial-gradient(circle at top right, rgba(255, 189, 143, 0.26), transparent 42%);
+  padding: 22px;
 }
 
 .heroEyebrow,
@@ -61,10 +60,10 @@
 }
 
 .title {
-  margin: 14px 0 10px;
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.05;
-  max-width: 14ch;
+  margin: 10px 0 12px;
+  font-size: clamp(26px, 3vw, 36px);
+  line-height: 1.1;
+  max-width: none;
 }
 
 .subtitle {
@@ -79,7 +78,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px 14px;
-  margin-top: 18px;
   color: var(--admin-muted);
   font-size: 13px;
 }
@@ -92,7 +90,12 @@
 }
 
 .heroActions {
-  margin-top: 22px;
+  align-items: flex-end;
+  margin-top: 16px;
+}
+
+.inlineActions {
+  align-items: center;
 }
 
 .primaryButton,
@@ -106,10 +109,16 @@
   appearance: none;
   border: 0;
   border-radius: 999px;
+  height: var(--admin-control-height);
+  min-height: var(--admin-control-height);
   padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     transform 0.18s ease,
@@ -127,13 +136,13 @@
 .closeModalBtn:hover,
 .pagination button:hover,
 .inlineLinkButton:hover {
-  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(64, 35, 13, 0.08);
 }
 
 .primaryButton {
-  background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-deep));
+  background: var(--admin-primary-deep);
   color: #fff;
-  box-shadow: 0 12px 26px rgba(181, 82, 51, 0.24);
+  box-shadow: 0 8px 18px rgba(181, 82, 51, 0.18);
 }
 
 .secondaryButton,
@@ -150,7 +159,7 @@
 }
 
 .dangerButton {
-  background: linear-gradient(135deg, #d94d3f, var(--admin-danger));
+  background: var(--admin-danger);
   color: #fff;
 }
 
@@ -171,7 +180,10 @@
 .toggleInline {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  height: var(--admin-control-height);
+  min-height: var(--admin-control-height);
   padding: 10px 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.86);
@@ -247,6 +259,15 @@
 
 .inlineField input,
 .inlineField select,
+.compactSelect,
+.searchBox input,
+.fullInput {
+  height: var(--admin-control-height);
+}
+
+.inlineField input,
+.inlineField select,
+.compactSelect,
 .searchBox input,
 .fullInput,
 .textArea,
@@ -267,6 +288,7 @@
 
 .inlineField input:focus,
 .inlineField select:focus,
+.compactSelect:focus,
 .searchBox input:focus,
 .fullInput:focus,
 .textArea:focus,
@@ -364,10 +386,10 @@
 }
 
 .metricCard {
-  padding: 18px;
-  border-radius: 22px;
+  padding: 16px;
+  border-radius: 18px;
   border: 1px solid transparent;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(251, 244, 238, 0.84));
+  background: #fff;
 }
 
 .metricCardNeutral {
@@ -376,22 +398,22 @@
 
 .metricCardSuccess {
   border-color: rgba(31, 122, 82, 0.22);
-  background: linear-gradient(180deg, rgba(242, 255, 249, 0.96), rgba(233, 248, 240, 0.88));
+  background: rgba(242, 255, 249, 0.96);
 }
 
 .metricCardWarning {
   border-color: rgba(169, 106, 20, 0.22);
-  background: linear-gradient(180deg, rgba(255, 248, 234, 0.98), rgba(255, 242, 214, 0.9));
+  background: rgba(255, 248, 234, 0.98);
 }
 
 .metricCardDanger {
   border-color: rgba(180, 35, 24, 0.18);
-  background: linear-gradient(180deg, rgba(255, 243, 241, 0.98), rgba(255, 233, 230, 0.9));
+  background: rgba(255, 243, 241, 0.98);
 }
 
 .metricCardInfo {
   border-color: rgba(29, 91, 143, 0.22);
-  background: linear-gradient(180deg, rgba(241, 249, 255, 0.98), rgba(230, 243, 255, 0.92));
+  background: rgba(241, 249, 255, 0.98);
 }
 
 .metricLabel {
@@ -404,14 +426,16 @@
 
 .metricValue {
   margin-top: 8px;
-  font-size: 31px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 900;
 }
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  align-items: flex-end;
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -420,14 +444,18 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  align-items: flex-end;
 }
 
 .tabButton {
-  display: grid;
-  gap: 4px;
-  min-width: 154px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  height: var(--admin-control-height);
+  min-height: var(--admin-control-height);
   text-align: left;
-  padding: 12px 15px;
+  padding: 11px 14px;
   border: 1px solid var(--admin-border);
   background: rgba(255, 255, 255, 0.84);
   color: var(--admin-text);
@@ -445,9 +473,9 @@
 }
 
 .tabButtonActive {
-  background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-deep));
+  background: var(--admin-primary-deep);
   color: #fff;
-  box-shadow: 0 14px 28px rgba(181, 82, 51, 0.22);
+  box-shadow: 0 8px 18px rgba(181, 82, 51, 0.18);
 }
 
 .tabButtonActive small {
@@ -456,8 +484,10 @@
 
 .toolbarControls {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: flex-end;
+  justify-content: flex-end;
 }
 
 .syncBadge {
@@ -474,7 +504,8 @@
 }
 
 .searchBox {
-  min-width: 320px;
+  flex: 1 1 320px;
+  min-width: min(320px, 100%);
   display: grid;
   gap: 6px;
 }
@@ -517,6 +548,13 @@
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.filters > .primaryButton,
+.filters > .secondaryButton,
+.toolbarControls > .primaryButton,
+.toolbarControls > .secondaryButton {
+  align-self: flex-end;
 }
 
 .overviewGrid {
@@ -718,6 +756,15 @@
 
 .actionColumn {
   min-width: 160px;
+  align-items: flex-start;
+  justify-items: stretch;
+}
+
+.actionColumn .primaryButton,
+.actionColumn .secondaryButton,
+.actionColumn .dangerButton {
+  width: 100%;
+  min-width: 132px;
 }
 
 .switch {
@@ -861,6 +908,12 @@
   border: 0;
   font-size: 13px;
   font-weight: 800;
+}
+
+.inlineLinkButton {
+  height: auto;
+  min-height: auto;
+  justify-content: flex-start;
 }
 
 .surfaceBlock {
