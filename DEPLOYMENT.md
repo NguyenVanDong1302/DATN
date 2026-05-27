@@ -108,14 +108,14 @@ PORT=4000
 MONGO_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/<database_name>?retryWrites=true&w=majority&appName=Cluster0
 JWT_SECRET=replace_with_a_long_random_secret
 MEDIA_PUBLIC_BASE_URL=https://api.example.com
-CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app
+CORS_ALLOWED_ORIGINS=https://datn-hx48.vercel.app
 CORS_ALLOW_VERCEL_PREVIEWS=true
 ```
 
 If you also use a custom Vercel domain, add it to `CORS_ALLOWED_ORIGINS` too:
 
 ```env
-CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://your-custom-domain.com
+CORS_ALLOWED_ORIGINS=https://datn-hx48.vercel.app/,https://your-custom-domain.com
 ```
 
 ### 3. Expose the backend to the Internet over HTTPS

@@ -2,7 +2,10 @@ const jwt = require("jsonwebtoken");
 const { AppError } = require("./errors");
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+  return (
+    process.env.JWT_SECRET ||
+    "3fcb9fbccd5c9ce069ea26c2ff9b2ba4f0dc10ccf23e60706add40e63a16b16f"
+  );
 }
 
 function getJwtExpiresIn() {
