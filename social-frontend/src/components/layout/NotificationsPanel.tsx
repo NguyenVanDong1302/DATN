@@ -6,9 +6,9 @@ import type { NotificationItem } from '../../features/notifications/notification
 import styles from '../../pages/NotificationsPage.module.css'
 
 const FILTERS = [
-  { key: 'all', label: 'Tat ca' },
-  { key: 'activity', label: 'Tuong tac bai viet' },
-  { key: 'follow', label: 'Theo doi' },
+  { key: 'all', label: 'Tất cả' },
+  { key: 'activity', label: 'Tương tác bài viết' },
+  { key: 'follow', label: 'Theo dõi' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
@@ -48,9 +48,9 @@ function buildLabel(item: NotificationItem) {
   const first = names[0] || 'Ai đó'
   const total = Number(item.totalEvents) || names.length || 1
   const others = Math.max(total - 1, 0)
-  if (item.type === 'follow') return others > 0 ? `${first} và ${others} người khác đã theo dõi bạn` : `${first} started following you`
-  if (item.type === 'like') return others > 0 ? `${first} và ${others} người khác đã thích bài viết của bạn` : `${first} liked your post`
-  return others > 0 ? `${first} và ${others} người khác đã bình luận bài viết của bạn` : `${first} commented: ${item.previewText || ''}`
+  if (item.type === 'follow') return others > 0 ? `${first} và ${others} người khác đã theo dõi bạn` : `${first} đã theo dõi bạn`
+  if (item.type === 'like') return others > 0 ? `${first} và ${others} người khác đã thích bài viết của bạn` : `${first} đã thích bài viết của bạn`
+  return others > 0 ? `${first} và ${others} người khác đã bình luận bài viết của bạn` : `${first} đã bình luận: ${item.previewText || ''}`
 }
 function getAccentClass(type: string) {
   if (type === 'follow') return styles.avatarFollow

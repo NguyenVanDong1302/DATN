@@ -171,13 +171,13 @@ function getMessageReactionDisplay(message: ChatMessage) {
 
 function buildMessagePreview(message: ChatMessage) {
   const mediaItems = getMessageMediaItems(message)
-  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Da gui 1 video' : 'Da gui 1 anh'
+  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Đã gửi 1 video' : 'Đã gửi 1 ảnh'
   if (mediaItems.length > 1) {
     const videoCount = mediaItems.filter((item) => item.type === 'video').length
     const imageCount = mediaItems.length - videoCount
-    if (videoCount === mediaItems.length) return `Da gui ${videoCount} video`
-    if (imageCount === mediaItems.length) return `Da gui ${imageCount} anh`
-    return `Da gui ${mediaItems.length} tep`
+    if (videoCount === mediaItems.length) return `Đã gửi ${videoCount} video`
+    if (imageCount === mediaItems.length) return `Đã gửi ${imageCount} ảnh`
+    return `Đã gửi ${mediaItems.length} tệp`
   }
   return message.text
 }
@@ -308,7 +308,7 @@ export default function MessagesPage() {
         : activeCall?.phase === 'connecting'
           ? 'Đang kết nối cuộc gọi'
           : 'Đang trong cuộc gọi'
-    : activeConversation?.peer.bio || 'Instagram User'
+    : activeConversation?.peer.bio || 'Người dùng T'
   const isBlocked = Boolean(settings?.isBlocked ?? activeConversation?.isBlocked)
   const isMuted = Boolean(mutedConversationIds[activeId])
   const shouldShowInbox = !isCompactLayout || compactView === 'inbox'
@@ -865,7 +865,7 @@ export default function MessagesPage() {
         contentScrollRef.current.scrollTop = nextScrollHeight - previousScrollHeight + previousScrollTop
       })
     } catch (err: any) {
-      setError(err?.message || 'Khong tai duoc tin nhan cu hon')
+      setError(err?.message || 'Không tải được tin nhắn cũ hơn')
     } finally {
       setLoadingOlder(false)
     }
@@ -1013,7 +1013,7 @@ export default function MessagesPage() {
             <img className="ig-msg__avatar" src={avatarOf(user)} alt={user.username} />
             <div className="ig-msg__searchMeta">
               <div className="ig-msg__itemName">{user.username}</div>
-              <div className="ig-msg__itemLast">{user.bio || user.email || 'Instagram User'}</div>
+              <div className="ig-msg__itemLast">{user.bio || user.email || 'Người dùng T'}</div>
             </div>
           </button>
         ))}
@@ -1056,7 +1056,7 @@ export default function MessagesPage() {
                 {searchLoading ? <div className="ig-msg__searchEmpty">Đang tải danh sách người dùng...</div> : null}
                 {!searchLoading ? (
                   <>
-                    {renderSearchGroup('Đang follow', searchResults.following)}
+                    {renderSearchGroup('Đang theo dõi', searchResults.following)}
                     {renderSearchGroup('Đề xuất', searchResults.suggested)}
                     {!searchResults.following.length && !searchResults.suggested.length ? <div className="ig-msg__searchEmpty">{query.trim() ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng để gợi ý.'}</div> : null}
                   </>
@@ -1066,7 +1066,7 @@ export default function MessagesPage() {
           </div>
 
           <div className="ig-msg__sectionHead">
-            <div className="ig-msg__sectionTitle">Messages</div>
+            <div className="ig-msg__sectionTitle">Tin nhắn</div>
           </div>
 
           <div className="ig-msg__list">
@@ -1133,8 +1133,8 @@ export default function MessagesPage() {
                     <div className="ig-msg__hero">
                       <img className="ig-msg__heroAvatar" src={avatarOf(activeConversation.peer)} alt={activeConversation.peer.username} />
                       <div className="ig-msg__heroName">{displayPeerName}</div>
-                      <div className="ig-msg__heroUser">{activeConversation.peer.bio || 'Instagram'}</div>
-                      <button className="ig-msg__profileBtn" type="button" onClick={() => navigate(`/profile/${activeConversation.peer.username}`)}>View profile</button>
+                      <div className="ig-msg__heroUser">{activeConversation.peer.bio || 'T'}</div>
+                      <button className="ig-msg__profileBtn" type="button" onClick={() => navigate(`/profile/${activeConversation.peer.username}`)}>Xem trang cá nhân</button>
                     </div>
 
                     <div className="ig-msg__body">
@@ -1146,7 +1146,7 @@ export default function MessagesPage() {
                             onClick={() => void loadOlderMessages()}
                             disabled={loadingOlder || detailLoading}
                           >
-                            {loadingOlder ? 'Dang tai tin nhan cu hon...' : 'Xem tin nhan cu hon'}
+                            {loadingOlder ? 'Đang tải tin nhắn cũ hơn...' : 'Xem tin nhắn cũ hơn'}
                           </button>
                         </div>
                       ) : null}
@@ -1264,7 +1264,7 @@ export default function MessagesPage() {
                       <button className="ig-msg__emoji" type="button">☺</button>
                       <input
                         className="ig-msg__input"
-                        placeholder={isBlocked ? 'Đã chặn người dùng' : 'Message...'}
+                        placeholder={isBlocked ? 'Đã chặn người dùng' : 'Nhắn tin...'}
                         value={text}
                         disabled={isBlocked}
                         onChange={(e) => setText(e.target.value)}

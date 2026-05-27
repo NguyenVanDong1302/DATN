@@ -111,7 +111,7 @@ export function CallWindow({
 
   const content = call.isMinimized ? (
     <div className={cx(styles.window, styles.windowMinimized)}>
-        <div className={styles.miniBar}>
+      <div className={styles.miniBar}>
         <img className={styles.miniAvatar} src={avatarUrl} alt={call.peer.username} />
         <div className={styles.miniMeta}>
           <div className={styles.miniTitle}>{call.peer.username}</div>
@@ -131,7 +131,7 @@ export function CallWindow({
     <div className={styles.window}>
       <div className={styles.header}>
         <div className={styles.meta}>
-          <div className={styles.eyebrow}>{call.mode === 'video' ? 'Video call' : 'Voice call'}</div>
+          <div className={styles.eyebrow}>{call.mode === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}</div>
           <div className={styles.title}>{callTitle(call)}</div>
           <div className={styles.subtitle}>{callSubtitle(call)}</div>
         </div>
@@ -151,7 +151,7 @@ export function CallWindow({
               <img className={styles.avatar} src={avatarUrl} alt={call.peer.username} />
               <div className={styles.callState}>
                 <div className={styles.callName}>{call.peer.username}</div>
-                <div className={styles.callHint}>{call.peer.bio || 'Instagram User'}</div>
+                <div className={styles.callHint}>{call.peer.bio || 'Người dùng T'}</div>
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 # DATN Social App
 
-Instagram-like social network project built with:
+T-like social network project built with:
 
 - Frontend: React + Vite + TypeScript
 - Backend: Node.js + Express

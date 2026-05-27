@@ -28,7 +28,7 @@ export default function AccountLockedPage() {
     const fromState = (location.state as any)?.lockInfo || {}
     const fromStorage = readLockPayload()
     return {
-      reason: fromState.reason || fromStorage.reason || 'Tai khoan cua ban dang tam khoa. Vui long lien he admin.',
+      reason: fromState.reason || fromStorage.reason || 'Tài khoản của bạn đang tạm khóa. Vui lòng liên hệ quản trị viên.',
       lockedAt: fromState.lockedAt || fromStorage.lockedAt || null,
     }
   }, [location.state])
@@ -65,7 +65,7 @@ export default function AccountLockedPage() {
           boxShadow: '0 10px 40px rgba(153, 27, 27, 0.08)',
         }}
       >
-        <h1 style={{ marginTop: 0, marginBottom: 8, color: '#991b1b' }}>Tai khoan da bi khoa</h1>
+        <h1 style={{ marginTop: 0, marginBottom: 8, color: '#991b1b' }}>Tài khoản đã bị khóa</h1>
         <p style={{ marginTop: 0, color: '#7f1d1d' }}>{payload.reason}</p>
         <div style={{ marginTop: 12, color: '#7f1d1d', fontSize: 14 }}>
           <strong>Thoi gian khoa:</strong> {lockedAtText}
@@ -84,7 +84,7 @@ export default function AccountLockedPage() {
             cursor: 'pointer',
           }}
         >
-          Quay lai dang nhap
+          Quay lại đăng nhập
         </button>
       </section>
     </div>

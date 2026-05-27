@@ -91,7 +91,7 @@ export default function PostPage() {
       setPost(res?.data?.post || res?.data || null)
     } catch (error: any) {
       setPost(null)
-      toast.push(error?.message || 'Khong tai duoc bai viet')
+      toast.push(error?.message || 'Không tải được bài viết')
     } finally {
       setLoadingPost(false)
     }
@@ -107,7 +107,7 @@ export default function PostPage() {
         const rows = Array.isArray(res?.data?.items) ? res.data.items : []
         setSuggested(rows.filter((item) => String(item?._id || '') !== excludePostId).slice(0, 8))
       } catch (error: any) {
-        const message = error?.message || 'Khong tai duoc bai viet de xuat'
+        const message = error?.message || 'Không tải được bài viết đề xuất'
         setSuggestedError(message)
         toast.push(message)
       } finally {
@@ -168,7 +168,7 @@ export default function PostPage() {
       setPost((curr) => (curr ? { ...curr, ...(res?.data || {}) } : curr))
     } catch (error: any) {
       setPost((curr) => (curr ? { ...curr, ...previous } : curr))
-      toast.push(error?.message || 'Khong the cap nhat luot thich')
+      toast.push(error?.message || 'Không thể cập nhật lượt thích')
     }
   }
 
@@ -180,8 +180,8 @@ export default function PostPage() {
   return (
     <section className={`${styles.page} ${responsiveStyles.page}`}>
       <div className={styles.mainSection}>
-        {loadingPost && !post ? <div className={styles.stateCard}>Dang tai bai viet...</div> : null}
-        {!loadingPost && !post ? <div className={styles.stateCard}>Khong tim thay bai viet.</div> : null}
+        {loadingPost && !post ? <div className={styles.stateCard}>Đang tải bài viết...</div> : null}
+        {!loadingPost && !post ? <div className={styles.stateCard}>Không tìm thấy bài viết.</div> : null}
 
         {post ? (
           <PostCard
@@ -204,7 +204,7 @@ export default function PostPage() {
 
       <section className={`${styles.suggestedSection} ${responsiveStyles.suggestedSection}`}>
         <div className={`${styles.suggestedHeader} ${responsiveStyles.suggestedHeader}`}>
-          <h2 className={styles.suggestedTitle}>Bai viet de xuat</h2>
+          <h2 className={styles.suggestedTitle}>Bài viết đề xuất</h2>
           <button
             type="button"
             className={styles.refreshBtn}
@@ -214,18 +214,18 @@ export default function PostPage() {
               void loadSuggested(id)
             }}
           >
-            {loadingSuggested ? 'Dang tai...' : 'Lam moi'}
+            {loadingSuggested ? 'Đang tải...' : 'Làm mới'}
           </button>
         </div>
 
         {suggestedError ? <div className={styles.errorCard}>{suggestedError}</div> : null}
 
         {loadingSuggested && !suggestedItems.length ? (
-          <div className={styles.stateCard}>Dang tai bai viet de xuat...</div>
+          <div className={styles.stateCard}>Đang tải bài viết đề xuất...</div>
         ) : null}
 
         {!loadingSuggested && !suggestedItems.length ? (
-          <div className={styles.stateCard}>Chua co bai viet de xuat.</div>
+          <div className={styles.stateCard}>Chưa có bài viết đề xuất.</div>
         ) : null}
 
         {suggestedItems.length ? (
@@ -250,7 +250,7 @@ export default function PostPage() {
                           <img className={styles.media} src={preview.src} alt={item.content || 'suggested post'} />
                         )
                       ) : (
-                        <div className={styles.mediaPlaceholder}>Khong co media</div>
+                        <div className={styles.mediaPlaceholder}>Không có media</div>
                       )}
 
                       {preview?.type === 'video' ? <span className={styles.videoBadge}>Video</span> : null}
@@ -267,16 +267,16 @@ export default function PostPage() {
                     </button>
 
                     <p className={item.content ? styles.caption : styles.captionMuted}>
-                      {item.content || 'Bai viet khong co mo ta.'}
+                      {item.content || 'Bài viết không có mô tả.'}
                     </p>
 
                     <div className={styles.metaRow}>
-                      <span>{likesCount} luot thich</span>
-                      <span>{commentsCount} binh luan</span>
+                      <span>{likesCount} lượt thích</span>
+                      <span>{commentsCount} bình luận</span>
                     </div>
 
                     <Link className={styles.openBtn} to={`/post/${item._id}`}>
-                      Mo bai viet
+                      Mở bài viết
                     </Link>
                   </div>
                 </article>

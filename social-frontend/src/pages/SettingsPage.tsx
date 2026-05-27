@@ -11,10 +11,10 @@ import tabletStyles from './SettingsPage.tablet.module.css'
 import mobileStyles from './SettingsPage.mobile.module.css'
 
 const GENDER_OPTIONS = [
-  { value: '', label: 'Khong muon tiet lo' },
+  { value: '', label: 'Không muốn tiết lộ' },
   { value: 'Nam', label: 'Nam' },
-  { value: 'Nu', label: 'Nu' },
-  { value: 'Khac', label: 'Khac' },
+  { value: 'Nu', label: 'Nữ' },
+  { value: 'Khac', label: 'Khác' },
 ]
 
 const USERNAME_PATTERN = /^[a-z0-9._]{3,30}$/
@@ -97,7 +97,7 @@ export default function SettingsPage() {
         setUsernameDraft(profile.username || state.username)
       } catch (error: any) {
         if (!mounted) return
-        toast.push(error?.message || 'Khong tai duoc ho so hien tai')
+        toast.push(error?.message || 'Không tải được hồ sơ hiện tại')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -178,10 +178,10 @@ export default function SettingsPage() {
 
       setState({ username: normalized })
       setUsernameDraft(normalized)
-      toast.push('Da doi username thanh cong')
+      toast.push('Đã đổi username thành công')
       navigate(`/profile/${encodeURIComponent(normalized)}`)
     } catch (error: any) {
-      toast.push(error?.message || 'Khong the doi username')
+      toast.push(error?.message || 'Không thể đổi username')
     } finally {
       setSavingUsername(false)
     }
@@ -192,11 +192,11 @@ export default function SettingsPage() {
 
     const { currentPassword, newPassword, confirmPassword } = passwordForm
     if (!currentPassword || !newPassword) {
-      toast.push('Vui long nhap mat khau hien tai va mat khau moi')
+      toast.push('Vui lòng nhập mật khẩu hiện tại và mật khẩu mới')
       return
     }
     if (newPassword.length < 6) {
-      toast.push('Mat khau moi phai co it nhat 6 ky tu')
+      toast.push('Mật khẩu mới phải có ít nhất 6 ký tự')
       return
     }
     if (confirmPassword && confirmPassword !== newPassword) {
@@ -217,16 +217,16 @@ export default function SettingsPage() {
         newPassword: '',
         confirmPassword: '',
       })
-      toast.push('Doi mat khau thanh cong')
+      toast.push('Đổi mật khẩu thành công')
     } catch (error: any) {
-      toast.push(error?.message || 'Khong the doi mat khau')
+      toast.push(error?.message || 'Không thể đổi mật khẩu')
     } finally {
       setSavingPassword(false)
     }
   }
 
   if (loading) {
-    return <div className={`${styles.state} ${responsiveStyles.state}`}>Dang tai trang chinh sua trang ca nhan...</div>
+    return <div className={`${styles.state} ${responsiveStyles.state}`}>Đang tải trang chỉnh sửa trang cá nhân...</div>
   }
 
   return (
@@ -237,11 +237,11 @@ export default function SettingsPage() {
             <img className={styles.avatar} src={avatarSrc} alt={state.username} />
             <div>
               <div className={`${styles.username} ${responsiveStyles.username}`}>{state.username}</div>
-              <div className={`${styles.fullName} ${responsiveStyles.fullName}`}>{form.fullName || 'Chua dat ten hien thi'}</div>
+              <div className={`${styles.fullName} ${responsiveStyles.fullName}`}>{form.fullName || 'Chưa đặt tên hiển thị'}</div>
             </div>
           </div>
           <button className={`${styles.changePhotoBtn} ${responsiveStyles.changePhotoBtn}`} type="button" onClick={() => fileInputRef.current?.click()}>
-            Doi anh
+            Đổi ảnh
           </button>
           <input ref={fileInputRef} hidden type="file" accept="image/*" onChange={handleAvatarPick} />
         </div>
@@ -257,11 +257,11 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Tieu su</label>
+          <label className={styles.label}>Tiểu sử</label>
           <div className={styles.textareaWrap}>
             <textarea
               className={styles.textarea}
-              placeholder="Tieu su"
+              placeholder="Tiểu sử"
               maxLength={150}
               value={form.bio}
               onChange={(e) => setForm((current) => ({ ...current, bio: e.target.value }))}
@@ -271,17 +271,17 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Ten hien thi</label>
+          <label className={styles.label}>Tên hiển thị</label>
           <input
             className={styles.input}
-            placeholder="Ten hien thi"
+            placeholder="Tên hiển thị"
             value={form.fullName}
             onChange={(e) => setForm((current) => ({ ...current, fullName: e.target.value }))}
           />
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Gioi tinh</label>
+          <label className={styles.label}>Giới tính</label>
           <div className={styles.selectWrap}>
             <select
               className={styles.select}
@@ -298,9 +298,9 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Hien thi huy hieu Threads</label>
+          <label className={styles.label}>Hiển thị huy hiệu Threads</label>
           <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
-            <div className={styles.switchTitle}>Hien thi huy hieu Threads</div>
+            <div className={styles.switchTitle}>Hiển thị huy hiệu Threads</div>
             <button
               type="button"
               className={`${styles.switch} ${form.showThreadsBadge ? styles.switchOn : ''}`}
@@ -313,9 +313,9 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Goi y tai khoan tren profile</label>
+          <label className={styles.label}>Gợi ý tài khoản trên trang cá nhân</label>
           <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
-            <div className={styles.switchTitle}>Hien thi goi y tai khoan tren profile</div>
+            <div className={styles.switchTitle}>Hiển thị gợi ý tài khoản trên trang cá nhân</div>
             <button
               type="button"
               className={`${styles.switch} ${form.showSuggestedAccountsOnProfile ? styles.switchOn : ''}`}
@@ -328,11 +328,11 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Quyen rieng tu tai khoan</label>
+          <label className={styles.label}>Quyền riêng tư tài khoản</label>
           <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div>
-              <div className={styles.switchTitle}>Tai khoan rieng tu</div>
-              <div className={styles.switchDesc}>Chi nguoi theo doi moi xem duoc noi dung cua ban.</div>
+              <div className={styles.switchTitle}>Tài khoản riêng tư</div>
+              <div className={styles.switchDesc}>Chỉ người theo dõi mới xem được nội dung của bạn.</div>
             </div>
             <button
               type="button"
@@ -346,11 +346,11 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.fieldBlock}>
-          <label className={styles.label}>Trang thai hoat dong</label>
+          <label className={styles.label}>Trạng thái hoạt động</label>
           <div className={`${styles.switchCard} ${responsiveStyles.switchCard}`}>
             <div>
-              <div className={styles.switchTitle}>Hien thi trang thai hoat dong</div>
-              <div className={styles.switchDesc}>Cho phep nguoi khac biet khi ban dang online.</div>
+              <div className={styles.switchTitle}>Hiển thị trạng thái hoạt động</div>
+              <div className={styles.switchDesc}>Cho phép người khác biết khi bạn đang online.</div>
             </div>
             <button
               type="button"
@@ -371,7 +371,7 @@ export default function SettingsPage() {
       </form>
 
       <form className={`${styles.panel} ${responsiveStyles.panel}`} onSubmit={handleUsernameSubmit}>
-        <div className={styles.panelTitle}>Doi username</div>
+        <div className={styles.panelTitle}>Đổi username</div>
         <div className={`${styles.inlineField} ${responsiveStyles.inlineField}`}>
           <input
             className={styles.input}
@@ -381,20 +381,20 @@ export default function SettingsPage() {
             autoComplete="off"
           />
           <button className={`${styles.secondaryBtn} ${responsiveStyles.secondaryBtn}`} type="submit" disabled={savingUsername}>
-            {savingUsername ? 'Dang doi...' : 'Doi username'}
+            {savingUsername ? 'Đang đổi...' : 'Đổi username'}
           </button>
         </div>
       </form>
 
       <form className={`${styles.panel} ${responsiveStyles.panel}`} onSubmit={handlePasswordSubmit}>
-        <div className={styles.panelTitle}>Doi mat khau</div>
+        <div className={styles.panelTitle}>Đổi mật khẩu</div>
         <div className={styles.grid2}>
           <input
             className={styles.input}
             type="password"
             value={passwordForm.currentPassword}
             onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))}
-            placeholder="Mat khau hien tai"
+            placeholder="Mật khẩu hiện tại"
             autoComplete="current-password"
           />
           <input
@@ -402,7 +402,7 @@ export default function SettingsPage() {
             type="password"
             value={passwordForm.newPassword}
             onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))}
-            placeholder="Mat khau moi"
+            placeholder="Mật khẩu mới"
             autoComplete="new-password"
           />
           <input
@@ -416,7 +416,7 @@ export default function SettingsPage() {
         </div>
         <div className={styles.actionsLeft}>
           <button className={`${styles.secondaryBtn} ${responsiveStyles.secondaryBtn}`} type="submit" disabled={savingPassword}>
-            {savingPassword ? 'Dang cap nhat...' : 'Doi mat khau'}
+            {savingPassword ? 'Đang cập nhật...' : 'Đổi mật khẩu'}
           </button>
         </div>
       </form>

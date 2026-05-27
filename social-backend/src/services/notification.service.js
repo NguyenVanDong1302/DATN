@@ -55,37 +55,37 @@ function buildNotifyMessage(notification) {
     ? notification.actorUsernames.filter(Boolean)
     : [];
 
-  const first = names[0] || 'Ai do';
+  const first = names[0] || 'Ai đó';
   const others = Math.max((notification.totalEvents || names.length || 1) - 1, 0);
 
   if (notification.type === 'follow') {
     return others > 0
-      ? `${first} va ${others} nguoi khac da theo doi ban.`
-      : `${first} da theo doi ban.`;
+      ? `${first} và ${others} người khác đã theo dõi bạn.`
+      : `${first} đã theo dõi bạn.`;
   }
 
   if (notification.type === 'like') {
     if (notification.targetType === 'story') {
       return others > 0
-        ? `${first} va ${others} nguoi khac da thich tin cua ban.`
-        : `${first} da thich tin cua ban.`;
+        ? `${first} và ${others} người khác đã thích tin của bạn.`
+        : `${first} đã thích tin của bạn.`;
     }
     return others > 0
-      ? `${first} va ${others} nguoi khac da thich bai viet cua ban.`
-      : `${first} da thich bai viet cua ban.`;
+      ? `${first} và ${others} người khác đã thích bài viết của bạn.`
+      : `${first} đã thích bài viết của bạn.`;
   }
 
   if (notification.type === 'comment') {
     return others > 0
-      ? `${first} va ${others} nguoi khac da binh luan ve bai viet cua ban.`
-      : `${first} da binh luan ve bai viet cua ban.`;
+      ? `${first} và ${others} người khác đã bình luận về bài viết của bạn.`
+      : `${first} đã bình luận về bài viết của bạn.`;
   }
 
   if (notification.type === 'moderation') {
-    return String(notification.previewText || 'Tai khoan cua ban co cap nhat tu he thong quan tri.');
+    return String(notification.previewText || 'Tài khoản của bạn có cập nhật từ hệ thống quản trị.');
   }
 
-  return `${first} da gui cho ban mot tin nhan moi.`;
+  return `${first} đã gửi cho bạn một tin nhắn mới.`;
 }
 
 function isSameActor({ recipientId, actorId, recipientUsername = '', actorUsername = '' }) {

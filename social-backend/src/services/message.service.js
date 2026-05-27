@@ -174,7 +174,7 @@ function serializeMessage(row, currentUserId = "") {
 
 function getMessagePreview(message) {
   const mediaItems = normalizeMediaItems(message);
-  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Da gui 1 video' : 'Da gui 1 anh';
+  if (mediaItems.length === 1) return mediaItems[0].type === 'video' ? 'Đã gửi 1 video' : 'Đã gửi 1 ảnh';
   if (mediaItems.length > 1) {
     const videoCount = mediaItems.filter((item) => item.type === 'video').length;
     const imageCount = mediaItems.length - videoCount;

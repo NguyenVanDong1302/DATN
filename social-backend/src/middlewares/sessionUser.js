@@ -94,7 +94,7 @@ async function sessionUser(req, res, next) {
 
     if (currentUser?.accountLocked) {
       return next(
-        new AppError("Tai khoan da bi khoa", 423, "ACCOUNT_LOCKED", buildLockDetails(currentUser)),
+        new AppError("Tài khoản đã bị khóa", 423, "ACCOUNT_LOCKED", buildLockDetails(currentUser)),
       );
     }
 

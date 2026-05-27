@@ -323,7 +323,7 @@ export default function PostCard({
                 {post.authorUsername || post.authorId || 'user'}
               </div>
               {post.authorVerified ? (
-                <span style={styles.verifiedBadge} title="Tai khoan da xac thuc">
+                <span style={styles.verifiedBadge} title="Tài khoản đã xác thực">
                   ✓
                 </span>
               ) : null}
@@ -345,7 +345,7 @@ export default function PostCard({
               onClick={onToggleFollow}
               disabled={!!followPending}
             >
-              {followPending ? 'Dang theo doi...' : 'Theo doi'}
+              {followPending ? 'Đang theo dõi...' : 'Theo dõi'}
             </button>
           ) : null}
 
@@ -357,12 +357,12 @@ export default function PostCard({
               <div style={styles.menu}>
                 {showFollowButton && onToggleFollow ? (
                   <button type="button" style={styles.menuBtn} disabled={!!followPending} onClick={() => { onToggleFollow(); setMenuOpen(false) }}>
-                    {followPending ? 'Dang xu ly...' : following ? 'Unfollow' : 'Follow'}
+                    {followPending ? 'Đang xử lý...' : following ? 'Bỏ theo dõi' : 'Theo dõi'}
                   </button>
                 ) : null}
                 {onReport ? (
                   <button type="button" style={styles.menuBtn} disabled={!!reportPending} onClick={handleReport}>
-                    {reportPending ? 'Dang gui...' : 'Bao cao bai viet'}
+                    {reportPending ? 'Đang gửi...' : 'Báo cáo bài viết'}
                   </button>
                 ) : null}
                 {onDelete ? (
@@ -439,7 +439,7 @@ export default function PostCard({
             onClick={onToggleFollow}
             disabled={!!followPending}
           >
-            {following ? 'Following' : 'Follow'}
+            {following ? 'Đang theo dõi' : 'Theo dõi'}
           </button>
         ) : null}
         {/* <button style={{ ...styles.actionBtn, marginLeft: 'auto' }} onClick={onOpenDetail}>

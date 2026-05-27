@@ -555,7 +555,7 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
                   <span>{viewerLoading ? '...' : `${viewerCount}`}</span>
                 </div>
                 <div className={styles.viewerList}>
-                  {!viewerLoading && !viewerItems.length ? <div className={styles.viewerEmpty}>Chua co luot xem.</div> : null}
+                  {!viewerLoading && !viewerItems.length ? <div className={styles.viewerEmpty}>Chưa có lượt xem.</div> : null}
                   {viewerItems.map((viewer) => (
                     <div key={`${viewer.userId}-${viewer.viewedAt || ''}`} className={styles.viewerRowItem}>
                       <img className={styles.viewerAvatar} src={avatarOf(viewer.username, viewer.avatarUrl)} alt={viewer.username} onError={(event) => handleAvatarError(event, viewer.username)} />
@@ -573,9 +573,9 @@ export default function StoryViewer({ groups, startGroupIndex, startItemIndex, o
               {isOwner ? (
                 <div className={styles.ownerFooter}>
                   <button className={styles.viewerToggle} type="button" onClick={() => setViewerPanelOpen((value) => !value)}>
-                    {viewerLoading ? 'Dang tai...' : `${viewerCount} luot xem`}
+                    {viewerLoading ? 'Đang tải...' : `${viewerCount} lượt xem`}
                   </button>
-                  <div className={styles.ownerMetaPill}>{currentItem.isArchived ? 'Da luu tru' : 'Tu dong luu sau 10 phut'}</div>
+                  <div className={styles.ownerMetaPill}>{currentItem.isArchived ? 'Đã lưu trữ' : 'Tự động lưu sau 10 phút'}</div>
                 </div>
               ) : (
                 <>

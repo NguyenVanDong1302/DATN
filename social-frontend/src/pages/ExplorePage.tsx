@@ -101,7 +101,7 @@ export default function ExplorePage() {
         setItems(Array.isArray(payload.items) ? payload.items : [])
         setTotalPages(Math.max(Number(payload.totalPages) || 1, 1))
       } catch (err: any) {
-        const message = err?.message || 'Khong tai duoc du lieu explore'
+        const message = err?.message || 'Không tải được dữ liệu khám phá'
         setError(message)
         toast.push(message)
       } finally {
@@ -200,9 +200,9 @@ export default function ExplorePage() {
         </div>
       ) : null}
 
-      {!error && loading && !exploreItems.length ? <div className={styles.stateBox}>Dang tai bai viet explore...</div> : null}
+      {!error && loading && !exploreItems.length ? <div className={styles.stateBox}>Đang tải bài viết khám phá...</div> : null}
 
-      {!loading && !error && !exploreItems.length ? <div className={styles.stateBox}>Chua co bai viet media nao de hien thi.</div> : null}
+      {!loading && !error && !exploreItems.length ? <div className={styles.stateBox}>Chưa có bài viết media nào để hiển thị.</div> : null}
 
       {exploreItems.length ? (
         <div className={cx(styles.grid, responsiveStyles.grid)}>

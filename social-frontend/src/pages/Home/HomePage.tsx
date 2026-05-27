@@ -23,7 +23,7 @@ export default function HomePage() {
       <div className={cx(styles.center, responsiveStyles.center, 'home-page__center')}>
         <div className={responsiveStyles.mobileHeader}>
           <button className={responsiveStyles.mobileBrand} type="button" onClick={() => navigate('/')}>
-            <span className={responsiveStyles.mobileBrandText}>Instagram</span>
+            <span className={responsiveStyles.mobileBrandText}>T</span>
             <svg className={responsiveStyles.mobileChevron} viewBox="0 0 24 24" aria-hidden="true">
               <path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
             </svg>
@@ -38,7 +38,7 @@ export default function HomePage() {
             <button
               className={`${responsiveStyles.mobileIconBtn} ${responsiveStyles.mobileNotificationBtn}`}
               type="button"
-              aria-label="Thong bao"
+              aria-label="Thông báo"
               onClick={() => navigate('/notifications')}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">

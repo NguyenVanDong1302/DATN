@@ -33,7 +33,7 @@ function getFirebaseMessage(error: unknown) {
         return error.message
     }
   }
-  return 'Dang nhap that bai. Vui long thu lai.'
+  return 'Đăng nhập thất bại. Vui lòng thử lại.'
 }
 
 export default function LoginPage() {
@@ -82,7 +82,7 @@ export default function LoginPage() {
     } catch (err: any) {
       if (err?.data?.code === 'ACCOUNT_LOCKED') {
         const lockInfo = {
-          reason: err?.data?.data?.reason || 'Tai khoan da bi khoa',
+          reason: err?.data?.data?.reason || 'Tài khoản đã bị khóa',
           lockedAt: err?.data?.data?.lockedAt || null,
         }
         localStorage.setItem('account_lock_info', JSON.stringify(lockInfo))
@@ -90,7 +90,7 @@ export default function LoginPage() {
         navigate('/account-locked', { replace: true, state: { lockInfo } })
         return
       }
-      setError(err?.message || 'Dang nhap that bai')
+      setError(err?.message || 'Đăng nhập thất bại')
     } finally {
       setIsSubmitting(false)
     }
@@ -100,12 +100,12 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={`${styles.content} ${responsiveStyles.content}`}>
         <section className={`${styles.visual} ${responsiveStyles.visual}`}>
-          <div className={styles.logo} aria-hidden="true" />
+          {/* <div className={styles.logo} aria-hidden="true" /> */}
           <div className={styles.visualInner}>
             <div className={`${styles.hero} ${responsiveStyles.hero}`}>
               <h1>
-                Hay xem cac khoanh khac thuong ngay cua <span className={styles.highlightWarm}>ban</span>{' '}
-                <span className={styles.highlightPink}>than nhe.</span>
+                {/* Chào mừng bạn<span className={styles.highlightWarm}></span>{' '} */}
+                <span className={styles.highlightPink}> Chào mừng bạn</span>
               </h1>
             </div>
             <div className={`${styles.stack} ${responsiveStyles.stack}`} aria-hidden="true">
@@ -118,20 +118,20 @@ export default function LoginPage() {
         </section>
         <section className={`${styles.panel} ${responsiveStyles.panel}`}>
           <div className={styles.formWrap}>
-            <div className={`${styles.formHeader} ${responsiveStyles.formHeader}`}><button type="button" className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Quay lai">‹</button><div>Dang nhap vao Instagram</div></div>
+            <div className={`${styles.formHeader} ${responsiveStyles.formHeader}`}><button type="button" className={styles.backBtn} onClick={() => navigate(-1)} aria-label="Quay lại">‹</button><div>Đăng nhập</div></div>
             <div className={styles.form}>
               {configError ? <div className={styles.error}>{configError}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}
               <input className={`${styles.input} ${responsiveStyles.input}`} placeholder="Email" value={formState.email} onChange={(e) => setFormState((prev) => ({ ...prev, email: e.target.value }))} />
-              <input className={`${styles.input} ${responsiveStyles.input}`} type="password" placeholder="Mat khau" value={formState.password} onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))} />
-              <button type="button" className={`${styles.primaryBtn} ${responsiveStyles.primaryBtn}`} onClick={onSubmitBackend} disabled={isSubmitting}>Dang nhap</button>
+              <input className={`${styles.input} ${responsiveStyles.input}`} type="password" placeholder="Mật khẩu" value={formState.password} onChange={(e) => setFormState((prev) => ({ ...prev, password: e.target.value }))} />
+              <button type="button" className={`${styles.primaryBtn} ${responsiveStyles.primaryBtn}`} onClick={onSubmitBackend} disabled={isSubmitting}>Đăng nhập</button>
               <div className={styles.links}>
-                <button type="button" className={`${styles.textLink} ${responsiveStyles.textLink}`}>Quen mat khau?</button>
-                <button type="button" className={`${styles.facebookBtn} ${responsiveStyles.facebookBtn}`}>Dang nhap bang Facebook</button>
-                <button type="button" className={`${styles.outlineBtn} ${responsiveStyles.outlineBtn}`} onClick={() => navigate('/register')}>Tao tai khoan moi</button>
+                <button type="button" className={`${styles.textLink} ${responsiveStyles.textLink}`}>Quên mật khẩu?</button>
+                <button type="button" className={`${styles.facebookBtn} ${responsiveStyles.facebookBtn}`}>Đăng nhập bằng Facebook</button>
+                <button type="button" className={`${styles.outlineBtn} ${responsiveStyles.outlineBtn}`} onClick={() => navigate('/register')}>Đăng ký</button>
               </div>
               <button type="button" className={`${styles.googleBtn} ${responsiveStyles.googleBtn}`} onClick={onGoogleLogin} disabled={isSubmitting || Boolean(configError)}>
-                {isSubmitting ? 'Dang ket noi...' : 'Tiep tuc voi Google'}
+                {isSubmitting ? 'Đang kết nối...' : 'Tiếp tục với Google'}
               </button>
             </div>
           </div>

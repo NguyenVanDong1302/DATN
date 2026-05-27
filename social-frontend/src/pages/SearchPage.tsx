@@ -164,7 +164,7 @@ export default function SearchPage() {
       const payload = response?.data || {}
       setExplorePosts(Array.isArray(payload.items) ? payload.items : [])
     } catch (err: any) {
-      setExploreError(err?.message || 'Khong tai duoc du lieu explore')
+      setExploreError(err?.message || 'Không tải được dữ liệu khám phá')
     } finally {
       setExploreLoading(false)
     }
@@ -199,7 +199,7 @@ export default function SearchPage() {
         setUsers(items)
       } catch (err: any) {
         if (!mounted) return
-        setError(err?.message || 'Khong tai duoc danh sach nguoi dung')
+        setError(err?.message || 'Không tải được danh sách người dùng')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -236,13 +236,13 @@ export default function SearchPage() {
       .filter(Boolean) as Array<{ post: Post; preview: PreviewMedia }>
   }, [explorePosts])
 
-  const listTitle = query.trim() ? 'Ket qua tim kiem' : 'Goi y cho ban'
+  const listTitle = query.trim() ? 'Kết quả tìm kiếm' : 'Gợi ý cho bạn'
 
   return (
     <div className={cx(styles.overlay, responsiveStyles.overlay)} onClick={isMobile ? undefined : handleClose}>
       <section className={cx(styles.popup, responsiveStyles.popup)} onClick={(event) => (isMobile ? undefined : event.stopPropagation())}>
         <div className={cx(styles.header, responsiveStyles.header)}>
-          <h1 className={styles.title}>Tim kiem</h1>
+          <h1 className={styles.title}>Tìm kiếm</h1>
           <button type="button" className={styles.closeBtn} onClick={handleClose}>
             x
           </button>
@@ -262,7 +262,7 @@ export default function SearchPage() {
               onChange={(event) => setQuery(event.target.value)}
               onFocus={() => setSearchActive(true)}
               onClick={() => setSearchActive(true)}
-              placeholder="Tim kiem"
+              placeholder="Tìm kiếm"
               className={cx(styles.input, responsiveStyles.input)}
               autoFocus={!isMobile}
             />
@@ -290,9 +290,9 @@ export default function SearchPage() {
         {!isMobile || searchActive ? (
           <div className={cx(styles.list, isMobile && responsiveStyles.mobileList, isMobile && responsiveStyles.resultsPanel)}>
             {isMobile ? <div className={responsiveStyles.listHeading}>{listTitle}</div> : null}
-            {loading ? <div className={styles.state}>Dang tai nguoi dung...</div> : null}
+            {loading ? <div className={styles.state}>Đang tải người dùng...</div> : null}
             {!loading && error ? <div className={styles.state}>{error}</div> : null}
-            {!loading && !error && !results.length ? <div className={styles.state}>Khong tim thay nguoi dung phu hop.</div> : null}
+            {!loading && !error && !results.length ? <div className={styles.state}>Không tìm thấy người dùng phù hợp.</div> : null}
 
             {!loading && !error
               ? results.map((user) => (
@@ -305,7 +305,7 @@ export default function SearchPage() {
                     <img className={styles.avatar} src={avatarOf(user)} alt={user.username} />
                     <div className={styles.meta}>
                       <div className={styles.username}>{user.username}</div>
-                      <div className={styles.subtext}>{user.bio || user.email || 'Nguoi dung Instagram clone'}</div>
+                      <div className={styles.subtext}>{user.bio || user.email || 'Nguoi dung T clone'}</div>
                     </div>
                   </button>
                 ))
@@ -315,7 +315,7 @@ export default function SearchPage() {
 
         {isMobile && !searchActive ? (
           <div className={cx(responsiveStyles.explorePanel, responsiveStyles.mobileSurface)}>
-            {exploreLoading && !exploreItems.length ? <div className={responsiveStyles.stateBox}>Dang tai bai viet explore...</div> : null}
+            {exploreLoading && !exploreItems.length ? <div className={responsiveStyles.stateBox}>Đang tải bài viết khám phá...</div> : null}
             {!exploreLoading && exploreError ? (
               <div className={responsiveStyles.stateBox}>
                 <div>{exploreError}</div>
@@ -325,7 +325,7 @@ export default function SearchPage() {
               </div>
             ) : null}
             {!exploreLoading && !exploreError && !exploreItems.length ? (
-              <div className={responsiveStyles.stateBox}>Chua co bai viet media nao de hien thi.</div>
+              <div className={responsiveStyles.stateBox}>Chưa có bài viết media nào để hiển thị.</div>
             ) : null}
             {exploreItems.length ? (
               <div className={responsiveStyles.exploreGrid}>

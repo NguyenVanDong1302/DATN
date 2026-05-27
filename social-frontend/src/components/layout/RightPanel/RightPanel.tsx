@@ -21,7 +21,7 @@ export default function RightPanel() {
                 Giới thiệu · Trợ giúp · Báo chí · API · Việc làm ·<br />
                 Quyền riêng tư · Điều khoản · Vị trí · Ngôn ngữ ·<br />
                 Meta đã xác minh<br /><br />
-                {/* © 2026 INSTAGRAM FROM META */}
+                {/* © 2026 T FROM META */}
             </div>
         </div>
     );

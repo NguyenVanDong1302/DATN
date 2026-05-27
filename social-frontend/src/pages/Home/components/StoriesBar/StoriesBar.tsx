@@ -89,7 +89,7 @@ export default function StoriesBar() {
         if (!cancelled) setStories(items)
       })
       .catch((error: any) => {
-        if (!cancelled) toast.push(error?.message || 'Khong tai duoc stories')
+        if (!cancelled) toast.push(error?.message || 'Không tải được stories')
       })
 
     return () => {
@@ -154,7 +154,7 @@ export default function StoriesBar() {
         />,
       )
     } catch (error: any) {
-      toast.push(error?.message || 'Khong tao duoc story')
+      toast.push(error?.message || 'Không tạo được story')
     } finally {
       event.currentTarget.value = ''
     }
@@ -174,7 +174,7 @@ export default function StoriesBar() {
         return next
       })
     } catch (error: any) {
-      toast.push(error?.message || 'Khong the follow nguoi dung')
+      toast.push(error?.message || 'Không thể theo dõi người dùng')
     } finally {
       setFollowPendingId('')
     }
@@ -217,7 +217,7 @@ export default function StoriesBar() {
               type="button"
               className={styles.suggestionProfileBtn}
               onClick={() => navigate(`/profile/${encodeURIComponent(user.username)}`)}
-              title={`Mo trang ca nhan ${user.username}`}
+              title={`Mở trang cá nhân ${user.username}`}
             >
               <div className={`${styles.ring} ${styles.ringSuggested}`}>
                 <img
@@ -228,7 +228,7 @@ export default function StoriesBar() {
                 />
               </div>
               <div className={cx(styles.name, responsiveStyles.name, 'stories-bar__name')}>{user.username}</div>
-              <div className={cx(styles.helper, responsiveStyles.helper, 'stories-bar__helper')}>De xuat</div>
+              <div className={cx(styles.helper, responsiveStyles.helper, 'stories-bar__helper')}>Đề xuất</div>
             </button>
 
             <button
@@ -236,7 +236,7 @@ export default function StoriesBar() {
               className={cx(styles.followQuickAction, responsiveStyles.followQuickAction)}
               disabled={isPending}
               onClick={() => handleFollowSuggestion(user)}
-              aria-label={`Follow ${user.username}`}
+              aria-label={`Theo dõi ${user.username}`}
             >
               {isPending ? '...' : '+'}
             </button>

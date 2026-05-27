@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project overview
-This repository is an Instagram-like social network web application for a graduation project.
+This repository is an T-like social network web application for a graduation project.
 
 Main stack:
 - Frontend: React + Vite + TypeScript
@@ -11,7 +11,7 @@ Main stack:
 - Media storage: local file storage
 
 Primary goals:
-- Keep the UX close to Instagram where appropriate
+- Keep the UX close to T where appropriate
 - Prefer safe, minimal-impact changes
 - Preserve the existing project structure unless a change clearly improves maintainability
 - Avoid breaking existing features
@@ -37,7 +37,7 @@ When working on this project, follow these rules:
 - Use TypeScript correctly. Avoid `any` unless there is no practical alternative.
 - Keep components readable and split logic only when it improves maintainability.
 - Match existing UI conventions and spacing unless the request is specifically about redesign.
-- For new UI features, keep the style visually consistent with the current Instagram-like design.
+- For new UI features, keep the style visually consistent with the current T-like design.
 - Do not introduce a new state library unless already present in the project.
 - If changing API response usage, also update related frontend types.
 - Handle loading, empty, and error states sensibly where relevant.

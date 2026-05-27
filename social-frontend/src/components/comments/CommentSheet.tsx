@@ -332,7 +332,7 @@ export default function CommentSheet({
           type="button"
           className={cx(styles.fullscreenCloseBtn, responsiveStyles.fullscreenCloseBtn)}
           onClick={onClose}
-          aria-label="Dong binh luan"
+          aria-label="Đóng bình luận"
         >
           {'\u00D7'}
         </button>

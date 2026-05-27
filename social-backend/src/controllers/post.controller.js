@@ -428,7 +428,7 @@ async function createPost(req, res, next) {
       return res.status(201).json({
         ok: true,
         message:
-          "Post created. He thong dang kiem duyet anh/video va se hoan tat trong toi da 5 phut.",
+          "Bài viết đã được tạo. Hệ thống đang kiểm duyệt ảnh/video và sẽ hoàn tất trong tối đa 5 phút.",
         data: {
           postId: String(createdPost._id),
           ...serializedPendingPost,

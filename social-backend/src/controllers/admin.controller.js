@@ -293,20 +293,20 @@ function buildModerationNotificationMessage({ decision, reason, strikesCount = 0
   const cleanReason = String(reason || "").trim();
   if (decision === "delete_post") {
     return cleanReason
-      ? `Bai viet cua ban da bi xoa do vi pham: ${cleanReason}`
-      : "Bai viet cua ban da bi xoa do vi pham tieu chuan cong dong.";
+      ? `Bài viết của bạn đã bị xóa do vi phạm: ${cleanReason}`
+      : "Bài viết của bạn đã bị xóa do vi phạm tiêu chuẩn cộng đồng.";
   }
   if (decision === "strike_account") {
-    const strikeText = `Tai khoan cua ban nhan 1 gay (${strikesCount}/3).`;
-    const lockText = autoLocked ? " Tai khoan da bi khoa do du 3 gay." : "";
-    return cleanReason ? `${strikeText}${lockText} Ly do: ${cleanReason}` : `${strikeText}${lockText}`;
+    const strikeText = `Tài khoản của bạn nhận 1 gậy (${strikesCount}/3).`;
+    const lockText = autoLocked ? " Tài khoản đã bị khóa do đủ 3 gậy." : "";
+    return cleanReason ? `${strikeText}${lockText} Lý do: ${cleanReason}` : `${strikeText}${lockText}`;
   }
   if (decision === "lock_account") {
     return cleanReason
-      ? `Tai khoan cua ban da bi khoa boi quan tri vien. Ly do: ${cleanReason}`
-      : "Tai khoan cua ban da bi khoa boi quan tri vien.";
+      ? `Tài khoản của bạn đã bị khóa bởi quản trị viên. Lý do: ${cleanReason}`
+      : "Tài khoản của bạn đã bị khóa bởi quản trị viên.";
   }
-  return cleanReason || "Bao cao da duoc xu ly boi quan tri vien.";
+  return cleanReason || "Báo cáo đã được xử lý bởi quản trị viên.";
 }
 
 function buildModerationNotificationMessageFromActions({
@@ -330,40 +330,40 @@ function buildModerationNotificationMessageFromActions({
 
   const fragments = [];
   if (normalizedActions.includes("delete_post")) {
-    fragments.push("Bai viet cua ban da bi xoa do vi pham tieu chuan cong dong.");
+    fragments.push("Bài viết của bạn đã bị xóa do vi phạm tiêu chuẩn cộng đồng.");
   }
   if (normalizedActions.includes("strike_account")) {
-    const strikeText = `Tai khoan cua ban nhan 1 gay (${strikesCount}/3).`;
-    const lockText = autoLocked ? " Tai khoan da bi khoa do du 3 gay." : "";
+    const strikeText = `Tài khoản của bạn nhận 1 gậy (${strikesCount}/3).`;
+    const lockText = autoLocked ? " Tài khoản đã bị khóa do đủ 3 gậy." : "";
     fragments.push(`${strikeText}${lockText}`.trim());
   }
   if (normalizedActions.includes("lock_account") && !autoLocked) {
-    fragments.push("Tai khoan cua ban da bi khoa boi quan tri vien.");
+    fragments.push("Tài khoản của bạn đã bị khóa bởi quản trị viên.");
   }
 
-  const base = fragments.join(" ").trim() || "Bao cao da duoc xu ly boi quan tri vien.";
+  const base = fragments.join(" ").trim() || "Báo cáo đã được xử lý bởi quản trị viên.";
   const cleanReason = String(reason || "").trim();
-  return cleanReason ? `${base} Ly do: ${cleanReason}` : base;
+  return cleanReason ? `${base} Lý do: ${cleanReason}` : base;
 }
 
 function buildAdminPostActionMessage({ action, reason }) {
   const cleanReason = String(reason || "").trim();
   if (action === "delete_post") {
     return cleanReason
-      ? `Bai viet cua ban da bi xoa boi admin. Ly do: ${cleanReason}`
-      : "Bai viet cua ban da bi xoa boi admin.";
+      ? `Bài viết của bạn đã bị xóa bởi admin. Lý do: ${cleanReason}`
+      : "Bài viết của bạn đã bị xóa bởi admin.";
   }
   if (action === "lock_comments") {
     return cleanReason
-      ? `Admin da khoa binh luan bai viet cua ban. Ly do: ${cleanReason}`
-      : "Admin da khoa binh luan bai viet cua ban.";
+      ? `Admin đã khóa bình luận bài viết của bạn. Lý do: ${cleanReason}`
+      : "Admin đã khóa bình luận bài viết của bạn.";
   }
   if (action === "unlock_comments") {
     return cleanReason
-      ? `Admin da mo lai binh luan bai viet cua ban. Ghi chu: ${cleanReason}`
-      : "Admin da mo lai binh luan bai viet cua ban.";
+      ? `Admin đã mở lại bình luận bài viết của bạn. Ghi chú: ${cleanReason}`
+      : "Admin đã mở lại bình luận bài viết của bạn.";
   }
-  return cleanReason || "Bai viet cua ban da duoc cap nhat boi admin.";
+  return cleanReason || "Bài viết của bạn đã được cập nhật bởi admin.";
 }
 
 async function buildCommentCountMap(postIds = []) {
@@ -1106,7 +1106,7 @@ async function resolveReportedPost(req, res, next) {
           postAuthor.accountLocked = true;
           if (!postAuthor.accountLockedAt) postAuthor.accountLockedAt = reviewedAt;
           postAuthor.accountLockedReason =
-            reason || postAuthor.accountLockedReason || "Tai khoan da bi khoa do du 3 gay vi pham";
+            reason || postAuthor.accountLockedReason || "Tài khoản đã bị khóa do đủ 3 gậy vi phạm";
           autoLocked = true;
         }
       }
@@ -1117,7 +1117,7 @@ async function resolveReportedPost(req, res, next) {
         if (reason) {
           postAuthor.accountLockedReason = reason;
         } else if (!postAuthor.accountLockedReason) {
-          postAuthor.accountLockedReason = "Tai khoan bi khoa boi admin";
+          postAuthor.accountLockedReason = "Tài khoản bị khóa bởi admin";
         }
         accountChanged = true;
       }
@@ -1208,7 +1208,7 @@ async function updateUserRestrictions(req, res, next) {
         if (body.lockReason) {
           user.accountLockedReason = body.lockReason;
         } else if (!user.accountLockedReason) {
-          user.accountLockedReason = "Tai khoan bi khoa boi admin";
+          user.accountLockedReason = "Tài khoản bị khóa bởi admin";
         }
       } else {
         user.accountLockedAt = null;

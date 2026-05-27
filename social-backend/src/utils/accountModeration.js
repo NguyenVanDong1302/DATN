@@ -20,28 +20,28 @@ function buildLockDetails(user) {
 
 function ensureAccountNotLocked(user) {
   if (!user?.accountLocked) return;
-  throw new AppError("Tai khoan da bi khoa", 423, "ACCOUNT_LOCKED", buildLockDetails(user));
+  throw new AppError("Tài khoản đã bị khóa", 423, "ACCOUNT_LOCKED", buildLockDetails(user));
 }
 
 function ensureCanComment(user) {
   ensureAccountNotLocked(user);
   const restrictions = normalizeRestrictions(user?.restrictions);
   if (!restrictions.commentBlocked) return;
-  throw new AppError("Tai khoan cua ban da bi khoa tinh nang binh luan", 403, "COMMENT_BLOCKED");
+  throw new AppError("Tài khoản của bạn đã bị khóa tính năng bình luận", 403, "COMMENT_BLOCKED");
 }
 
 function ensureCanLike(user) {
   ensureAccountNotLocked(user);
   const restrictions = normalizeRestrictions(user?.restrictions);
   if (!restrictions.likeBlocked) return;
-  throw new AppError("Tai khoan cua ban da bi khoa tinh nang like", 403, "LIKE_BLOCKED");
+  throw new AppError("Tài khoản của bạn đã bị khóa tính năng thích", 403, "LIKE_BLOCKED");
 }
 
 function ensureCanMessage(user) {
   ensureAccountNotLocked(user);
   const restrictions = normalizeRestrictions(user?.restrictions);
   if (!restrictions.messagingBlocked) return;
-  throw new AppError("Tai khoan cua ban da bi chan nhan tin", 403, "MESSAGE_BLOCKED");
+  throw new AppError("Tài khoản của bạn đã bị chặn nhắn tin", 403, "MESSAGE_BLOCKED");
 }
 
 function ensureCanCreatePost(user, todayPostCount = 0) {

@@ -9,9 +9,9 @@ import tabletStyles from './NotificationsPage.tablet.module.css'
 import mobileStyles from './NotificationsPage.mobile.module.css'
 
 const FILTERS = [
-  { key: 'all', label: 'Tat ca' },
-  { key: 'activity', label: 'Tuong tac bai viet' },
-  { key: 'follow', label: 'Theo doi' },
+  { key: 'all', label: 'Tất cả' },
+  { key: 'activity', label: 'Tương tác bài viết' },
+  { key: 'follow', label: 'Theo dõi' },
 ] as const
 
 type FilterKey = (typeof FILTERS)[number]['key']
@@ -61,20 +61,20 @@ function matchesFilter(item: NotificationItem, filter: FilterKey) {
 
 function buildLabel(item: NotificationItem) {
   const names = Array.isArray(item.actorUsernames) ? item.actorUsernames.filter(Boolean) : []
-  const first = names[0] || 'Ai do'
+  const first = names[0] || 'Ai đó'
   const total = Number(item.totalEvents) || names.length || 1
   const others = Math.max(total - 1, 0)
 
   if (item.type === 'follow') {
-    return others > 0 ? `${first} va ${others} nguoi khac da theo doi ban` : `${first} started following you`
+    return others > 0 ? `${first} và ${others} người khác đã theo dõi bạn` : `${first} đã theo dõi bạn`
   }
   if (item.type === 'like') {
-    return others > 0 ? `${first} va ${others} nguoi khac da thich bai viet cua ban` : `${first} liked your post`
+    return others > 0 ? `${first} và ${others} người khác đã thích bài viết của bạn` : `${first} đã thích bài viết của bạn`
   }
   if (item.type === 'moderation') {
-    return item.previewText || 'Tai khoan cua ban co cap nhat moderation'
+    return item.previewText || 'Tài khoản của bạn có cập nhật từ hệ thống kiểm duyệt'
   }
-  return others > 0 ? `${first} va ${others} nguoi khac da binh luan bai viet cua ban` : `${first} commented: ${item.previewText || ''}`
+  return others > 0 ? `${first} và ${others} người khác đã bình luận bài viết của bạn` : `${first} đã bình luận: ${item.previewText || ''}`
 }
 
 function getAccentClass(type: string) {
@@ -95,7 +95,7 @@ function getInitials(name = '') {
 
 function NotificationRow({ item, onOpen, onToggleRead }: { item: NotificationItem; onOpen: () => void; onToggleRead: () => void }) {
   const names = Array.isArray(item.actorUsernames) ? item.actorUsernames.filter(Boolean) : []
-  const first = names[0] || 'Ai do'
+  const first = names[0] || 'Ai đó'
 
   return (
     <div className={`${styles.row} ${!item.isRead ? styles.rowUnread : ''}`}>
@@ -117,10 +117,10 @@ function NotificationRow({ item, onOpen, onToggleRead }: { item: NotificationIte
           type="button"
           className={item.isRead ? styles.statusBtn : styles.unreadDot}
           onClick={onToggleRead}
-          aria-label={item.isRead ? 'Danh dau chua doc' : 'Danh dau da doc'}
-          title={item.isRead ? 'Danh dau chua doc' : 'Danh dau da doc'}
+          aria-label={item.isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
+          title={item.isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
         >
-          {item.isRead ? 'Chua doc' : ''}
+          {item.isRead ? 'Chưa đọc' : ''}
         </button>
       </div>
     </div>
@@ -188,9 +188,9 @@ export default function NotificationsPage() {
           </div>
 
           <div className={cx(styles.summaryRow, responsiveStyles.summaryRow)}>
-            <span>{loading ? 'Dang tai...' : `${unreadCount} chua doc`}</span>
+            <span>{loading ? 'Đang tải...' : `${unreadCount} chưa đọc`}</span>
             <button type="button" className={styles.markAllBtn} onClick={() => markAllRead()} disabled={!unreadCount}>
-              Mark all as read
+              Đánh dấu tất cả là đã đọc
             </button>
           </div>
         </div>
@@ -212,7 +212,7 @@ export default function NotificationsPage() {
             </section>
           ))}
 
-          {!loading && !visibleItems.length ? <div className={styles.empty}>Chua co thong bao phu hop.</div> : null}
+          {!loading && !visibleItems.length ? <div className={styles.empty}>Chưa có thông báo phù hợp.</div> : null}
         </div>
       </aside>
     </div>

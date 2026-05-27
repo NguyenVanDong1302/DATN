@@ -120,13 +120,13 @@ function DetailModal({ post, onOpenAuthor, onOpenPostPage, onOpenComment }: Deta
       {post.content ? <div className={styles.detailCaption}>{post.content}</div> : null}
 
       <div className={styles.detailStats}>
-        <span>{likesCount} luot thich</span>
-        <span>{commentsCount} binh luan</span>
+        <span>{likesCount} lượt thích</span>
+        <span>{commentsCount} bình luận</span>
       </div>
 
       <div className={styles.detailActionRow}>
-        <button type="button" className={styles.detailActionBtn} onClick={onOpenComment}>Mo binh luan</button>
-        <button type="button" className={styles.detailActionBtn} onClick={onOpenPostPage}>Mo trang chi tiet</button>
+        <button type="button" className={styles.detailActionBtn} onClick={onOpenComment}>Mở bình luận</button>
+        <button type="button" className={styles.detailActionBtn} onClick={onOpenPostPage}>Mở trang chi tiết</button>
       </div>
     </div>
   )
@@ -159,7 +159,7 @@ function EditPostModal({ post, onSave, onCancel }: EditModalProps) {
     try {
       await onSave(nextContent)
     } catch (err: any) {
-      setError(err?.message || 'Khong cap nhat duoc bai viet')
+      setError(err?.message || 'Không cập nhật được bài viết')
     } finally {
       setSaving(false)
     }
@@ -310,7 +310,7 @@ export default function Feed() {
       setItems(Array.isArray(payload.items) ? payload.items : [])
       setTotalPages(Math.max(Number(payload.totalPages) || 1, 1))
     } catch (error: any) {
-      toast.push(error?.message || 'Khong tai duoc danh sach bai viet')
+      toast.push(error?.message || 'Không tải được danh sách bài viết')
     } finally {
       setLoading(false)
     }
@@ -351,7 +351,7 @@ export default function Feed() {
       }
     } catch (error: any) {
       updatePost(post._id, previous)
-      toast.push(error?.message || 'Khong the cap nhat luot thich')
+      toast.push(error?.message || 'Không thể cập nhật lượt thích')
     }
   }
 
@@ -382,7 +382,7 @@ export default function Feed() {
         else next.delete(normalizedTargetUsername)
         return next
       })
-      toast.push(error?.message || 'Khong the cap nhat follow')
+      toast.push(error?.message || 'Không thể cập nhật theo dõi')
     } finally {
       setFollowPendingMap((prev) => ({ ...prev, [normalizedTargetUsername]: false }))
     }
@@ -402,9 +402,9 @@ export default function Feed() {
     try {
       await postsApi.deletePost(post._id)
       setItems((prev) => prev.filter((item) => item._id !== post._id))
-      toast.push('Da xoa bai viet')
+      toast.push('Đã xóa bài viết')
     } catch (error: any) {
-      toast.push(error?.message || 'Khong the xoa bai viet')
+      toast.push(error?.message || 'Không thể xóa bài viết')
     }
   }
 
@@ -457,13 +457,13 @@ export default function Feed() {
     setReportPendingMap((prev) => ({ ...prev, [post._id]: true }))
     try {
       await api.post(`/posts/${post._id}/report`, { reason })
-      toast.push('Da gui bao cao toi admin')
+      toast.push('Đã gửi báo cáo tới admin')
       updatePost(post._id, {
         moderationStatus: 'reported',
         reportCount: Number(post.reportCount || 0) + 1,
       })
     } catch (error: any) {
-      toast.push(error?.message || 'Khong the bao cao bai viet')
+      toast.push(error?.message || 'Không thể báo cáo bài viết')
     } finally {
       setReportPendingMap((prev) => ({ ...prev, [post._id]: false }))
     }
@@ -532,18 +532,18 @@ export default function Feed() {
           <div className={cx(styles.subtitle, responsiveStyles.subtitle, 'home-feed__subtitle')}>Hien thi toan bo bai viet theo thoi gian gan nhat</div>
         </div> */}
         {/* <button className={cx('btn', responsiveStyles.refresh, 'home-feed__refresh')} type="button" onClick={refresh} disabled={loading}>
-          {loading ? 'Dang tai...' : 'Lam moi'}
+          {loading ? 'Đang tải...' : 'Làm mới'}
         </button> */}
       </div>
 
-      {loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Dang tai bai viet...</div> : null}
-      {!loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Chua co bai viet nao.</div> : null}
+      {loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Đang tải bài viết...</div> : null}
+      {!loading && !items.length ? <div className={cx(styles.state, responsiveStyles.state)}>Chưa có bài viết nào.</div> : null}
 
       {primaryPosts.map((post) => renderPostCard(post))}
 
       {suggestedPosts.length ? (
         <section className={styles.suggestedSection}>
-          <div className={cx(styles.suggestedHeader, responsiveStyles.suggestedHeader)}>Bai viet goi y</div>
+          <div className={cx(styles.suggestedHeader, responsiveStyles.suggestedHeader)}>Bài viết gợi ý</div>
           <div className={styles.suggestedList}>{suggestedPosts.map((post) => renderPostCard(post, true))}</div>
         </section>
       ) : null}

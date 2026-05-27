@@ -85,19 +85,19 @@ function buildAdultModerationReason(moderation = {}) {
   details.push(`nguon:${source}`);
 
   const base =
-    "He thong kiem duyet tu dong phat hien bai viet co dau hieu noi dung 18+/goi duc. Bai viet da bi go va chuyen admin xu ly.";
+    "Hệ thống kiểm duyệt tự động phát hiện bài viết có dấu hiệu nội dung 18+/gợi dục. Bài viết đã bị gỡ và chuyển admin xử lý.";
   if (!cleanSignals.length) {
     return truncateText(`${base} ${details.join(", ")}.`, 500);
   }
   return truncateText(
-    `${base} ${details.join(", ")}. Tu khoa: ${cleanSignals.join(", ")}.`,
+    `${base} ${details.join(", ")}. Từ khóa: ${cleanSignals.join(", ")}.`,
     500,
   );
 }
 
 function buildModerationTimeoutReason() {
   return truncateText(
-    "He thong khong the hoan tat xac minh noi dung media trong toi da 5 phut. Bai viet tam dung hien thi va da tao request de admin xem xet thu cong.",
+    "Hệ thống không thể hoàn tất xác minh nội dung media trong tối đa 5 phút. Bài viết tạm dừng hiển thị và đã tạo request để admin xem xét thủ công.",
     500,
   );
 }
@@ -166,7 +166,7 @@ async function warnPostAuthorForViolation(post, reason) {
       actorUsername: SYSTEM_MODERATION_ACTOR_USERNAME,
       postId: String(post._id),
       previewText:
-        "He thong da go bai viet cua ban do phat hien noi dung 18+ (demo). Admin se danh gia va quyet dinh hinh thuc xu phat.",
+        "Hệ thống đã gỡ bài viết của bạn do phát hiện nội dung 18+ (demo). Admin sẽ đánh giá và quyết định hình thức xử phạt.",
     });
     return true;
   } catch (error) {
@@ -185,8 +185,8 @@ async function warnPostAuthorForManualReview(post, reason) {
       actorUsername: SYSTEM_MODERATION_ACTOR_USERNAME,
       postId: String(post._id),
       previewText: reason
-        ? `Bai viet cua ban dang cho admin kiem tra noi dung nhay cam. ${reason}`
-        : "Bai viet cua ban dang cho admin kiem tra noi dung nhay cam vi qua trinh xac minh tu dong qua 5 phut.",
+        ? `Bài viết của bạn đang chờ admin kiểm tra nội dung nhạy cảm. ${reason}`
+        : "Bài viết của bạn đang chờ admin kiểm tra nội dung nhạy cảm vì quá trình xác minh tự động quá 5 phút.",
     });
     return true;
   } catch (error) {

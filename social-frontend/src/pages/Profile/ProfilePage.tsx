@@ -245,20 +245,20 @@ function ConnectionsModal({
     <div className={styles.connectionsModal}>
       <div className={styles.connectionsTabs}>
         <button type="button" className={`${styles.connectionsTab} ${activeTab === 'followers' ? styles.connectionsTabActive : ''}`} onClick={() => setActiveTab('followers')}>
-          Followers
+          Người theo dõi
         </button>
         <button type="button" className={`${styles.connectionsTab} ${activeTab === 'following' ? styles.connectionsTabActive : ''}`} onClick={() => setActiveTab('following')}>
-          Following
+          Đang theo dõi
         </button>
       </div>
 
       <div className={styles.connectionsSearchWrap}>
-        <input className={styles.connectionsSearch} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" />
+        <input className={styles.connectionsSearch} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm kiếm" />
       </div>
 
       <div className={styles.connectionsList}>
-        {loading ? <div className={styles.connectionsEmpty}>Loading...</div> : null}
-        {!loading && !filteredRows.length ? <div className={styles.connectionsEmpty}>No users found.</div> : null}
+        {loading ? <div className={styles.connectionsEmpty}>Đang tải...</div> : null}
+        {!loading && !filteredRows.length ? <div className={styles.connectionsEmpty}>Không tìm thấy người dùng.</div> : null}
         {!loading ? filteredRows.map((row) => {
           const rowId = row._id || row.id
           const isPending = pendingUnfollowId === rowId
@@ -273,10 +273,10 @@ function ConnectionsModal({
               </div>
               {activeTab === 'following' ? (
                 <button type="button" className={styles.connectionsActionBtn} disabled={isPending} onClick={() => setConfirmUnfollowUser(row)}>
-                  {isPending ? 'Processing...' : 'Following'}
+                  {isPending ? 'Đang xử lý...' : 'Đang theo dõi'}
                 </button>
               ) : (
-                <span className={styles.connectionsTag}>Follower</span>
+                <span className={styles.connectionsTag}>Người theo dõi</span>
               )}
             </div>
           )
@@ -288,13 +288,13 @@ function ConnectionsModal({
           <div className={styles.confirmCard} onMouseDown={(event) => event.stopPropagation()}>
             <img className={styles.confirmAvatar} src={getAvatarUrl({ username: confirmUnfollowUser.username, fullName: confirmUnfollowUser.fullName, avatarUrl: confirmUnfollowUser.avatarUrl })} alt={confirmUnfollowUser.username || 'user'} />
             <div className={styles.confirmText}>
-              If you change your mind, you'll have to request to follow @{confirmUnfollowUser.username} again.
+              Nếu bạn đổi ý, bạn sẽ phải gửi yêu cầu theo dõi lại @{confirmUnfollowUser.username}.
             </div>
             <button type="button" className={`${styles.confirmBtn} ${styles.confirmDanger}`} onClick={() => void handleUnfollow(confirmUnfollowUser)}>
-              Unfollow
+              Bỏ theo dõi
             </button>
             <button type="button" className={styles.confirmBtn} onClick={() => setConfirmUnfollowUser(null)}>
-              Cancel
+              Hủy
             </button>
           </div>
         </div>
@@ -488,7 +488,7 @@ export default function ProfilePage() {
             <div className={cx(styles.topRow, responsiveStyles.topRow)}>
               <div className={cx(styles.usernameRow, responsiveStyles.usernameRow)}>
                 <div className={cx(styles.username, responsiveStyles.username)}>{username}</div>
-                {profile?.isVerified ? <span className={styles.verifiedBadge} title="Tai khoan da xac thuc">✓</span> : null}
+                {profile?.isVerified ? <span className={styles.verifiedBadge} title="Tài khoản đã xác thực">✓</span> : null}
                 {!isOwnProfile && profile?.relationship?.isFollowedBy ? <span className={styles.mutualBadge}>Theo dõi bạn</span> : null}
                 {isOwnProfile ? (
                   <button className={cx(styles.topIconBtn, responsiveStyles.topIconBtn)} type="button" title="Cài đặt" onClick={() => nav('/settings')}>
@@ -508,17 +508,17 @@ export default function ProfilePage() {
               <div className={styles.stat}><b>{posts.length}</b> posts</div>
               {isOwnProfile ? (
                 <button type="button" className={`${styles.stat} ${styles.statBtn}`} onClick={() => openConnectionsModal('followers')}>
-                  <b>{followersCount}</b> followers
+                  <b>{followersCount}</b> người theo dõi
                 </button>
               ) : (
-                <div className={styles.stat}><b>{followersCount}</b> followers</div>
+                <div className={styles.stat}><b>{followersCount}</b> người theo dõi</div>
               )}
               {isOwnProfile ? (
                 <button type="button" className={`${styles.stat} ${styles.statBtn}`} onClick={() => openConnectionsModal('following')}>
-                  <b>{followingCount}</b> following
+                  <b>{followingCount}</b> đang theo dõi
                 </button>
               ) : (
-                <div className={styles.stat}><b>{followingCount}</b> following</div>
+                <div className={styles.stat}><b>{followingCount}</b> đang theo dõi</div>
               )}
             </div>
 
@@ -540,10 +540,10 @@ export default function ProfilePage() {
                     onClick={handleToggleFollow}
                     disabled={followPending}
                   >
-                    {followPending ? 'Đang xử lý...' : profile?.relationship?.isFollowing ? 'Following' : 'Follow'}
+                    {followPending ? 'Đang xử lý...' : profile?.relationship?.isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
                   </button>
                   <button className={cx(styles.actionBtn, styles.secondaryBtn, responsiveStyles.actionBtn)} type="button" onClick={handleMessage} disabled={!canMessage || messagePending}>
-                    {messagePending ? 'Đang mở...' : 'Message'}
+                    {messagePending ? 'Đang mở...' : 'Nhắn tin'}
                   </button>
                   <button className={cx(styles.iconBtn, styles.secondaryBtn, responsiveStyles.iconBtn)} type="button" title="Tùy chọn khác">
                     <IconMore size={17} />
@@ -585,10 +585,10 @@ export default function ProfilePage() {
               <button key={story.id} className={styles.tile} type="button" onClick={() => openArchiveViewer(index)}>
                 {thumb.kind === 'image' ? <img src={thumb.src} alt={story.authorUsername || 'story archive'} loading="lazy" /> : null}
                 {thumb.kind === 'video' ? <ReelTilePreview src={thumb.src} /> : null}
-                {thumb.kind === 'empty' ? <div className={styles.tileFallback}>Khong co media</div> : null}
-                <span className={styles.storyBadge}>{story.mediaType === 'video' ? 'Story video' : 'Story image'}</span>
-                <span className={styles.storyMetaBadge}>{formatArchiveDate(story.archivedAt || story.createdAt)} · {story.viewersCount || 0} views</span>
-                <span className={styles.tileOverlay}><span>Mo kho luu tru</span></span>
+                {thumb.kind === 'empty' ? <div className={styles.tileFallback}>Không có media</div> : null}
+                <span className={styles.storyBadge}>{story.mediaType === 'video' ? 'Tin video' : 'Tin ảnh'}</span>
+                <span className={styles.storyMetaBadge}>{formatArchiveDate(story.archivedAt || story.createdAt)} · {story.viewersCount || 0} lượt xem</span>
+                <span className={styles.tileOverlay}><span>Mở kho lưu trữ</span></span>
               </button>
             )
           }) : null}

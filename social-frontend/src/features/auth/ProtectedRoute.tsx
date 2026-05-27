@@ -35,7 +35,7 @@ export default function ProtectedRoute() {
         if (cancelled) return
         if (locked) {
           const info = {
-            reason: res?.data?.accountLockedReason || 'Tai khoan da bi khoa',
+            reason: res?.data?.accountLockedReason || 'Tài khoản đã bị khóa',
             lockedAt: res?.data?.accountLockedAt || null,
           }
           localStorage.setItem('account_lock_info', JSON.stringify(info))
@@ -54,7 +54,7 @@ export default function ProtectedRoute() {
         }
         if (err?.data?.code === 'ACCOUNT_LOCKED') {
           const info = {
-            reason: err?.data?.data?.reason || 'Tai khoan da bi khoa',
+            reason: err?.data?.data?.reason || 'Tài khoản đã bị khóa',
             lockedAt: err?.data?.data?.lockedAt || null,
           }
           localStorage.setItem('account_lock_info', JSON.stringify(info))
@@ -86,7 +86,7 @@ export default function ProtectedRoute() {
           background: '#ffffff',
         }}
       >
-        Dang kiem tra phien dang nhap...
+        Đang kiểm tra phiên đăng nhập...
       </div>
     )
   }
