@@ -36,9 +36,9 @@ setIO(createNoopSocketIO());
 let mongoConnectionPromise = null;
 
 async function ensureDatabase(_req, _res, next) {
-  const mongoUri = process.env.MONGO_URI;
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
   if (!mongoUri) {
-    next(new AppError("Missing MONGO_URI environment variable", 500, "MONGO_URI_MISSING"));
+    next(new AppError("Missing MONGO_URI or MONGODB_URI environment variable", 500, "MONGO_URI_MISSING"));
     return;
   }
 

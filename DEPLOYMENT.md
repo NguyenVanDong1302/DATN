@@ -35,6 +35,7 @@ Required:
 
 ```env
 MONGO_URI=your_mongodb_atlas_connection_string
+# or MONGODB_URI=your_mongodb_atlas_connection_string
 MONGODB_SERVER_SELECTION_TIMEOUT_MS=8000
 JWT_SECRET=replace_with_a_long_random_secret
 MEDIA_PUBLIC_BASE_URL=https://social-backend-indol.vercel.app
@@ -42,7 +43,14 @@ CORS_ALLOWED_ORIGINS=https://datn-hx48.vercel.app
 CORS_ALLOW_VERCEL_PREVIEWS=true
 ```
 
-`MONGO_URI` must not be `mongodb://localhost...` or `mongodb://127.0.0.1...` on Vercel. Use MongoDB Atlas or another public MongoDB host, and allow Vercel access in the database network settings.
+`MONGO_URI`/`MONGODB_URI` must not be `mongodb://localhost...` or `mongodb://127.0.0.1...` on Vercel. Use MongoDB Atlas or another public MongoDB host, and allow Vercel access in the database network settings.
+
+MongoDB Atlas checklist:
+
+- create a database user with read/write access
+- add the app IP rule you need, or `0.0.0.0/0` for quick testing
+- URL-encode special characters in the password
+- include the target database name in the URI path
 
 Optional for admin/moderation demos:
 
@@ -97,7 +105,7 @@ Recommended backend `.env` values for self-hosting:
 ```env
 HOST=0.0.0.0
 PORT=4000
-MONGO_URI=mongodb+srv://dongyh2002bghs_db_user:<Xincamon123>@instagramclone.owta2ao.mongodb.net/?appName=InstagramClone
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/<database_name>?retryWrites=true&w=majority&appName=Cluster0
 JWT_SECRET=replace_with_a_long_random_secret
 MEDIA_PUBLIC_BASE_URL=https://api.example.com
 CORS_ALLOWED_ORIGINS=https://your-frontend.vercel.app
@@ -140,6 +148,7 @@ Add these variables in the Vercel project for `social-frontend`:
 - `VITE_API_BASE_URL=https://api.example.com/api`
 - `VITE_MEDIA_BASE_URL=https://api.example.com`
 - `VITE_SOCKET_URL=https://api.example.com`
+- `VITE_SOCKET_ENABLED=true`
 - `VITE_BACKEND_PORT=4000`
 - `VITE_FIREBASE_API_KEY=...`
 - `VITE_FIREBASE_AUTH_DOMAIN=...`
